@@ -5,7 +5,6 @@ import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio } from "lucid
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { TrackedUserList } from "../components/tracked-user-list"
-import { AddUserDialog } from "../components/add-user-dialog"
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
@@ -114,7 +113,6 @@ export default function DashboardPage() {
         <section>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <h2 className="text-xl font-medium tracking-tight">Takip Edilenler</h2>
-            <AddUserDialog />
           </div>
 
           <Tabs defaultValue="follower" className="w-full">

@@ -19,7 +19,7 @@ export function TrackedUserList({ category }: { category: TrackedUserCategory })
       <div className="py-16 text-center border border-dashed border-border rounded-xl bg-card/30 flex flex-col items-center justify-center animate-in fade-in duration-500">
         <UserIcon className="w-10 h-10 text-muted-foreground/50 mb-4" />
         <p className="text-muted-foreground">Bu kategoride kullanıcı yok.</p>
-        <p className="text-sm text-muted-foreground/70 mt-1">Takibe başlamak için birini ekle.</p>
+        <p className="text-sm text-muted-foreground/70 mt-1">Veriler senkronize edildiğinde burada görünecek.</p>
       </div>
     )
   }
