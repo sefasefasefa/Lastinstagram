@@ -9,6 +9,7 @@ import { Toaster } from 'sonner';
 import { useGetMe } from '@workspace/api-client-react';
 import LoginPage from './pages/login';
 import DashboardPage from './pages/dashboard';
+import SettingsPage from './pages/settings';
 import NotFound from './pages/not-found';
 
 const queryClient = new QueryClient({
@@ -44,6 +45,14 @@ function DashboardRoute() {
   return <DashboardPage />;
 }
 
+function SettingsRoute() {
+  const { data: me, isPending } = useGetMe();
+
+  if (isPending) return null;
+  if (!me) return <Redirect to="/login" />;
+  return <SettingsPage />;
+}
+
 function AppRoutes() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -51,6 +60,7 @@ function AppRoutes() {
         <Route path="/" component={HomeRedirect} />
         <Route path="/login" component={LoginRoute} />
         <Route path="/dashboard" component={DashboardRoute} />
+        <Route path="/settings" component={SettingsRoute} />
         <Route component={NotFound} />
       </Switch>
       <Toaster />

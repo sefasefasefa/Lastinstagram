@@ -63,6 +63,35 @@ export interface DashboardSummary {
   monitoringEnabled: boolean;
 }
 
+export type RequestConfigHeaders = {[key: string]: string};
+
+export type RequestConfigCookies = {[key: string]: string};
+
+export interface RequestConfig {
+  targetUrl: string | null;
+  headers: RequestConfigHeaders;
+  cookies: RequestConfigCookies;
+}
+
+export type RequestConfigInputHeaders = {[key: string]: string};
+
+export type RequestConfigInputCookies = {[key: string]: string};
+
+export interface RequestConfigInput {
+  targetUrl: string | null;
+  headers: RequestConfigInputHeaders;
+  cookies: RequestConfigInputCookies;
+}
+
+export type RequestConfigTestResultHeaders = {[key: string]: string};
+
+export interface RequestConfigTestResult {
+  status: number;
+  statusText: string;
+  headers: RequestConfigTestResultHeaders;
+  bodyPreview: string;
+}
+
 export type ListTrackedUsersParams = {
 category?: TrackedUserCategory;
 };

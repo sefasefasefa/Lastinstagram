@@ -9,6 +9,43 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Get the saved outbound request configuration
+ */
+export const GetRequestConfigResponse = zod.object({
+  "targetUrl": zod.string().nullable(),
+  "headers": zod.record(zod.string(), zod.string()),
+  "cookies": zod.record(zod.string(), zod.string())
+})
+
+
+/**
+ * @summary Save the outbound request configuration
+ */
+export const UpdateRequestConfigBody = zod.object({
+  "targetUrl": zod.string().nullable(),
+  "headers": zod.record(zod.string(), zod.string()),
+  "cookies": zod.record(zod.string(), zod.string())
+})
+
+export const UpdateRequestConfigResponse = zod.object({
+  "targetUrl": zod.string().nullable(),
+  "headers": zod.record(zod.string(), zod.string()),
+  "cookies": zod.record(zod.string(), zod.string())
+})
+
+
+/**
+ * @summary Send a real request to the saved target URL using the saved headers/cookies and return the response
+ */
+export const TestRequestConfigResponse = zod.object({
+  "status": zod.number(),
+  "statusText": zod.string(),
+  "headers": zod.record(zod.string(), zod.string()),
+  "bodyPreview": zod.string()
+})
+
+
+/**
  * @summary Log in with a username and password
  */
 
@@ -27,7 +64,7 @@ export const LoginResponse = zod.object({
 
 
 /**
- * @summary Log out the current session
+ * @summary Log out the current session. Idempotent - returns 204 even if not authenticated.
  */
 export const LogoutResponse = zod.void()
 

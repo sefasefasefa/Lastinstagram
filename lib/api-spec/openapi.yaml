@@ -16,7 +16,52 @@ tags:
     description: Monitoring toggle operations
   - name: trackedUsers
     description: Tracked user list operations
+  - name: settings
+    description: Outbound request configuration (target URL, headers, cookies)
 paths:
+  /settings/request-config:
+    get:
+      operationId: getRequestConfig
+      tags: [settings]
+      summary: Get the saved outbound request configuration
+      responses:
+        "200":
+          description: Request configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestConfig"
+    put:
+      operationId: updateRequestConfig
+      tags: [settings]
+      summary: Save the outbound request configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestConfigInput"
+      responses:
+        "200":
+          description: Updated request configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestConfig"
+  /settings/request-config/test:
+    post:
+      operationId: testRequestConfig
+      tags: [settings]
+      summary: Send a real request to the saved target URL using the saved headers/cookies and return the response
+      responses:
+        "200":
+          description: Result of the test request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestConfigTestResult"
+        "400":
+          description: No target URL configured, or the request failed before a response was received
   /auth/login:
     post:
       operationId: login
@@ -250,4 +295,48 @@ components:
           type: integer
         monitoringEnabled:
           type: boolean
+    RequestConfig:
+      type: object
+      required: [targetUrl, headers, cookies]
+      properties:
+        targetUrl:
+          type: string
+          nullable: true
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        cookies:
+          type: object
+          additionalProperties:
+            type: string
+    RequestConfigInput:
+      type: object
+      required: [targetUrl, headers, cookies]
+      properties:
+        targetUrl:
+          type: string
+          nullable: true
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        cookies:
+          type: object
+          additionalProperties:
+            type: string
+    RequestConfigTestResult:
+      type: object
+      required: [status, statusText, headers, bodyPreview]
+      properties:
+        status:
+          type: integer
+        statusText:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        bodyPreview:
+          type: string
 

@@ -27,6 +27,9 @@ import type {
   LoginRequest,
   MonitoringStatus,
   MonitoringUpdate,
+  RequestConfig,
+  RequestConfigInput,
+  RequestConfigTestResult,
   TrackedUser,
   TrackedUserInput
 } from './api.schemas';
@@ -57,6 +60,225 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetRequestConfigUrl = () => {
+
+
+
+
+  return `/api/settings/request-config`
+}
+
+/**
+ * @summary Get the saved outbound request configuration
+ */
+export const getRequestConfig = async ( options?: RequestInit): Promise<RequestConfig> => {
+
+  return customFetch<RequestConfig>(getGetRequestConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRequestConfigQueryKey = () => {
+    return [
+    `/api/settings/request-config`
+    ] as const;
+    }
+
+
+export const getGetRequestConfigQueryOptions = <TData = Awaited<ReturnType<typeof getRequestConfig>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRequestConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRequestConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRequestConfig>>> = ({ signal }) => getRequestConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRequestConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRequestConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getRequestConfig>>>
+export type GetRequestConfigQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the saved outbound request configuration
+ */
+
+export function useGetRequestConfig<TData = Awaited<ReturnType<typeof getRequestConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRequestConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRequestConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateRequestConfigUrl = () => {
+
+
+
+
+  return `/api/settings/request-config`
+}
+
+/**
+ * @summary Save the outbound request configuration
+ */
+export const updateRequestConfig = async (requestConfigInput: RequestConfigInput, options?: RequestInit): Promise<RequestConfig> => {
+
+  return customFetch<RequestConfig>(getUpdateRequestConfigUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(requestConfigInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateRequestConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRequestConfig>>, TError,{data: BodyType<RequestConfigInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateRequestConfig>>, TError,{data: BodyType<RequestConfigInput>}, TContext> => {
+
+const mutationKey = ['updateRequestConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateRequestConfig>>, {data: BodyType<RequestConfigInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateRequestConfig(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateRequestConfigMutationResult = NonNullable<Awaited<ReturnType<typeof updateRequestConfig>>>
+    export type UpdateRequestConfigMutationBody = BodyType<RequestConfigInput>
+    export type UpdateRequestConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Save the outbound request configuration
+ */
+export const useUpdateRequestConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRequestConfig>>, TError,{data: BodyType<RequestConfigInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateRequestConfig>>,
+        TError,
+        {data: BodyType<RequestConfigInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateRequestConfigMutationOptions(options));
+    }
+
+export const getTestRequestConfigUrl = () => {
+
+
+
+
+  return `/api/settings/request-config/test`
+}
+
+/**
+ * @summary Send a real request to the saved target URL using the saved headers/cookies and return the response
+ */
+export const testRequestConfig = async ( options?: RequestInit): Promise<RequestConfigTestResult> => {
+
+  return customFetch<RequestConfigTestResult>(getTestRequestConfigUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getTestRequestConfigMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testRequestConfig>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testRequestConfig>>, TError,void, TContext> => {
+
+const mutationKey = ['testRequestConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testRequestConfig>>, void> = () => {
+
+
+          return  testRequestConfig(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestRequestConfigMutationResult = NonNullable<Awaited<ReturnType<typeof testRequestConfig>>>
+
+    export type TestRequestConfigMutationError = ErrorType<void>
+
+    /**
+ * @summary Send a real request to the saved target URL using the saved headers/cookies and return the response
+ */
+export const useTestRequestConfig = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testRequestConfig>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testRequestConfig>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getTestRequestConfigMutationOptions(options));
+    }
 
 export const getLoginUrl = () => {
 
@@ -138,7 +360,7 @@ export const getLogoutUrl = () => {
 }
 
 /**
- * @summary Log out the current session
+ * @summary Log out the current session. Idempotent - returns 204 even if not authenticated.
  */
 export const logout = async ( options?: RequestInit): Promise<void> => {
 
@@ -187,7 +409,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type LogoutMutationError = ErrorType<unknown>
 
     /**
- * @summary Log out the current session
+ * @summary Log out the current session. Idempotent - returns 204 even if not authenticated.
  */
 export const useLogout = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}

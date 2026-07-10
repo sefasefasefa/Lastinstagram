@@ -1,7 +1,8 @@
 import { useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSummary, getGetMonitoringStatusQueryKey, useGetMe, useLogout } from "@workspace/api-client-react"
+import { Link } from "wouter"
 import { Button, Card } from "../components/ui/core"
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/radix"
-import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio } from "lucide-react"
+import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio, Settings } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { TrackedUserList } from "../components/tracked-user-list"
@@ -52,6 +53,12 @@ export default function DashboardPage() {
                 {me?.username ?? "hesabım"}
               </span>
             </div>
+            <Link href="/settings">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                <Settings className="w-4 h-4 mr-2" />
+                Ayarlar
+              </Button>
+            </Link>
             <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground hover:text-foreground">
               <LogOut className="w-4 h-4 mr-2" />
               Çıkış Yap
