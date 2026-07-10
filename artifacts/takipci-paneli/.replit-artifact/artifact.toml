@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Takipçi Paneli"
+version = "1.0.0"
+id = "artifacts/takipci-paneli"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18973
+
+[services.development]
+run = "pnpm --filter @workspace/takipci-paneli run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/takipci-paneli", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/takipci-paneli/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18973"
+BASE_PATH = "/"
