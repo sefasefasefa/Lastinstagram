@@ -18,46 +18,6 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Returns the current mock Instagram connection status
- * @summary Get connection status
- */
-export const GetConnectionResponse = zod.object({
-  "connected": zod.boolean(),
-  "username": zod.string().nullable(),
-  "connectedAt": zod.coerce.date().nullish()
-})
-
-
-/**
- * Simulates connecting an Instagram account (no real login is performed)
- * @summary Connect account
- */
-
-
-
-export const ConnectAccountBody = zod.object({
-  "username": zod.string().min(1)
-})
-
-export const ConnectAccountResponse = zod.object({
-  "connected": zod.boolean(),
-  "username": zod.string().nullable(),
-  "connectedAt": zod.coerce.date().nullish()
-})
-
-
-/**
- * Clears the current mock connection
- * @summary Disconnect account
- */
-export const DisconnectAccountResponse = zod.object({
-  "connected": zod.boolean(),
-  "username": zod.string().nullable(),
-  "connectedAt": zod.coerce.date().nullish()
-})
-
-
-/**
  * @summary Get monitoring status
  */
 export const GetMonitoringStatusResponse = zod.object({
@@ -84,8 +44,7 @@ export const GetDashboardSummaryResponse = zod.object({
   "followerCount": zod.number(),
   "likedPostCount": zod.number(),
   "likedStoryCount": zod.number(),
-  "monitoringEnabled": zod.boolean(),
-  "connected": zod.boolean()
+  "monitoringEnabled": zod.boolean()
 })
 
 

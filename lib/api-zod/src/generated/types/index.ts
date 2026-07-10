@@ -6,8 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export * from './connectionInput';
-export * from './connectionStatus';
 export * from './dashboardSummary';
 export * from './healthStatus';
 export * from './listTrackedUsersParams';

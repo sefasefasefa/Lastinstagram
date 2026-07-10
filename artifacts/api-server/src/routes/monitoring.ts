@@ -7,8 +7,11 @@ import {
   UpdateMonitoringStatusResponse,
 } from "@workspace/api-zod";
 import { getOrCreateAppState } from "../lib/appState";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
+
+router.use(requireAuth);
 
 router.get("/monitoring", async (_req, res): Promise<void> => {
   const state = await getOrCreateAppState();

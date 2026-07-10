@@ -10,8 +10,6 @@ servers:
 tags:
   - name: health
     description: Health operations
-  - name: connection
-    description: Instagram connection (mock) operations
   - name: monitoring
     description: Monitoring toggle operations
   - name: trackedUsers
@@ -30,51 +28,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-  /connection:
-    get:
-      operationId: getConnection
-      tags: [connection]
-      summary: Get connection status
-      description: Returns the current mock Instagram connection status
-      responses:
-        "200":
-          description: Connection status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConnectionStatus"
-  /connection/connect:
-    post:
-      operationId: connectAccount
-      tags: [connection]
-      summary: Connect account
-      description: Simulates connecting an Instagram account (no real login is performed)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ConnectionInput"
-      responses:
-        "200":
-          description: Updated connection status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConnectionStatus"
-  /connection/disconnect:
-    post:
-      operationId: disconnectAccount
-      tags: [connection]
-      summary: Disconnect account
-      description: Clears the current mock connection
-      responses:
-        "200":
-          description: Updated connection status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConnectionStatus"
   /monitoring:
     get:
       operationId: getMonitoringStatus
@@ -177,24 +130,6 @@ components:
           type: string
       required:
         - status
-    ConnectionStatus:
-      type: object
-      required: [connected, username]
-      properties:
-        connected:
-          type: boolean
-        username:
-          type: ["string", "null"]
-        connectedAt:
-          type: ["string", "null"]
-          format: date-time
-    ConnectionInput:
-      type: object
-      required: [username]
-      properties:
-        username:
-          type: string
-          minLength: 1
     MonitoringStatus:
       type: object
       required: [enabled]
@@ -243,7 +178,7 @@ components:
           $ref: "#/components/schemas/TrackedUserCategory"
     DashboardSummary:
       type: object
-      required: [followerCount, likedPostCount, likedStoryCount, monitoringEnabled, connected]
+      required: [followerCount, likedPostCount, likedStoryCount, monitoringEnabled]
       properties:
         followerCount:
           type: integer
@@ -252,7 +187,5 @@ components:
         likedStoryCount:
           type: integer
         monitoringEnabled:
-          type: boolean
-        connected:
           type: boolean
 

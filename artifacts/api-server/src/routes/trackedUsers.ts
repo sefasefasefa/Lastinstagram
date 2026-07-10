@@ -8,8 +8,11 @@ import {
   CreateTrackedUserResponse,
   DeleteTrackedUserParams,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
+
+router.use(requireAuth);
 
 router.get("/tracked-users", async (req, res): Promise<void> => {
   const query = ListTrackedUsersQueryParams.safeParse(req.query);

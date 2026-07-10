@@ -9,19 +9,6 @@ export interface HealthStatus {
   status: string;
 }
 
-export interface ConnectionStatus {
-  connected: boolean;
-  /** @nullable */
-  username: string | null;
-  /** @nullable */
-  connectedAt?: string | null;
-}
-
-export interface ConnectionInput {
-  /** @minLength 1 */
-  username: string;
-}
-
 export interface MonitoringStatus {
   enabled: boolean;
 }
@@ -62,7 +49,6 @@ export interface DashboardSummary {
   likedPostCount: number;
   likedStoryCount: number;
   monitoringEnabled: boolean;
-  connected: boolean;
 }
 
 export type ListTrackedUsersParams = {

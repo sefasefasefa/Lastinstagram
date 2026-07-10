@@ -3,8 +3,11 @@ import { sql } from "drizzle-orm";
 import { db, trackedUsersTable } from "@workspace/db";
 import { GetDashboardSummaryResponse } from "@workspace/api-zod";
 import { getOrCreateAppState } from "../lib/appState";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
+
+router.use(requireAuth);
 
 router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   const state = await getOrCreateAppState();
@@ -32,7 +35,6 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
       likedPostCount: counts.liked_post,
       likedStoryCount: counts.liked_story,
       monitoringEnabled: state.monitoringEnabled,
-      connected: state.connected,
     }),
   );
 });

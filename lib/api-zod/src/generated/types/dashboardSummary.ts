@@ -11,5 +11,4 @@ export interface DashboardSummary {
   likedPostCount: number;
   likedStoryCount: number;
   monitoringEnabled: boolean;
-  connected: boolean;
 }

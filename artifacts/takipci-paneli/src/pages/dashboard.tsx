@@ -1,28 +1,26 @@
-import { useGetConnection, useDisconnectAccount, useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSummary, getGetMonitoringStatusQueryKey, getGetConnectionQueryKey } from "@workspace/api-client-react"
+import { useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSummary, getGetMonitoringStatusQueryKey } from "@workspace/api-client-react"
 import { Button, Card } from "../components/ui/core"
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/radix"
 import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
+import { useClerk, useUser } from "@clerk/react"
 import { TrackedUserList } from "../components/tracked-user-list"
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
-  const { data: connection } = useGetConnection()
-  const disconnect = useDisconnectAccount()
+  const { user } = useUser()
+  const { signOut } = useClerk()
 
   const { data: monitoring } = useGetMonitoringStatus()
   const updateMonitoring = useUpdateMonitoringStatus()
 
   const { data: summary } = useGetDashboardSummary()
 
-  const handleDisconnect = () => {
-    disconnect.mutate(undefined, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetConnectionQueryKey() })
-        toast.info("Instagram bağlantısı kesildi")
-      }
-    })
+  const handleSignOut = () => {
+    signOut({ redirectUrl: basePath || "/" })
   }
 
   const toggleMonitoring = (enabled: boolean) => {
@@ -49,11 +47,13 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border text-sm text-muted-foreground">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Connected as <span className="font-mono text-foreground">@{connection?.username}</span>
+              <span className="font-mono text-foreground">
+                {user?.primaryEmailAddress?.emailAddress ?? user?.username ?? "hesabım"}
+              </span>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleDisconnect} disabled={disconnect.isPending} className="text-muted-foreground hover:text-foreground">
+            <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground hover:text-foreground">
               <LogOut className="w-4 h-4 mr-2" />
-              Disconnect
+              Çıkış Yap
             </Button>
           </div>
         </div>
