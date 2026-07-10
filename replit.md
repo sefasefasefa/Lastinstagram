@@ -1,24 +1,33 @@
-# [Project name]
+# Takipçi Paneli
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Turkish-language tracker/subscriber panel web app (frontend: "Takipçi Paneli") backed by a shared Express API server and Postgres database.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- Artifact workflows (managed, restart via the Replit workflow UI/tool):
+  - `artifacts/takipci-paneli: web` — frontend (Vite dev server)
+  - `artifacts/api-server: API Server` — Express API
+  - `artifacts/mockup-sandbox: Component Preview Server` — design/canvas preview sandbox
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL` — Postgres connection string (pre-provisioned Replit DB)
+- Auth: Replit-managed Clerk (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `VITE_CLERK_PUBLISHABLE_KEY` auto-provisioned)
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM
+- Auth: Clerk (Replit-managed)
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
+
+## Gotchas
+
+- This project was imported with `artifacts/*` directories and `.replit-artifact/artifact.toml` files already present, but the artifacts weren't registered with the platform yet (`listArtifacts()` returned empty and their workflows didn't exist). Registration was triggered by calling `verifyAndReplaceArtifactToml` with the existing (unmodified) TOML content for one artifact, which caused the platform to auto-discover and register all three artifacts and their workflows in one pass.
 
 ## Where things live
 

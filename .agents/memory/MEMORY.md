@@ -1,0 +1,1 @@
+- [Unregistered imported artifacts](unregistered-imported-artifacts.md) — imported projects can have artifact.toml files on disk that aren't registered with the platform yet; fix by re-saving the TOML.
