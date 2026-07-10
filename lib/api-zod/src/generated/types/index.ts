@@ -6,9 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './authUser';
 export * from './dashboardSummary';
 export * from './healthStatus';
 export * from './listTrackedUsersParams';
+export * from './loginRequest';
 export * from './monitoringStatus';
 export * from './monitoringUpdate';
 export * from './trackedUser';

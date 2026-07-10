@@ -10,11 +10,55 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Username/password authentication operations
   - name: monitoring
     description: Monitoring toggle operations
   - name: trackedUsers
     description: Tracked user list operations
 paths:
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in with a username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid username or password
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out the current session. Idempotent - returns 204 even if not authenticated.
+      responses:
+        "204":
+          description: Logged out (or already logged out)
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get the currently authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
   /healthz:
     get:
       operationId: healthCheck
@@ -130,6 +174,24 @@ components:
           type: string
       required:
         - status
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+    AuthUser:
+      type: object
+      required: [id, username]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
     MonitoringStatus:
       type: object
       required: [enabled]

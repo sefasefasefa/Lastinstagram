@@ -9,6 +9,39 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Log in with a username and password
+ */
+
+
+
+
+export const LoginBody = zod.object({
+  "username": zod.string().min(1),
+  "password": zod.string().min(1)
+})
+
+export const LoginResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string()
+})
+
+
+/**
+ * @summary Log out the current session
+ */
+export const LogoutResponse = zod.void()
+
+
+/**
+ * @summary Get the currently authenticated user
+ */
+export const GetMeResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string()
+})
+
+
+/**
  * Returns server health status
  * @summary Health check
  */

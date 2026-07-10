@@ -1,18 +1,15 @@
-import { useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSummary, getGetMonitoringStatusQueryKey } from "@workspace/api-client-react"
+import { useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSummary, getGetMonitoringStatusQueryKey, useGetMe, useLogout } from "@workspace/api-client-react"
 import { Button, Card } from "../components/ui/core"
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/radix"
 import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { useClerk, useUser } from "@clerk/react"
 import { TrackedUserList } from "../components/tracked-user-list"
-
-const basePath = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
-  const { user } = useUser()
-  const { signOut } = useClerk()
+  const { data: me } = useGetMe()
+  const logout = useLogout()
 
   const { data: monitoring } = useGetMonitoringStatus()
   const updateMonitoring = useUpdateMonitoringStatus()
@@ -20,7 +17,11 @@ export default function DashboardPage() {
   const { data: summary } = useGetDashboardSummary()
 
   const handleSignOut = () => {
-    signOut({ redirectUrl: basePath || "/" })
+    logout.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.invalidateQueries()
+      },
+    })
   }
 
   const toggleMonitoring = (enabled: boolean) => {
@@ -48,7 +49,7 @@ export default function DashboardPage() {
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border text-sm text-muted-foreground">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="font-mono text-foreground">
-                {user?.primaryEmailAddress?.emailAddress ?? user?.username ?? "hesabım"}
+                {me?.username ?? "hesabım"}
               </span>
             </div>
             <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground hover:text-foreground">

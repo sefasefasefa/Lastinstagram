@@ -9,6 +9,18 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface LoginRequest {
+  /** @minLength 1 */
+  username: string;
+  /** @minLength 1 */
+  password: string;
+}
+
+export interface AuthUser {
+  id: number;
+  username: string;
+}
+
 export interface MonitoringStatus {
   enabled: boolean;
 }
