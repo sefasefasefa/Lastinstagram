@@ -13,7 +13,7 @@ A Turkish-language tracker/subscriber panel web app (frontend: "Takipçi Paneli"
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string (pre-provisioned Replit DB), `SESSION_SECRET` — express-session cookie signing secret
-- Auth: plain username/password login (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`), session cookie backed by a Postgres-stored session table. Seeded default account: username `admin`, password `admin123` — change or rotate this before sharing/deploying the app.
+- Auth: plain username/password login (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`), session cookie backed by a Postgres-stored session table. Default account: username `admin`, password `admin123` — change or rotate this before sharing/deploying the app. There is no register endpoint or seed script; this row was inserted directly into the `users` table (bcrypt hash of `admin123`) since none existed after the initial `db push`.
 
 ## Stack
 
