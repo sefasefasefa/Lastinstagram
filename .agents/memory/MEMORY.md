@@ -1,3 +1,4 @@
 - [Unregistered imported artifacts](unregistered-imported-artifacts.md) — imported projects can have artifact.toml files on disk that aren't registered with the platform yet; fix by re-saving the TOML.
 - [connect-pg-simple + esbuild](connect-pg-simple-esbuild-bundle.md) — createTableIfMissing throws ENOENT when bundled; declare the session table yourself instead.
 - [Dev proxy caching non-GET](dev-proxy-caching-non-get.md) — preview proxy can return stale cached responses for POST endpoints; set Cache-Control: no-store in dev.
+- [Corrupted generated/source files](corrupted-generated-source-files.md) — imported project had hand-edited garbage in generated codegen output and in a frontend entry file; git diff vs HEAD + regenerate/restore fixed it.
