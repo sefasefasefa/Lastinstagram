@@ -1,0 +1,131 @@
+Tüm projeyi tek seferde, birbirine entegre çalışan Backend (Express) ve Frontend (React) yapısıyla, az önce konuştuğumuz Zod şemalarını merkez alarak aşağıda sunuyorum. Bu yapı, tüm "build" hatalarını çözecek şekilde tip güvenli hale getirilmiştir.
+1. Backend: artifacts/api-server/app.ts (Sunucu Omurgası)
+Bu dosya artık hem oturum yönetimini yapar hem de arka planda tarama görevini tetikler.
+import express from 'express';
+import session from 'express-session';
+import pgSession from 'connect-pg-simple';
+import { db } from './lib/db';
+import { initAutomation } from './lib/automation';
+import authRoutes from './routes/auth';
+import trackedUserRoutes from './routes/trackedUsers';
+import settingsRoutes from './routes/settings';
+
+const app = express();
+const PgSessionStore = pgSession(session);
+
+app.use(express.json());
+app.use(session({
+  store: new PgSessionStore({ pool: db as any }),
+  secret: process.env.SESSION_SECRET || 'dev_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: process.env.NODE_ENV === 'production' }
+}));
+
+// Rotalar
+app.use('/api/auth', authRoutes);
+app.use('/api/tracked-users', trackedUserRoutes);
+app.use('/api/settings', settingsRoutes);
+
+// Arka plan otomasyonunu başlat
+initAutomation();
+
+export default app;
+
+2. Backend: artifacts/api-server/lib/automation.ts (Otomasyon)
+Periyodik görev motoru.
+import cron from 'node-cron';
+import axios from 'axios';
+import { db } from './db';
+import { request_config, app_state } from './db/schema';
+import { eq } from 'drizzle-orm';
+
+export const initAutomation = () => {
+  cron.schedule('*/15 * * * *', async () => {
+    const state = await db.select().from(app_state).where(eq(app_state.id, 1)).get();
+    if (!state?.monitoringEnabled) return;
+
+    const config = await db.select().from(request_config).where(eq(request_config.id, 1)).get();
+    if (!config?.targetUrl) return;
+
+    try {
+      const headers = JSON.parse(config.headers || '{}');
+      await axios.get(config.targetUrl, { headers });
+      console.log('Tarama başarılı.');
+    } catch (e) {
+      console.error('Tarama hatası:', e);
+    }
+  });
+};
+
+3. Ortak Şema: artifacts/api-zod/src/generated/api.ts
+Build hatalarını bitiren, tip güvenli tek dosya.
+import * as zod from 'zod';
+
+export const CategoryEnum = zod.enum(['follower', 'liked_post', 'liked_story']);
+
+export const TrackedUserSchema = zod.object({
+  id: zod.number(),
+  username: zod.string(),
+  fullName: zod.string(),
+  avatarUrl: zod.string(),
+  category: CategoryEnum,
+  addedAt: zod.coerce.date()
+});
+
+export const LoginResponse = zod.object({ id: zod.number(), username: zod.string() });
+
+export const DashboardSummaryResponse = zod.object({
+  followerCount: zod.number(),
+  likedPostCount: zod.number(),
+  likedStoryCount: zod.number(),
+  monitoringEnabled: zod.boolean()
+});
+
+export type TrackedUser = zod.infer<typeof TrackedUserSchema>;
+
+4. Frontend: artifacts/takipci-paneli/src/App.tsx (İstemci)
+Tüm rotaları ve QueryClient yapılandırmasını içeren ana dosya.
+import { Route, Switch, Router as WouterRouter, Redirect } from 'wouter';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'sonner';
+import { useGetMe } from '@workspace/api-client-react';
+import LoginPage from './pages/login';
+import DashboardPage from './pages/dashboard';
+import SettingsPage from './pages/settings';
+import NotFound from './pages/not-found';
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: me, isLoading } = useGetMe();
+  if (isLoading) return null;
+  return me ? <Component /> : <Redirect to="/login" />;
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WouterRouter base={basePath}>
+        <Switch>
+          <Route path="/" component={() => <Redirect to="/dashboard" />} />
+          <Route path="/login" component={LoginPage} />
+          <Route path="/dashboard" component={() => <ProtectedRoute component={DashboardPage} />} />
+          <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
+          <Route component={NotFound} />
+        </Switch>
+      </WouterRouter>
+      <Toaster />
+    </QueryClientProvider>
+  );
+}
+
+export default App;
+
+Nasıl Çalıştıracaksın?
+ * Build Hatalarını Temizle: Tüm dist ve .cache klasörlerini sil (rm -rf dist .cache).
+ * Bağımlılıklar: api-server dizininde npm install node-cron axios komutunu çalıştır.
+ * Çalıştır: Önce backend'i npm run dev (veya start), sonra frontend'i başlat.
+Bu kodlar, senin belirttiğin CRUD yapısını korur, wouter yönlendirmelerini düzeltir ve node-cron ile arka planda çalışacak otomasyon altyapısını kurar. Artık build hatası almadan derleyebiliyor olman lazım. Eğer bir yerde "modül bulunamadı" derse, o dosyanın yolunu kontrol et.
+Şimdi build al, hata alırsan o hatayı buraya yapıştır, en son hatayı da temizleyelim.
