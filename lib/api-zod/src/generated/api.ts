@@ -7,167 +7,89 @@
  */
 import * as zod from 'zod';
 
-
-/**
- * @summary Get the saved outbound request configuration
- */
-export const GetRequestConfigResponse = zod.object({
-  "targetUrl": zod.string().nullable(),
-  "headers": zod.record(zod.string(), zod.string()),
-  "cookies": zod.record(zod.string(), zod.string())
-})
-
-
-/**
- * @summary Save the outbound request configuration
- */
-export const UpdateRequestConfigBody = zod.object({
-  "targetUrl": zod.string().nullable(),
-  "headers": zod.record(zod.string(), zod.string()),
-  "cookies": zod.record(zod.string(), zod.string())
-})
-
-export const UpdateRequestConfigResponse = zod.object({
-  "targetUrl": zod.string().nullable(),
-  "headers": zod.record(zod.string(), zod.string()),
-  "cookies": zod.record(zod.string(), zod.string())
-})
-
-
-/**
- * @summary Send a real request to the saved target URL using the saved headers/cookies and return the response
- */
-export const TestRequestConfigResponse = zod.object({
-  "status": zod.number(),
-  "statusText": zod.string(),
-  "headers": zod.record(zod.string(), zod.string()),
-  "bodyPreview": zod.string()
-})
-
-
-/**
- * @summary Log in with a username and password
- */
-
-
-
-
+// --- 1. OTURUM VE YETKİLENDİRME ---
 export const LoginBody = zod.object({
   "username": zod.string().min(1),
   "password": zod.string().min(1)
-})
+});
 
 export const LoginResponse = zod.object({
   "id": zod.number(),
-  "username": zod.string()
-})
+  "username": zod.string(),
+  "sessionExpiry": zod.string().datetime(), // Session'ın ne zaman düşeceğini bilmek için
+  "deviceProfile": zod.string().optional() // Instagram için tarayıcı parmak izi
+});
 
+export const LogoutResponse = zod.void();
 
-/**
- * @summary Log out the current session. Idempotent - returns 204 even if not authenticated.
- */
-export const LogoutResponse = zod.void()
+// --- 2. OTOMASYON VE GÖREV YÖNETİMİ (Yeni Eklendi) ---
+export const ActionTypeEnum = zod.enum(['like', 'view_story', 'follow']);
 
+export const CreateAutomationJobBody = zod.object({
+  "targetUsername": zod.string().min(1),
+  "actionType": ActionTypeEnum,
+  "frequencyMinutes": zod.number().min(15).max(1440),
+  "randomizeDelay": zod.boolean().default(true)
+});
 
-/**
- * @summary Get the currently authenticated user
- */
-export const GetMeResponse = zod.object({
-  "id": zod.number(),
-  "username": zod.string()
-})
+export const AutomationJobResponse = zod.object({
+  "jobId": zod.string(),
+  "status": zod.enum(['active', 'paused', 'failed']),
+  "nextRunAt": zod.coerce.date()
+});
 
-
-/**
- * Returns server health status
- * @summary Health check
- */
-export const HealthCheckResponse = zod.object({
-  "status": zod.string()
-})
-
-
-/**
- * @summary Get monitoring status
- */
-export const GetMonitoringStatusResponse = zod.object({
-  "enabled": zod.boolean()
-})
-
-
-/**
- * @summary Enable or disable monitoring
- */
-export const UpdateMonitoringStatusBody = zod.object({
-  "enabled": zod.boolean()
-})
-
-export const UpdateMonitoringStatusResponse = zod.object({
-  "enabled": zod.boolean()
-})
-
-
-/**
- * @summary Get counts per category
- */
-export const GetDashboardSummaryResponse = zod.object({
-  "followerCount": zod.number(),
-  "likedPostCount": zod.number(),
-  "likedStoryCount": zod.number(),
-  "monitoringEnabled": zod.boolean()
-})
-
-
-/**
- * Returns tracked users, optionally filtered by category
- * @summary List tracked users
- */
-export const ListTrackedUsersQueryParams = zod.object({
-  "category": zod.enum(['follower', 'liked_post', 'liked_story']).optional()
-})
+// --- 3. KULLANICI TAKİP VE MONİTÖR ---
+export const CategoryEnum = zod.enum(['follower', 'liked_post', 'liked_story']);
 
 export const ListTrackedUsersResponseItem = zod.object({
   "id": zod.number(),
   "username": zod.string(),
   "fullName": zod.string(),
   "avatarUrl": zod.string(),
-  "category": zod.enum(['follower', 'liked_post', 'liked_story']),
-  "addedAt": zod.coerce.date()
-})
-export const ListTrackedUsersResponse = zod.array(ListTrackedUsersResponseItem)
+  "category": CategoryEnum,
+  "addedAt": zod.coerce.date(),
+  "lastInteractionAt": zod.coerce.date().nullable(), // Botun son aksiyon zamanı
+  "interactionCount": zod.number().default(0)       // Toplam beğeni/işlem sayısı
+});
 
-
-/**
- * @summary Add a tracked user
- */
-
-
-
+export const ListTrackedUsersResponse = zod.array(ListTrackedUsersResponseItem);
 
 export const CreateTrackedUserBody = zod.object({
   "username": zod.string().min(1),
   "fullName": zod.string().min(1),
   "avatarUrl": zod.string(),
-  "category": zod.enum(['follower', 'liked_post', 'liked_story'])
-})
+  "category": CategoryEnum,
+  "autoLikeEnabled": zod.boolean().default(false) // Kullanıcı eklenirken botu otomatik başlat
+});
 
-export const CreateTrackedUserResponse = zod.object({
-  "id": zod.number(),
-  "username": zod.string(),
-  "fullName": zod.string(),
-  "avatarUrl": zod.string(),
-  "category": zod.enum(['follower', 'liked_post', 'liked_story']),
-  "addedAt": zod.coerce.date()
-})
+// --- 4. SİSTEM VE İZLEME ---
+export const GetDashboardSummaryResponse = zod.object({
+  "followerCount": zod.number(),
+  "likedPostCount": zod.number(),
+  "likedStoryCount": zod.number(),
+  "monitoringEnabled": zod.boolean(),
+  "rateLimitStatus": zod.enum(['safe', 'warning', 'critical']).default('safe') // Instagram ban riski takibi
+});
 
+export const GetRequestConfigResponse = zod.object({
+  "targetUrl": zod.string().nullable(),
+  "headers": zod.record(zod.string(), zod.string()),
+  "cookies": zod.record(zod.string(), zod.string())
+});
 
-/**
- * @summary Remove a tracked user
- */
-export const DeleteTrackedUserParams = zod.object({
-  "id": zod.coerce.number()
-})
+export const UpdateRequestConfigBody = zod.object({
+  "targetUrl": zod.string().nullable(),
+  "headers": zod.record(zod.string(), zod.string()),
+  "cookies": zod.record(zod.string(), zod.string())
+});
 
-export const DeleteTrackedUserResponse = zod.void()
+export const HealthCheckResponse = zod.object({
+  "status": zod.string(),
+  "lastRestart": zod.coerce.date()
+});
 
-
+// --- 5. HATA YÖNETİMİ (Yeni) ---
+export const ErrorResponse = zod.object({
+  "error": zod.string(),
+  "code": zod.enum(['RATE_LIMIT_EXCEEDED', 'AUTH_EXPIRED', 'ACTION_BLOCKED', 'INTERNAL_ERROR'])
+});
