@@ -7,6 +7,8 @@ import {
   CreateTrackedUserBody,
   CreateTrackedUserResponse,
   DeleteTrackedUserParams,
+  RecordTrackedUserVisitParams,
+  RecordTrackedUserVisitResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 
@@ -71,6 +73,37 @@ router.delete("/tracked-users/:id", async (req, res): Promise<void> => {
   }
 
   res.sendStatus(204);
+});
+
+// Logs that the user opened the real Instagram profile themselves (see
+// openapi.yaml for the full rationale) - it never touches Instagram.
+router.post("/tracked-users/:id/visit", async (req, res): Promise<void> => {
+  const params = RecordTrackedUserVisitParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(trackedUsersTable)
+    .where(eq(trackedUsersTable.id, params.data.id));
+
+  if (!existing) {
+    res.status(404).json({ error: "Tracked user not found" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(trackedUsersTable)
+    .set({
+      lastInteractionAt: new Date(),
+      interactionCount: existing.interactionCount + 1,
+    })
+    .where(eq(trackedUsersTable.id, params.data.id))
+    .returning();
+
+  res.json(RecordTrackedUserVisitResponse.parse(updated));
 });
 
 export default router;

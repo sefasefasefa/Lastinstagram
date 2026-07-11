@@ -258,3 +258,24 @@ export const DeleteTrackedUserParams = zod.object({
 export const DeleteTrackedUserResponse = zod.void()
 
 
+/**
+ * Called when a user clicks "Instagram'da Aç" in the panel, which opens the real Instagram profile in a new browser tab so the user can like/comment/view stories themselves. This just logs that the click happened (bumps interactionCount, sets lastInteractionAt to now) - it does not perform any action on Instagram; nothing in this codebase does.
+ * @summary Record that the user opened this profile on Instagram themselves
+ */
+export const RecordTrackedUserVisitParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RecordTrackedUserVisitResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "fullName": zod.string(),
+  "avatarUrl": zod.string(),
+  "category": zod.enum(['follower', 'liked_post', 'liked_story']),
+  "addedAt": zod.coerce.date(),
+  "lastInteractionAt": zod.coerce.date().nullish().describe('Set manually via the API - nothing in this codebase writes to it automatically.'),
+  "interactionCount": zod.number().describe('Set manually via the API - nothing in this codebase increments it automatically.'),
+  "autoLikeEnabled": zod.boolean().describe('Stored preference flag only - no automated liking exists in this codebase.')
+})
+
+

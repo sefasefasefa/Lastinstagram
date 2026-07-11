@@ -287,6 +287,33 @@ paths:
       responses:
         "204":
           description: Deleted
+  /tracked-users/{id}/visit:
+    post:
+      operationId: recordTrackedUserVisit
+      tags: [trackedUsers]
+      summary: Record that the user opened this profile on Instagram themselves
+      description: >-
+        Called when a user clicks "Instagram'da Aç" in the panel, which opens
+        the real Instagram profile in a new browser tab so the user can
+        like/comment/view stories themselves. This just logs that the click
+        happened (bumps interactionCount, sets lastInteractionAt to now) -
+        it does not perform any action on Instagram; nothing in this
+        codebase does.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated tracked user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackedUser"
+        "404":
+          description: Tracked user not found
 components:
   schemas:
     HealthStatus:

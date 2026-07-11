@@ -1331,3 +1331,75 @@ export const useDeleteTrackedUser = <TError = ErrorType<unknown>,
       return useMutation(getDeleteTrackedUserMutationOptions(options));
     }
 
+export const getRecordTrackedUserVisitUrl = (id: number,) => {
+
+
+
+
+  return `/api/tracked-users/${id}/visit`
+}
+
+/**
+ * Called when a user clicks "Instagram'da Aç" in the panel, which opens the real Instagram profile in a new browser tab so the user can like/comment/view stories themselves. This just logs that the click happened (bumps interactionCount, sets lastInteractionAt to now) - it does not perform any action on Instagram; nothing in this codebase does.
+ * @summary Record that the user opened this profile on Instagram themselves
+ */
+export const recordTrackedUserVisit = async (id: number, options?: RequestInit): Promise<TrackedUser> => {
+
+  return customFetch<TrackedUser>(getRecordTrackedUserVisitUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRecordTrackedUserVisitMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordTrackedUserVisit>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordTrackedUserVisit>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['recordTrackedUserVisit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordTrackedUserVisit>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  recordTrackedUserVisit(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordTrackedUserVisitMutationResult = NonNullable<Awaited<ReturnType<typeof recordTrackedUserVisit>>>
+
+    export type RecordTrackedUserVisitMutationError = ErrorType<void>
+
+    /**
+ * @summary Record that the user opened this profile on Instagram themselves
+ */
+export const useRecordTrackedUserVisit = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordTrackedUserVisit>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordTrackedUserVisit>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRecordTrackedUserVisitMutationOptions(options));
+    }
+

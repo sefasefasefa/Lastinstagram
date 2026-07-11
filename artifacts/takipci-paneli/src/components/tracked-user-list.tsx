@@ -1,13 +1,14 @@
-import { useListTrackedUsers, useDeleteTrackedUser, getListTrackedUsersQueryKey, getGetDashboardSummaryQueryKey, TrackedUserCategory } from "@workspace/api-client-react"
+import { useListTrackedUsers, useDeleteTrackedUser, useRecordTrackedUserVisit, getListTrackedUsersQueryKey, getGetDashboardSummaryQueryKey, TrackedUserCategory } from "@workspace/api-client-react"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/radix"
 import { Button } from "./ui/core"
-import { Trash2, User as UserIcon } from "lucide-react"
+import { Trash2, User as UserIcon, ExternalLink } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 export function TrackedUserList({ category }: { category: TrackedUserCategory }) {
   const { data: users, isLoading } = useListTrackedUsers({ category })
   const deleteUser = useDeleteTrackedUser()
+  const recordVisit = useRecordTrackedUserVisit()
   const queryClient = useQueryClient()
 
   if (isLoading) {
@@ -34,6 +35,18 @@ export function TrackedUserList({ category }: { category: TrackedUserCategory })
     })
   }
 
+  // Opens the real Instagram profile in a new tab so the user can
+  // like/comment/view stories themselves - nothing here acts on Instagram
+  // automatically. We just log that the click happened.
+  const handleOpenInstagram = (id: number, username: string) => {
+    window.open(`https://www.instagram.com/${username}/`, "_blank", "noopener,noreferrer")
+    recordVisit.mutate({ id }, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTrackedUsersQueryKey({ category }) })
+      },
+    })
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {users.map((user, index) => (
@@ -51,7 +64,23 @@ export function TrackedUserList({ category }: { category: TrackedUserCategory })
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-medium text-foreground truncate">{user.fullName}</h4>
             <p className="text-xs text-muted-foreground truncate font-mono mt-0.5">@{user.username}</p>
+            {user.lastInteractionAt && (
+              <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                Son ziyaret: {new Date(user.lastInteractionAt).toLocaleString("tr-TR")}
+              </p>
+            )}
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground hover:text-primary hover:bg-primary/10 shrink-0"
+            onClick={() => handleOpenInstagram(user.id, user.username)}
+            disabled={recordVisit.isPending}
+            title="Instagram'da aç (beğen, yorum yap veya hikayeyi kendin izle)"
+            data-testid={`button-open-instagram-${user.username}`}
+          >
+            <ExternalLink className="w-4 h-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
