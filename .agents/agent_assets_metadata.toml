@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "_nK-cnlNYsWGlYefJjPrJ"
+uri = "file://exports/takipci-paneli-proje.zip"
+type = "unspecified"
+title = "Takipçi Paneli - Proje Kodu (mevcut hali)"
