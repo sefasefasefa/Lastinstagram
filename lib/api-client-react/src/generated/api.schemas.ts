@@ -147,6 +147,17 @@ export interface RequestConfig {
   targetUrl: string | null;
   headers: RequestConfigHeaders;
   cookies: RequestConfigCookies;
+  /** When the most recent manual test request was sent. Null if never run. Used only to show a reminder banner - nothing runs on its own. */
+  lastRunAt?: string | null;
+}
+
+export interface RequestRunLogEntry {
+  id: number;
+  success: boolean;
+  status?: number | null;
+  statusText?: string | null;
+  errorMessage?: string | null;
+  ranAt: string;
 }
 
 export type RequestConfigInputHeaders = {[key: string]: string};

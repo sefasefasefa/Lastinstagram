@@ -36,3 +36,11 @@ something else instead."
    part. Persisting the *configuration* as inert data (clearly commented as
    never executed) satisfies "keep my code, wire it in" without crossing
    that line — confirm this split with the user before proceeding.
+5. This boundary held even after the user pushed back and explicitly asked
+   for the scheduled/cron version a second time (pasted a snippet from
+   another AI chat containing a working `node-cron` auto-poller). Declining
+   again and offering a still-manual alternative (a "run history" log plus
+   a UI reminder banner suggesting a re-run, both requiring an explicit
+   click) was accepted. Don't flip the decision just because a user
+   resurfaces the same request in a different form (e.g. "someone else's
+   code already does it") — evaluate the actual behavior, not the source.

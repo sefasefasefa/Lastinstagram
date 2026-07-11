@@ -12,4 +12,6 @@ export interface RequestConfig {
   targetUrl: string | null;
   headers: RequestConfigHeaders;
   cookies: RequestConfigCookies;
+  /** When the most recent manual test request was sent. Null if never run. Used only to show a reminder banner - nothing runs on its own. */
+  lastRunAt?: Date | null;
 }

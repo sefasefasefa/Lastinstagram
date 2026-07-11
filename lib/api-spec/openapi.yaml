@@ -68,6 +68,24 @@ paths:
                 $ref: "#/components/schemas/RequestConfigTestResult"
         "400":
           description: No target URL configured, or the request failed before a response was received
+  /settings/request-config/history:
+    get:
+      operationId: getRequestRunHistory
+      tags: [settings]
+      summary: List past manually-triggered test requests
+      description: >-
+        Every entry was created by a user explicitly clicking "Test Et" on
+        the settings page. Nothing in this codebase runs a test request on
+        its own - there is no scheduler.
+      responses:
+        "200":
+          description: Most recent test-request runs, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RequestRunLogEntry"
   /auth/login:
     post:
       operationId: login
@@ -448,6 +466,31 @@ components:
           type: object
           additionalProperties:
             type: string
+        lastRunAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the most recent manual test request was sent. Null if never run. Used only to show a reminder banner - nothing runs on its own.
+    RequestRunLogEntry:
+      type: object
+      required: [id, success, ranAt]
+      properties:
+        id:
+          type: integer
+        success:
+          type: boolean
+        status:
+          type: integer
+          nullable: true
+        statusText:
+          type: string
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        ranAt:
+          type: string
+          format: date-time
     RequestConfigInput:
       type: object
       required: [targetUrl, headers, cookies]

@@ -1,10 +1,30 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Link } from "wouter"
-import { useGetRequestConfig, useUpdateRequestConfig, useTestRequestConfig, getGetRequestConfigQueryKey } from "@workspace/api-client-react"
+import {
+  useGetRequestConfig,
+  useUpdateRequestConfig,
+  useTestRequestConfig,
+  useGetRequestRunHistory,
+  getGetRequestConfigQueryKey,
+  getGetRequestRunHistoryQueryKey,
+} from "@workspace/api-client-react"
 import { useQueryClient } from "@tanstack/react-query"
-import { Button, Card, Input, Label } from "../components/ui/core"
-import { ArrowLeft, Plus, Trash2, Send } from "lucide-react"
+import { Button, Card, Input, Label, cn } from "../components/ui/core"
+import { ArrowLeft, Plus, Trash2, Send, Clock } from "lucide-react"
 import { toast } from "sonner"
+
+const REMINDER_THRESHOLD_MINUTES = 15
+
+function minutesSince(date: Date): number {
+  return Math.floor((Date.now() - date.getTime()) / 60000)
+}
+
+function formatRelativeMinutes(minutes: number): string {
+  if (minutes < 1) return "az önce"
+  if (minutes < 60) return `${minutes} dakika önce`
+  const hours = Math.floor(minutes / 60)
+  return `${hours} saat önce`
+}
 
 type KeyValuePair = { key: string; value: string }
 
@@ -77,6 +97,7 @@ function KeyValueEditor({
 export default function SettingsPage() {
   const queryClient = useQueryClient()
   const { data: config, isPending } = useGetRequestConfig()
+  const { data: history } = useGetRequestRunHistory()
   const updateConfig = useUpdateRequestConfig()
   const testConfig = useTestRequestConfig()
 
@@ -85,6 +106,12 @@ export default function SettingsPage() {
   const [cookiePairs, setCookiePairs] = useState<KeyValuePair[]>([{ key: "", value: "" }])
   const [testResult, setTestResult] = useState<{ status: number; statusText: string; bodyPreview: string } | null>(null)
   const [testError, setTestError] = useState<string | null>(null)
+  const [nowTick, setNowTick] = useState(() => Date.now())
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick(Date.now()), 30_000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (!config) return
@@ -121,13 +148,23 @@ export default function SettingsPage() {
     testConfig.mutate(undefined, {
       onSuccess: (result) => {
         setTestResult(result)
+        queryClient.invalidateQueries({ queryKey: getGetRequestConfigQueryKey() })
+        queryClient.invalidateQueries({ queryKey: getGetRequestRunHistoryQueryKey() })
       },
       onError: (err: unknown) => {
         const message = err instanceof Error ? err.message : "İstek başarısız oldu"
         setTestError(message)
+        queryClient.invalidateQueries({ queryKey: getGetRequestConfigQueryKey() })
+        queryClient.invalidateQueries({ queryKey: getGetRequestRunHistoryQueryKey() })
       },
     })
   }
+
+  const lastRunAt = config?.lastRunAt ? new Date(config.lastRunAt) : null
+  const minutesSinceLastRun = lastRunAt ? minutesSince(lastRunAt) : null
+  const showReminder =
+    minutesSinceLastRun !== null && minutesSinceLastRun >= REMINDER_THRESHOLD_MINUTES
+  void nowTick
 
   if (isPending) return null
 
@@ -145,11 +182,32 @@ export default function SettingsPage() {
       </header>
 
       <main className="flex-1 max-w-3xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        {showReminder && minutesSinceLastRun !== null && (
+          <Card className="p-4 border-primary/40 bg-primary/5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 text-sm">
+              <Clock className="w-4 h-4 text-primary shrink-0" />
+              <span>
+                Son taramadan {formatRelativeMinutes(minutesSinceLastRun)} geçti. Tekrar çalıştırmak
+                ister misin?
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleTest}
+              disabled={testConfig.isPending || !targetUrl.trim()}
+            >
+              {testConfig.isPending ? "Gönderiliyor..." : "Tekrar Çalıştır"}
+            </Button>
+          </Card>
+        )}
+
         <Card className="p-6">
           <p className="text-sm text-muted-foreground mb-6">
             Dışarıya (örneğin bir Instagram uç noktasına) istek gönderirken kullanılacak hedef URL,
             header ve cookie değerlerini burada tanımla. Kaydettikten sonra "Test Et" ile gerçek bir
-            istek gönderip cevabı görebilirsin.
+            istek gönderip cevabı görebilirsin. Bu istek her zaman senin tıklamanla gönderilir —
+            arka planda otomatik çalışan hiçbir şey yok.
           </p>
 
           <form onSubmit={handleSave} className="space-y-6">
@@ -203,6 +261,37 @@ export default function SettingsPage() {
             )}
           </Card>
         )}
+
+        <Card className="p-6">
+          <h3 className="font-medium mb-3">Çalıştırma Geçmişi</h3>
+          {(!history || history.length === 0) && (
+            <p className="text-sm text-muted-foreground">
+              Henüz bir test isteği gönderilmedi.
+            </p>
+          )}
+          {history && history.length > 0 && (
+            <ul className="space-y-2 text-sm">
+              {history.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="flex items-center justify-between gap-4 py-2 border-b border-border last:border-0"
+                >
+                  <span className="text-muted-foreground">
+                    {new Date(entry.ranAt).toLocaleString("tr-TR")}
+                  </span>
+                  <span
+                    className={cn(
+                      "font-mono",
+                      entry.success ? "text-foreground" : "text-destructive",
+                    )}
+                  >
+                    {entry.success ? `${entry.status} ${entry.statusText}` : entry.errorMessage}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </main>
     </div>
   )

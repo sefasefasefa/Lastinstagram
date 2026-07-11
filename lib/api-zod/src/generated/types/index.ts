@@ -26,6 +26,7 @@ export * from './requestConfigInputCookies';
 export * from './requestConfigInputHeaders';
 export * from './requestConfigTestResult';
 export * from './requestConfigTestResultHeaders';
+export * from './requestRunLogEntry';
 export * from './trackedUser';
 export * from './trackedUserCategory';
 export * from './trackedUserInput';

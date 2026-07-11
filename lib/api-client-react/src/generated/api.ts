@@ -32,6 +32,7 @@ import type {
   RequestConfig,
   RequestConfigInput,
   RequestConfigTestResult,
+  RequestRunLogEntry,
   TrackedUser,
   TrackedUserInput
 } from './api.schemas';
@@ -281,6 +282,84 @@ export const useTestRequestConfig = <TError = ErrorType<void>,
       > => {
       return useMutation(getTestRequestConfigMutationOptions(options));
     }
+
+export const getGetRequestRunHistoryUrl = () => {
+
+
+
+
+  return `/api/settings/request-config/history`
+}
+
+/**
+ * Every entry was created by a user explicitly clicking "Test Et" on the settings page. Nothing in this codebase runs a test request on its own - there is no scheduler.
+ * @summary List past manually-triggered test requests
+ */
+export const getRequestRunHistory = async ( options?: RequestInit): Promise<RequestRunLogEntry[]> => {
+
+  return customFetch<RequestRunLogEntry[]>(getGetRequestRunHistoryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRequestRunHistoryQueryKey = () => {
+    return [
+    `/api/settings/request-config/history`
+    ] as const;
+    }
+
+
+export const getGetRequestRunHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getRequestRunHistory>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRequestRunHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRequestRunHistoryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRequestRunHistory>>> = ({ signal }) => getRequestRunHistory({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRequestRunHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRequestRunHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getRequestRunHistory>>>
+export type GetRequestRunHistoryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List past manually-triggered test requests
+ */
+
+export function useGetRequestRunHistory<TData = Awaited<ReturnType<typeof getRequestRunHistory>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRequestRunHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRequestRunHistoryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getLoginUrl = () => {
 

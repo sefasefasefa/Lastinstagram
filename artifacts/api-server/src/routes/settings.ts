@@ -7,8 +7,14 @@ import {
   UpdateRequestConfigBody,
   UpdateRequestConfigResponse,
   TestRequestConfigResponse,
+  GetRequestRunHistoryResponse,
 } from "@workspace/api-zod";
-import { getOrCreateRequestConfig } from "../lib/requestConfig";
+import {
+  getOrCreateRequestConfig,
+  getLastRunAt,
+  listRequestRunLog,
+  recordRequestRun,
+} from "../lib/requestConfig";
 import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -25,14 +31,35 @@ function toRecord(value: unknown): Record<string, string> {
 
 router.get("/settings/request-config", async (_req, res): Promise<void> => {
   const config = await getOrCreateRequestConfig();
+  const lastRunAt = await getLastRunAt();
   res.json(
     GetRequestConfigResponse.parse({
       targetUrl: config.targetUrl,
       headers: toRecord(config.headers),
       cookies: toRecord(config.cookies),
+      lastRunAt,
     }),
   );
 });
+
+router.get(
+  "/settings/request-config/history",
+  async (_req, res): Promise<void> => {
+    const rows = await listRequestRunLog();
+    res.json(
+      GetRequestRunHistoryResponse.parse(
+        rows.map((row) => ({
+          id: row.id,
+          success: row.success,
+          status: row.status,
+          statusText: row.statusText,
+          errorMessage: row.errorMessage,
+          ranAt: row.ranAt,
+        })),
+      ),
+    );
+  },
+);
 
 router.put("/settings/request-config", async (req, res): Promise<void> => {
   const parsed = UpdateRequestConfigBody.safeParse(req.body);
@@ -53,11 +80,13 @@ router.put("/settings/request-config", async (req, res): Promise<void> => {
     .where(eq(requestConfigTable.id, 1))
     .returning();
 
+  const lastRunAt = await getLastRunAt();
   res.json(
     UpdateRequestConfigResponse.parse({
       targetUrl: updated?.targetUrl ?? parsed.data.targetUrl,
       headers: toRecord(updated?.headers ?? parsed.data.headers),
       cookies: toRecord(updated?.cookies ?? parsed.data.cookies),
+      lastRunAt,
     }),
   );
 });
@@ -98,6 +127,12 @@ router.post(
         responseHeaders[key] = value;
       });
 
+      await recordRequestRun({
+        success: true,
+        status: response.status,
+        statusText: response.statusText,
+      });
+
       res.json(
         TestRequestConfigResponse.parse({
           status: response.status,
@@ -108,6 +143,7 @@ router.post(
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "İstek başarısız oldu";
+      await recordRequestRun({ success: false, errorMessage: message });
       res.status(400).json({ error: message });
     } finally {
       clearTimeout(timeout);

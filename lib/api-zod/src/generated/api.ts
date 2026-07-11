@@ -14,7 +14,8 @@ import * as zod from 'zod';
 export const GetRequestConfigResponse = zod.object({
   "targetUrl": zod.string().nullable(),
   "headers": zod.record(zod.string(), zod.string()),
-  "cookies": zod.record(zod.string(), zod.string())
+  "cookies": zod.record(zod.string(), zod.string()),
+  "lastRunAt": zod.coerce.date().nullish().describe('When the most recent manual test request was sent. Null if never run. Used only to show a reminder banner - nothing runs on its own.')
 })
 
 
@@ -30,7 +31,8 @@ export const UpdateRequestConfigBody = zod.object({
 export const UpdateRequestConfigResponse = zod.object({
   "targetUrl": zod.string().nullable(),
   "headers": zod.record(zod.string(), zod.string()),
-  "cookies": zod.record(zod.string(), zod.string())
+  "cookies": zod.record(zod.string(), zod.string()),
+  "lastRunAt": zod.coerce.date().nullish().describe('When the most recent manual test request was sent. Null if never run. Used only to show a reminder banner - nothing runs on its own.')
 })
 
 
@@ -43,6 +45,21 @@ export const TestRequestConfigResponse = zod.object({
   "headers": zod.record(zod.string(), zod.string()),
   "bodyPreview": zod.string()
 })
+
+
+/**
+ * Every entry was created by a user explicitly clicking "Test Et" on the settings page. Nothing in this codebase runs a test request on its own - there is no scheduler.
+ * @summary List past manually-triggered test requests
+ */
+export const GetRequestRunHistoryResponseItem = zod.object({
+  "id": zod.number(),
+  "success": zod.boolean(),
+  "status": zod.number().nullish(),
+  "statusText": zod.string().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "ranAt": zod.coerce.date()
+})
+export const GetRequestRunHistoryResponse = zod.array(GetRequestRunHistoryResponseItem)
 
 
 /**
