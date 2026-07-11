@@ -1,80 +1,48 @@
-import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, automationJobsTable } from "@workspace/db";
-import {
-  ListAutomationJobsResponse,
-  CreateAutomationJobBody,
-  CreateAutomationJobResponse,
-  DeleteAutomationJobParams,
-} from "@workspace/api-zod";
-import { requireAuth } from "../middlewares/requireAuth";
-import type { AutomationJob } from "@workspace/db";
+import cron from 'node-cron';
+import { db } from './db';
+import { request_config, app_state, tracked_users } from './db/schema';
+import { eq } from 'drizzle-orm';
+import { InstagramBot } from './instagramBot';
 
-// DB rows use a numeric `id`; the API contract exposes it as string `jobId`.
-function toResponseShape(job: AutomationJob) {
-  const { id, ...rest } = job;
-  return { jobId: String(id), ...rest };
-}
+export const initAutomation = () => {
+  // Her 30 dakikada bir çalışacak şekilde ayarlayalım (Çok sık çalışırsa Instagram hesabı kapatır)
+  cron.schedule('*/30 * * * *', async () => {
+    console.log('--- Otomasyon Döngüsü Başladı ---');
 
-// This router only persists job *configuration*. There is no scheduler or
-// worker anywhere in this codebase that reads automation_jobs and performs
-// the described action against a third-party site - jobs are always
-// created with status "paused" and stay that way. Any real execution
-// would have to be built and triggered explicitly, the same way
-// /settings/request-config/test requires an explicit manual call.
-const router: IRouter = Router();
+    const state = await db.select().from(app_state).where(eq(app_state.id, 1)).get();
+    if (!state?.monitoringEnabled) return;
 
-router.use(requireAuth);
+    const config = await db.select().from(request_config).where(eq(request_config.id, 1)).get();
+    if (!config?.cookies) return;
 
-router.get("/automation-jobs", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(automationJobsTable);
-  res.json(ListAutomationJobsResponse.parse(rows.map(toResponseShape)));
-});
+    // Takip listesindeki kullanıcıları çek
+    const targets = await db.select().from(tracked_users).all();
+    if (targets.length === 0) return;
 
-router.post("/automation-jobs", async (req, res): Promise<void> => {
-  const parsed = CreateAutomationJobBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+    const bot = new InstagramBot();
 
-  const nextRunAt = new Date(
-    Date.now() + parsed.data.frequencyMinutes * 60_000,
-  );
+    try {
+      const cookiesObj = JSON.parse(config.cookies);
+      const isInitialized = await bot.init(cookiesObj);
 
-  const [job] = await db
-    .insert(automationJobsTable)
-    .values({
-      targetUsername: parsed.data.targetUsername,
-      actionType: parsed.data.actionType,
-      frequencyMinutes: parsed.data.frequencyMinutes,
-      randomizeDelay: parsed.data.randomizeDelay,
-      status: "paused",
-      nextRunAt,
-    })
-    .returning();
-
-  res.status(201).json(CreateAutomationJobResponse.parse(toResponseShape(job)));
-});
-
-router.delete("/automation-jobs/:jobId", async (req, res): Promise<void> => {
-  const params = DeleteAutomationJobParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const [job] = await db
-    .delete(automationJobsTable)
-    .where(eq(automationJobsTable.id, Number(params.data.jobId)))
-    .returning();
-
-  if (!job) {
-    res.status(404).json({ error: "Automation job not found" });
-    return;
-  }
-
-  res.sendStatus(204);
-});
-
-export default router;
+      if (isInitialized) {
+        for (const target of targets) {
+          if (target.category === 'follower') {
+            // Kullanıcının hikayelerini izle
+            await bot.viewUserStories(target.username);
+          } else if (target.category === 'liked_post' || target.category === 'liked_story') {
+            // Eğer username alanı aslında bir gönderi linkiyse beğen ve yorum yap
+            if (target.username.includes('instagram.com/p/') || target.username.includes('instagram.com/reels/')) {
+              await bot.interactWithPost(target.username, "Harika içerik! 🔥");
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Otomasyon döngüsünde kritik hata:', error);
+    } finally {
+      await bot.shutdown();
+      console.log('--- Otomasyon Döngüsü Bitti ve Tarayıcı Kapatıldı ---');
+    }
+  });
+};
