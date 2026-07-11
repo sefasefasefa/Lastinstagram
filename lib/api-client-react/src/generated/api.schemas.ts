@@ -7,6 +7,54 @@
  */
 export interface HealthStatus {
   status: string;
+  /** When the current server process started. */
+  lastRestart: string;
+}
+
+export type ActionType = typeof ActionType[keyof typeof ActionType];
+
+
+export const ActionType = {
+  like: 'like',
+  view_story: 'view_story',
+  follow: 'follow',
+} as const;
+
+export interface AutomationJobInput {
+  /** @minLength 1 */
+  targetUsername: string;
+  actionType: ActionType;
+  /**
+     * @minimum 15
+     * @maximum 1440
+     */
+  frequencyMinutes: number;
+  randomizeDelay?: boolean;
+}
+
+/**
+ * Always created as "paused". Nothing in this codebase transitions it or runs the job.
+ */
+export type AutomationJobStatus = typeof AutomationJobStatus[keyof typeof AutomationJobStatus];
+
+
+export const AutomationJobStatus = {
+  active: 'active',
+  paused: 'paused',
+  failed: 'failed',
+} as const;
+
+export interface AutomationJob {
+  jobId: string;
+  targetUsername: string;
+  actionType: ActionType;
+  frequencyMinutes: number;
+  randomizeDelay: boolean;
+  /** Always created as "paused". Nothing in this codebase transitions it or runs the job. */
+  status: AutomationJobStatus;
+  /** Informational only (createdAt + frequencyMinutes) - not tied to any real scheduler. */
+  nextRunAt: string;
+  createdAt: string;
 }
 
 export interface LoginRequest {
@@ -14,11 +62,17 @@ export interface LoginRequest {
   username: string;
   /** @minLength 1 */
   password: string;
+  /** Optional client-supplied device/browser identifier. Echoed back on login, not persisted or used server-side. */
+  deviceProfile?: string;
 }
 
 export interface AuthUser {
   id: number;
   username: string;
+  /** When the current session cookie expires. */
+  sessionExpiry: string;
+  /** Optional client-supplied device/browser identifier, echoed back as received. Not used for anything server-side. */
+  deviceProfile?: string | null;
 }
 
 export interface MonitoringStatus {
@@ -45,6 +99,12 @@ export interface TrackedUser {
   avatarUrl: string;
   category: TrackedUserCategory;
   addedAt: string;
+  /** Set manually via the API - nothing in this codebase writes to it automatically. */
+  lastInteractionAt?: string | null;
+  /** Set manually via the API - nothing in this codebase increments it automatically. */
+  interactionCount: number;
+  /** Stored preference flag only - no automated liking exists in this codebase. */
+  autoLikeEnabled: boolean;
 }
 
 export interface TrackedUserInput {
@@ -54,13 +114,29 @@ export interface TrackedUserInput {
   fullName: string;
   avatarUrl: string;
   category: TrackedUserCategory;
+  /** Stored preference flag only - no automated liking exists in this codebase. */
+  autoLikeEnabled?: boolean;
 }
+
+/**
+ * Static placeholder ("safe") - no real request-rate tracking exists in this codebase.
+ */
+export type DashboardSummaryRateLimitStatus = typeof DashboardSummaryRateLimitStatus[keyof typeof DashboardSummaryRateLimitStatus];
+
+
+export const DashboardSummaryRateLimitStatus = {
+  safe: 'safe',
+  warning: 'warning',
+  critical: 'critical',
+} as const;
 
 export interface DashboardSummary {
   followerCount: number;
   likedPostCount: number;
   likedStoryCount: number;
   monitoringEnabled: boolean;
+  /** Static placeholder ("safe") - no real request-rate tracking exists in this codebase. */
+  rateLimitStatus: DashboardSummaryRateLimitStatus;
 }
 
 export type RequestConfigHeaders = {[key: string]: string};

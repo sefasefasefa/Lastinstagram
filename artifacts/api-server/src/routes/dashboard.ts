@@ -35,6 +35,9 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
       likedPostCount: counts.liked_post,
       likedStoryCount: counts.liked_story,
       monitoringEnabled: state.monitoringEnabled,
+      // Static placeholder - nothing in this codebase tracks real request
+      // rates against a third party, so there is nothing to derive this from.
+      rateLimitStatus: "safe",
     }),
   );
 });

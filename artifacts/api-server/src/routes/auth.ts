@@ -3,6 +3,13 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { LoginBody, LoginResponse, GetMeResponse } from "@workspace/api-zod";
+
+// express-session sets cookie.expires once a session is established. Reads
+// as an absolute timestamp so the client knows when it'll be signed out.
+function sessionExpiryOf(req: import("express").Request): string {
+  const expires = req.session.cookie.expires;
+  return (expires instanceof Date ? expires : new Date(expires!)).toISOString();
+}
 import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -36,7 +43,16 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       return;
     }
     req.session.userId = user.id;
-    res.json(LoginResponse.parse({ id: user.id, username: user.username }));
+    res.json(
+      LoginResponse.parse({
+        id: user.id,
+        username: user.username,
+        sessionExpiry: sessionExpiryOf(req),
+        // Echoed back verbatim if the client sends one; never persisted or
+        // used for anything server-side.
+        deviceProfile: parsed.data.deviceProfile,
+      }),
+    );
   });
 });
 
@@ -63,7 +79,13 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(GetMeResponse.parse({ id: user.id, username: user.username }));
+  res.json(
+    GetMeResponse.parse({
+      id: user.id,
+      username: user.username,
+      sessionExpiry: sessionExpiryOf(req),
+    }),
+  );
 });
 
 export default router;

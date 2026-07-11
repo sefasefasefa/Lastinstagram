@@ -9,4 +9,8 @@
 export interface AuthUser {
   id: number;
   username: string;
+  /** When the current session cookie expires. */
+  sessionExpiry: Date;
+  /** Optional client-supplied device/browser identifier, echoed back as received. Not used for anything server-side. */
+  deviceProfile?: string | null;
 }

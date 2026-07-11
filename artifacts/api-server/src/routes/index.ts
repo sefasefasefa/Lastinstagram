@@ -5,6 +5,7 @@ import monitoringRouter from "./monitoring";
 import trackedUsersRouter from "./trackedUsers";
 import dashboardRouter from "./dashboard";
 import settingsRouter from "./settings";
+import automationJobsRouter from "./automationJobs";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(monitoringRouter);
 router.use(trackedUsersRouter);
 router.use(dashboardRouter);
 router.use(settingsRouter);
+router.use(automationJobsRouter);
 
 export default router;

@@ -1,30 +1,38 @@
 ---
 name: Corrupted generated/source files in an imported project
-description: How to recognize and fix hand-edited garbage left inside codegen output or entry files by whatever produced/edited the imported repo before it reached Replit.
+description: How to recognize hand-edited garbage in codegen output vs. the user's real committed feature work, and how to reconcile them without deleting the user's code.
 ---
 
 Symptom: build fails with import/export mismatches that don't correspond to
-the current source-of-truth (e.g. an OpenAPI spec, or a router file), or a
-frontend entry file mysteriously imports backend-only packages
-(`express-session`, `connect-pg-simple`) it has no reason to use.
+the current source-of-truth (e.g. an OpenAPI spec, or a router file), or an
+entry file mysteriously imports code from a different layer (backend code
+pasted into a frontend component).
 
-**Why:** The file's content doesn't match what its stated generator/purpose
-would produce — it contains extra fields, Turkish comments, or code for a
-completely different layer (backend code pasted into a frontend component).
-This happens when a prior tool/edit corrupted the file without leaving any
-task-tracker trace, so there's no changelog to consult — only the file
-content itself is evidence.
+**Why this needs care:** Not all such content is throwaway corruption. Check
+`git log`/`git show <commit>:<path>` for the file, not just `git diff` against
+the working tree — a previous commit may show the divergent content was
+already committed by the user as real (if incomplete) feature work, not
+random noise. Blindly running `git checkout` or regenerating from a spec
+discards committed user work with no easy undo once the working tree is
+overwritten again, and users find that maddening — one user explicitly
+required "restore my code AND wire it into the app, don't just build
+something else instead."
 
 **How to apply:**
-1. Run `git diff <path>` against HEAD. If the working copy diverges from a
-   committed version that looks correct/consistent, that's the smoking gun.
-2. For generated files (codegen output): `git checkout -- <path>` to revert,
-   then re-run the actual codegen command (e.g. `orval` via the package's
-   `codegen` script) from the real source of truth — don't hand-patch
-   generated output.
-3. For hand-written source files: if a committed version exists and matches
-   the rest of the codebase's imports/usage, `git checkout -- <path>` is
-   sufficient.
-4. Check for stray leftover files the corruption may have introduced (e.g.
-   an unused module referenced only by the corrupted file) and delete them
-   if nothing legitimate imports them.
+1. `git log --oneline --all -- <path>` and inspect prior commits, not just
+   the current diff, before concluding something is corruption.
+2. If it's genuinely uncommitted stray debris with no matching commit
+   anywhere (nothing references it, no prior commit contains it), reverting
+   is safe.
+3. If a prior commit contains the divergent content, it's likely intentional
+   user work that just doesn't compile/integrate yet. Recover it (`git show
+   <commit>:<path>`), then integrate it properly into the actual
+   source-of-truth (e.g. add the fields/endpoints to the OpenAPI spec, wire
+   real DB columns/routes) rather than discarding it via a plain regen.
+4. If the recovered feature implies executing real side effects against a
+   third party in a way that would violate that party's terms of service
+   (e.g. an automation bot that auto-likes/follows/views on a social
+   platform using scraped cookies), don't build the execution/scheduling
+   part. Persisting the *configuration* as inert data (clearly commented as
+   never executed) satisfies "keep my code, wire it in" without crossing
+   that line — confirm this split with the user before proceeding.

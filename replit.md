@@ -30,6 +30,8 @@ A Turkish-language tracker/subscriber panel web app (frontend: "Takipçi Paneli"
 - This project was imported with `artifacts/*` directories and `.replit-artifact/artifact.toml` files already present, but the artifacts weren't registered with the platform yet (`listArtifacts()` returned empty and their workflows didn't exist). Registration was triggered by calling `verifyAndReplaceArtifactToml` with the existing (unmodified) TOML content for one artifact, which caused the platform to auto-discover and register all three artifacts and their workflows in one pass.
 - The dev preview proxy appears to cache API responses by path even for non-GET requests; the API server sets `Cache-Control: no-store` on every response in non-production to avoid stale results while developing.
 - `connect-pg-simple`'s `createTableIfMissing` reads a `table.sql` asset from its package directory, which esbuild does not bundle — it throws `ENOENT` at runtime. The `session` table is instead declared as a Drizzle table (`lib/db/src/schema/session.ts`) and kept in sync via `db push`; the store is created with `createTableIfMissing: false`.
+- The generated `lib/api-zod/src/generated/api.ts` was found hand-edited (uncommitted) at one point, out of sync with `openapi.yaml`, breaking the API server build. Never hand-edit generated files — change `lib/api-spec/openapi.yaml` and run the codegen command instead.
+- `automation_jobs` table + `/api/automation-jobs` endpoints store job *configuration* (target username, action type, frequency) only. **Nothing executes them** — there is no cron/worker anywhere in this codebase, jobs are always created with `status: "paused"`, and `nextRunAt` is purely informational. Building a real scheduler that performs automated actions (like/follow/view-story) against a third-party site was intentionally declined — it would violate that site's terms of service. Same boundary applies to `tracked_users.autoLikeEnabled`/`lastInteractionAt`/`interactionCount`: they're stored fields, nothing writes to them automatically.
 
 ## Where things live
 
@@ -46,10 +48,6 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 ## User preferences
 
 _Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
 
 ## Pointers
 

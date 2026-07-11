@@ -8,4 +8,6 @@
 
 export interface HealthStatus {
   status: string;
+  /** When the current server process started. */
+  lastRestart: Date;
 }

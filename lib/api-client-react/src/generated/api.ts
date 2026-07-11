@@ -21,6 +21,8 @@ import type {
 
 import type {
   AuthUser,
+  AutomationJob,
+  AutomationJobInput,
   DashboardSummary,
   HealthStatus,
   ListTrackedUsersParams,
@@ -576,6 +578,227 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
+
+export const getListAutomationJobsUrl = () => {
+
+
+
+
+  return `/api/automation-jobs`
+}
+
+/**
+ * Read-only listing of persisted job configuration. No job in this list is ever executed automatically by the server.
+ * @summary List stored automation job configurations
+ */
+export const listAutomationJobs = async ( options?: RequestInit): Promise<AutomationJob[]> => {
+
+  return customFetch<AutomationJob[]>(getListAutomationJobsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAutomationJobsQueryKey = () => {
+    return [
+    `/api/automation-jobs`
+    ] as const;
+    }
+
+
+export const getListAutomationJobsQueryOptions = <TData = Awaited<ReturnType<typeof listAutomationJobs>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAutomationJobs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAutomationJobsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAutomationJobs>>> = ({ signal }) => listAutomationJobs({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAutomationJobs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAutomationJobsQueryResult = NonNullable<Awaited<ReturnType<typeof listAutomationJobs>>>
+export type ListAutomationJobsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List stored automation job configurations
+ */
+
+export function useListAutomationJobs<TData = Awaited<ReturnType<typeof listAutomationJobs>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAutomationJobs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAutomationJobsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAutomationJobUrl = () => {
+
+
+
+
+  return `/api/automation-jobs`
+}
+
+/**
+ * Persists the job configuration only. Jobs are created with status "paused" and are never picked up by a scheduler - there is none in this codebase. A user must build/trigger any real execution explicitly elsewhere.
+ * @summary Save an automation job configuration
+ */
+export const createAutomationJob = async (automationJobInput: AutomationJobInput, options?: RequestInit): Promise<AutomationJob> => {
+
+  return customFetch<AutomationJob>(getCreateAutomationJobUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(automationJobInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAutomationJobMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAutomationJob>>, TError,{data: BodyType<AutomationJobInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAutomationJob>>, TError,{data: BodyType<AutomationJobInput>}, TContext> => {
+
+const mutationKey = ['createAutomationJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAutomationJob>>, {data: BodyType<AutomationJobInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAutomationJob(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAutomationJobMutationResult = NonNullable<Awaited<ReturnType<typeof createAutomationJob>>>
+    export type CreateAutomationJobMutationBody = BodyType<AutomationJobInput>
+    export type CreateAutomationJobMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Save an automation job configuration
+ */
+export const useCreateAutomationJob = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAutomationJob>>, TError,{data: BodyType<AutomationJobInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAutomationJob>>,
+        TError,
+        {data: BodyType<AutomationJobInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAutomationJobMutationOptions(options));
+    }
+
+export const getDeleteAutomationJobUrl = (jobId: string,) => {
+
+
+
+
+  return `/api/automation-jobs/${jobId}`
+}
+
+/**
+ * @summary Remove a stored automation job configuration
+ */
+export const deleteAutomationJob = async (jobId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteAutomationJobUrl(jobId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAutomationJobMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAutomationJob>>, TError,{jobId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAutomationJob>>, TError,{jobId: string}, TContext> => {
+
+const mutationKey = ['deleteAutomationJob'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAutomationJob>>, {jobId: string}> = (props) => {
+          const {jobId} = props ?? {};
+
+          return  deleteAutomationJob(jobId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAutomationJobMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAutomationJob>>>
+
+    export type DeleteAutomationJobMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove a stored automation job configuration
+ */
+export const useDeleteAutomationJob = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAutomationJob>>, TError,{jobId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAutomationJob>>,
+        TError,
+        {jobId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteAutomationJobMutationOptions(options));
+    }
 
 export const getGetMonitoringStatusUrl = () => {
 

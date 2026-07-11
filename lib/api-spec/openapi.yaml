@@ -18,6 +18,12 @@ tags:
     description: Tracked user list operations
   - name: settings
     description: Outbound request configuration (target URL, headers, cookies)
+  - name: automationJobs
+    description: >-
+      Stored automation job configuration. Jobs are persisted for record-keeping
+      only - nothing in this codebase schedules or executes them. Any real
+      execution against a third-party site must be triggered manually by a
+      user, the same way /settings/request-config/test works.
 paths:
   /settings/request-config:
     get:
@@ -117,6 +123,59 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /automation-jobs:
+    get:
+      operationId: listAutomationJobs
+      tags: [automationJobs]
+      summary: List stored automation job configurations
+      description: >-
+        Read-only listing of persisted job configuration. No job in this list
+        is ever executed automatically by the server.
+      responses:
+        "200":
+          description: List of automation jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AutomationJob"
+    post:
+      operationId: createAutomationJob
+      tags: [automationJobs]
+      summary: Save an automation job configuration
+      description: >-
+        Persists the job configuration only. Jobs are created with status
+        "paused" and are never picked up by a scheduler - there is none in
+        this codebase. A user must build/trigger any real execution
+        explicitly elsewhere.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationJobInput"
+      responses:
+        "201":
+          description: Created automation job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationJob"
+  /automation-jobs/{jobId}:
+    delete:
+      operationId: deleteAutomationJob
+      tags: [automationJobs]
+      summary: Remove a stored automation job configuration
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
   /monitoring:
     get:
       operationId: getMonitoringStatus
@@ -217,8 +276,57 @@ components:
       properties:
         status:
           type: string
+        lastRestart:
+          type: string
+          format: date-time
+          description: When the current server process started.
       required:
         - status
+        - lastRestart
+    ActionType:
+      type: string
+      enum: [like, view_story, follow]
+    AutomationJobInput:
+      type: object
+      required: [targetUsername, actionType, frequencyMinutes]
+      properties:
+        targetUsername:
+          type: string
+          minLength: 1
+        actionType:
+          $ref: "#/components/schemas/ActionType"
+        frequencyMinutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        randomizeDelay:
+          type: boolean
+          default: true
+    AutomationJob:
+      type: object
+      required: [jobId, targetUsername, actionType, frequencyMinutes, randomizeDelay, status, nextRunAt, createdAt]
+      properties:
+        jobId:
+          type: string
+        targetUsername:
+          type: string
+        actionType:
+          $ref: "#/components/schemas/ActionType"
+        frequencyMinutes:
+          type: integer
+        randomizeDelay:
+          type: boolean
+        status:
+          type: string
+          enum: [active, paused, failed]
+          description: Always created as "paused". Nothing in this codebase transitions it or runs the job.
+        nextRunAt:
+          type: string
+          format: date-time
+          description: Informational only (createdAt + frequencyMinutes) - not tied to any real scheduler.
+        createdAt:
+          type: string
+          format: date-time
     LoginRequest:
       type: object
       required: [username, password]
@@ -229,14 +337,25 @@ components:
         password:
           type: string
           minLength: 1
+        deviceProfile:
+          type: string
+          description: Optional client-supplied device/browser identifier. Echoed back on login, not persisted or used server-side.
     AuthUser:
       type: object
-      required: [id, username]
+      required: [id, username, sessionExpiry]
       properties:
         id:
           type: integer
         username:
           type: string
+        sessionExpiry:
+          type: string
+          format: date-time
+          description: When the current session cookie expires.
+        deviceProfile:
+          type: string
+          nullable: true
+          description: Optional client-supplied device/browser identifier, echoed back as received. Not used for anything server-side.
     MonitoringStatus:
       type: object
       required: [enabled]
@@ -254,7 +373,7 @@ components:
       enum: [follower, liked_post, liked_story]
     TrackedUser:
       type: object
-      required: [id, username, fullName, avatarUrl, category, addedAt]
+      required: [id, username, fullName, avatarUrl, category, addedAt, interactionCount, autoLikeEnabled]
       properties:
         id:
           type: integer
@@ -269,6 +388,17 @@ components:
         addedAt:
           type: string
           format: date-time
+        lastInteractionAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set manually via the API - nothing in this codebase writes to it automatically.
+        interactionCount:
+          type: integer
+          description: Set manually via the API - nothing in this codebase increments it automatically.
+        autoLikeEnabled:
+          type: boolean
+          description: Stored preference flag only - no automated liking exists in this codebase.
     TrackedUserInput:
       type: object
       required: [username, fullName, avatarUrl, category]
@@ -283,9 +413,13 @@ components:
           type: string
         category:
           $ref: "#/components/schemas/TrackedUserCategory"
+        autoLikeEnabled:
+          type: boolean
+          default: false
+          description: Stored preference flag only - no automated liking exists in this codebase.
     DashboardSummary:
       type: object
-      required: [followerCount, likedPostCount, likedStoryCount, monitoringEnabled]
+      required: [followerCount, likedPostCount, likedStoryCount, monitoringEnabled, rateLimitStatus]
       properties:
         followerCount:
           type: integer
@@ -295,6 +429,10 @@ components:
           type: integer
         monitoringEnabled:
           type: boolean
+        rateLimitStatus:
+          type: string
+          enum: [safe, warning, critical]
+          description: Static placeholder ("safe") - no real request-rate tracking exists in this codebase.
     RequestConfig:
       type: object
       required: [targetUrl, headers, cookies]

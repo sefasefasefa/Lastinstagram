@@ -44,7 +44,10 @@ router.post("/tracked-users", async (req, res): Promise<void> => {
 
   const [user] = await db
     .insert(trackedUsersTable)
-    .values(parsed.data)
+    .values({
+      ...parsed.data,
+      autoLikeEnabled: parsed.data.autoLikeEnabled ?? false,
+    })
     .returning();
 
   res.status(201).json(CreateTrackedUserResponse.parse(user));

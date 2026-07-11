@@ -22,3 +22,4 @@ export * from "./appState";
 export * from "./users";
 export * from "./session";
 export * from "./requestConfig";
+export * from "./automationJobs";

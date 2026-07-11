@@ -5,10 +5,13 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { DashboardSummaryRateLimitStatus } from './dashboardSummaryRateLimitStatus';
 
 export interface DashboardSummary {
   followerCount: number;
   likedPostCount: number;
   likedStoryCount: number;
   monitoringEnabled: boolean;
+  /** Static placeholder ("safe") - no real request-rate tracking exists in this codebase. */
+  rateLimitStatus: DashboardSummaryRateLimitStatus;
 }

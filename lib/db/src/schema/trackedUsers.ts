@@ -1,4 +1,11 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  serial,
+  timestamp,
+  integer,
+  boolean,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -17,6 +24,13 @@ export const trackedUsersTable = pgTable("tracked_users", {
   addedAt: timestamp("added_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // The following are stored fields only - nothing in this codebase writes
+  // to lastInteractionAt/interactionCount automatically, and autoLikeEnabled
+  // does not trigger any automated action. There is no scheduler/bot in
+  // this codebase; see lib/db/src/schema/automationJobs.ts for why.
+  lastInteractionAt: timestamp("last_interaction_at", { withTimezone: true }),
+  interactionCount: integer("interaction_count").notNull().default(0),
+  autoLikeEnabled: boolean("auto_like_enabled").notNull().default(false),
 });
 
 export const insertTrackedUserSchema = createInsertSchema(

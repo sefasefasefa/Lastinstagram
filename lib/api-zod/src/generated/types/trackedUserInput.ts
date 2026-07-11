@@ -14,4 +14,6 @@ export interface TrackedUserInput {
   fullName: string;
   avatarUrl: string;
   category: TrackedUserCategory;
+  /** Stored preference flag only - no automated liking exists in this codebase. */
+  autoLikeEnabled?: boolean;
 }

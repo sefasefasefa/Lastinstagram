@@ -11,4 +11,6 @@ export interface LoginRequest {
   username: string;
   /** @minLength 1 */
   password: string;
+  /** Optional client-supplied device/browser identifier. Echoed back on login, not persisted or used server-side. */
+  deviceProfile?: string;
 }

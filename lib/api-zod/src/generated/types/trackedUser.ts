@@ -14,4 +14,10 @@ export interface TrackedUser {
   avatarUrl: string;
   category: TrackedUserCategory;
   addedAt: Date;
+  /** Set manually via the API - nothing in this codebase writes to it automatically. */
+  lastInteractionAt?: Date | null;
+  /** Set manually via the API - nothing in this codebase increments it automatically. */
+  interactionCount: number;
+  /** Stored preference flag only - no automated liking exists in this codebase. */
+  autoLikeEnabled: boolean;
 }

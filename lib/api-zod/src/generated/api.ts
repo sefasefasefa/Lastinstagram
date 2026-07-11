@@ -54,12 +54,15 @@ export const TestRequestConfigResponse = zod.object({
 
 export const LoginBody = zod.object({
   "username": zod.string().min(1),
-  "password": zod.string().min(1)
+  "password": zod.string().min(1),
+  "deviceProfile": zod.string().optional().describe('Optional client-supplied device\/browser identifier. Echoed back on login, not persisted or used server-side.')
 })
 
 export const LoginResponse = zod.object({
   "id": zod.number(),
-  "username": zod.string()
+  "username": zod.string(),
+  "sessionExpiry": zod.coerce.date().describe('When the current session cookie expires.'),
+  "deviceProfile": zod.string().nullish().describe('Optional client-supplied device\/browser identifier, echoed back as received. Not used for anything server-side.')
 })
 
 
@@ -74,7 +77,9 @@ export const LogoutResponse = zod.void()
  */
 export const GetMeResponse = zod.object({
   "id": zod.number(),
-  "username": zod.string()
+  "username": zod.string(),
+  "sessionExpiry": zod.coerce.date().describe('When the current session cookie expires.'),
+  "deviceProfile": zod.string().nullish().describe('Optional client-supplied device\/browser identifier, echoed back as received. Not used for anything server-side.')
 })
 
 
@@ -83,8 +88,65 @@ export const GetMeResponse = zod.object({
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
-  "status": zod.string()
+  "status": zod.string(),
+  "lastRestart": zod.coerce.date().describe('When the current server process started.')
 })
+
+
+/**
+ * Read-only listing of persisted job configuration. No job in this list is ever executed automatically by the server.
+ * @summary List stored automation job configurations
+ */
+export const ListAutomationJobsResponseItem = zod.object({
+  "jobId": zod.string(),
+  "targetUsername": zod.string(),
+  "actionType": zod.enum(['like', 'view_story', 'follow']),
+  "frequencyMinutes": zod.number(),
+  "randomizeDelay": zod.boolean(),
+  "status": zod.enum(['active', 'paused', 'failed']).describe('Always created as \"paused\". Nothing in this codebase transitions it or runs the job.'),
+  "nextRunAt": zod.coerce.date().describe('Informational only (createdAt + frequencyMinutes) - not tied to any real scheduler.'),
+  "createdAt": zod.coerce.date()
+})
+export const ListAutomationJobsResponse = zod.array(ListAutomationJobsResponseItem)
+
+
+/**
+ * Persists the job configuration only. Jobs are created with status "paused" and are never picked up by a scheduler - there is none in this codebase. A user must build/trigger any real execution explicitly elsewhere.
+ * @summary Save an automation job configuration
+ */
+
+export const createAutomationJobBodyFrequencyMinutesMin = 15;
+export const createAutomationJobBodyFrequencyMinutesMax = 1440;
+
+export const createAutomationJobBodyRandomizeDelayDefault = true;
+
+export const CreateAutomationJobBody = zod.object({
+  "targetUsername": zod.string().min(1),
+  "actionType": zod.enum(['like', 'view_story', 'follow']),
+  "frequencyMinutes": zod.number().min(createAutomationJobBodyFrequencyMinutesMin).max(createAutomationJobBodyFrequencyMinutesMax),
+  "randomizeDelay": zod.boolean().default(createAutomationJobBodyRandomizeDelayDefault)
+})
+
+export const CreateAutomationJobResponse = zod.object({
+  "jobId": zod.string(),
+  "targetUsername": zod.string(),
+  "actionType": zod.enum(['like', 'view_story', 'follow']),
+  "frequencyMinutes": zod.number(),
+  "randomizeDelay": zod.boolean(),
+  "status": zod.enum(['active', 'paused', 'failed']).describe('Always created as \"paused\". Nothing in this codebase transitions it or runs the job.'),
+  "nextRunAt": zod.coerce.date().describe('Informational only (createdAt + frequencyMinutes) - not tied to any real scheduler.'),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Remove a stored automation job configuration
+ */
+export const DeleteAutomationJobParams = zod.object({
+  "jobId": zod.coerce.string()
+})
+
+export const DeleteAutomationJobResponse = zod.void()
 
 
 /**
@@ -114,7 +176,8 @@ export const GetDashboardSummaryResponse = zod.object({
   "followerCount": zod.number(),
   "likedPostCount": zod.number(),
   "likedStoryCount": zod.number(),
-  "monitoringEnabled": zod.boolean()
+  "monitoringEnabled": zod.boolean(),
+  "rateLimitStatus": zod.enum(['safe', 'warning', 'critical']).describe('Static placeholder (\"safe\") - no real request-rate tracking exists in this codebase.')
 })
 
 
@@ -132,7 +195,10 @@ export const ListTrackedUsersResponseItem = zod.object({
   "fullName": zod.string(),
   "avatarUrl": zod.string(),
   "category": zod.enum(['follower', 'liked_post', 'liked_story']),
-  "addedAt": zod.coerce.date()
+  "addedAt": zod.coerce.date(),
+  "lastInteractionAt": zod.coerce.date().nullish().describe('Set manually via the API - nothing in this codebase writes to it automatically.'),
+  "interactionCount": zod.number().describe('Set manually via the API - nothing in this codebase increments it automatically.'),
+  "autoLikeEnabled": zod.boolean().describe('Stored preference flag only - no automated liking exists in this codebase.')
 })
 export const ListTrackedUsersResponse = zod.array(ListTrackedUsersResponseItem)
 
@@ -142,13 +208,14 @@ export const ListTrackedUsersResponse = zod.array(ListTrackedUsersResponseItem)
  */
 
 
-
+export const createTrackedUserBodyAutoLikeEnabledDefault = false;
 
 export const CreateTrackedUserBody = zod.object({
   "username": zod.string().min(1),
   "fullName": zod.string().min(1),
   "avatarUrl": zod.string(),
-  "category": zod.enum(['follower', 'liked_post', 'liked_story'])
+  "category": zod.enum(['follower', 'liked_post', 'liked_story']),
+  "autoLikeEnabled": zod.boolean().default(createTrackedUserBodyAutoLikeEnabledDefault).describe('Stored preference flag only - no automated liking exists in this codebase.')
 })
 
 export const CreateTrackedUserResponse = zod.object({
@@ -157,7 +224,10 @@ export const CreateTrackedUserResponse = zod.object({
   "fullName": zod.string(),
   "avatarUrl": zod.string(),
   "category": zod.enum(['follower', 'liked_post', 'liked_story']),
-  "addedAt": zod.coerce.date()
+  "addedAt": zod.coerce.date(),
+  "lastInteractionAt": zod.coerce.date().nullish().describe('Set manually via the API - nothing in this codebase writes to it automatically.'),
+  "interactionCount": zod.number().describe('Set manually via the API - nothing in this codebase increments it automatically.'),
+  "autoLikeEnabled": zod.boolean().describe('Stored preference flag only - no automated liking exists in this codebase.')
 })
 
 
