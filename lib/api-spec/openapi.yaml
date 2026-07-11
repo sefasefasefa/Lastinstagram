@@ -24,6 +24,8 @@ tags:
       only - nothing in this codebase schedules or executes them. Any real
       execution against a third-party site must be triggered manually by a
       user, the same way /settings/request-config/test works.
+  - name: instagram
+    description: Authenticated Instagram profile, media and explicit interaction operations
 paths:
   /settings/request-config:
     get:
@@ -314,8 +316,319 @@ paths:
                 $ref: "#/components/schemas/TrackedUser"
         "404":
           description: Tracked user not found
+  /instagram/status:
+    get:
+      operationId: getInstagramStatus
+      tags: [instagram]
+      summary: Get the current Instagram client session status
+      responses:
+        "200":
+          description: Instagram client status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramStatusResponse"
+  /instagram/login:
+    post:
+      operationId: loginInstagram
+      tags: [instagram]
+      summary: Initialize the configured Instagram session
+      responses:
+        "200":
+          description: Instagram session initialized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramActionResponse"
+        "502":
+          description: Instagram authentication failed
+  /instagram/logout:
+    post:
+      operationId: logoutInstagram
+      tags: [instagram]
+      summary: Close the active Instagram session
+      responses:
+        "200":
+          description: Instagram session closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramActionResponse"
+  /instagram/profile/{username}:
+    get:
+      operationId: getInstagramProfile
+      tags: [instagram]
+      summary: Get an Instagram profile
+      parameters:
+        - $ref: "#/components/parameters/InstagramUsername"
+      responses:
+        "200":
+          description: Instagram profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramProfileResponse"
+        "502":
+          description: Instagram request failed
+  /instagram/posts/{username}:
+    get:
+      operationId: getInstagramPosts
+      tags: [instagram]
+      summary: Get recent Instagram posts
+      parameters:
+        - $ref: "#/components/parameters/InstagramUsername"
+      responses:
+        "200":
+          description: Instagram posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramPostsResponse"
+        "502":
+          description: Instagram request failed
+  /instagram/stories/{username}:
+    get:
+      operationId: getInstagramStories
+      tags: [instagram]
+      summary: Get active Instagram stories
+      parameters:
+        - $ref: "#/components/parameters/InstagramUsername"
+      responses:
+        "200":
+          description: Instagram stories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramStoriesResponse"
+        "502":
+          description: Instagram request failed
+  /instagram/reels/{username}:
+    get:
+      operationId: getInstagramReels
+      tags: [instagram]
+      summary: Get recent Instagram video posts and Reels
+      parameters:
+        - $ref: "#/components/parameters/InstagramUsername"
+      responses:
+        "200":
+          description: Instagram Reels
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramReelsResponse"
+        "502":
+          description: Instagram request failed
+  /instagram/like-post:
+    post:
+      operationId: likeInstagramPost
+      tags: [instagram]
+      summary: Like one Instagram post after an explicit user action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstagramPostActionInput"
+      responses:
+        "200":
+          description: Like request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramActionResponse"
+        "400":
+          description: Invalid request
+        "502":
+          description: Instagram rejected the request
+  /instagram/like-story:
+    post:
+      operationId: likeInstagramStory
+      tags: [instagram]
+      summary: Like one Instagram story after an explicit user action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstagramStoryActionInput"
+      responses:
+        "200":
+          description: Like request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramActionResponse"
+        "400":
+          description: Invalid request
+        "502":
+          description: Instagram rejected the request
+  /instagram/like-reel:
+    post:
+      operationId: likeInstagramReel
+      tags: [instagram]
+      summary: Like one Instagram Reel after an explicit user action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstagramReelActionInput"
+      responses:
+        "200":
+          description: Like request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramActionResponse"
+        "400":
+          description: Invalid request
+        "502":
+          description: Instagram rejected the request
 components:
+  parameters:
+    InstagramUsername:
+      name: username
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
   schemas:
+    InstagramStatusResponse:
+      type: object
+      required: [authenticated]
+      properties:
+        authenticated:
+          type: boolean
+    InstagramActionResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+    InstagramProfile:
+      type: object
+      required: [username, pk, fullName]
+      properties:
+        username:
+          type: string
+        pk:
+          type: string
+        fullName:
+          type: string
+        profilePicUrl:
+          type: string
+    InstagramProfileResponse:
+      type: object
+      required: [success, profile]
+      properties:
+        success:
+          type: boolean
+        profile:
+          $ref: "#/components/schemas/InstagramProfile"
+    InstagramPost:
+      type: object
+      required: [id, mediaType, likeCount, hasLiked]
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        mediaType:
+          type: integer
+        caption:
+          type: string
+        likeCount:
+          type: integer
+        displayUrl:
+          type: string
+        videoUrl:
+          type: string
+        hasLiked:
+          type: boolean
+    InstagramPostsResponse:
+      type: object
+      required: [success, posts]
+      properties:
+        success:
+          type: boolean
+        posts:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstagramPost"
+    InstagramStory:
+      type: object
+      required: [id, mediaType, timestamp]
+      properties:
+        id:
+          type: string
+        mediaType:
+          type: integer
+        thumbnailUrl:
+          type: string
+        videoUrl:
+          type: string
+        displayUrl:
+          type: string
+        timestamp:
+          type: integer
+          format: int64
+    InstagramStoriesResponse:
+      type: object
+      required: [success, stories]
+      properties:
+        success:
+          type: boolean
+        stories:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstagramStory"
+    InstagramReel:
+      allOf:
+        - $ref: "#/components/schemas/InstagramPost"
+        - type: object
+          required: [playCount, timestamp]
+          properties:
+            playCount:
+              type: integer
+            timestamp:
+              type: integer
+              format: int64
+    InstagramReelsResponse:
+      type: object
+      required: [success, reels]
+      properties:
+        success:
+          type: boolean
+        reels:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstagramReel"
+    InstagramPostActionInput:
+      type: object
+      required: [postId]
+      properties:
+        postId:
+          type: string
+          minLength: 1
+    InstagramStoryActionInput:
+      type: object
+      required: [storyId]
+      properties:
+        storyId:
+          type: string
+          minLength: 1
+    InstagramReelActionInput:
+      type: object
+      required: [reelId]
+      properties:
+        reelId:
+          type: string
+          minLength: 1
     HealthStatus:
       type: object
       properties:

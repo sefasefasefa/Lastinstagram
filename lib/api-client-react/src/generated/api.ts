@@ -25,6 +25,15 @@ import type {
   AutomationJobInput,
   DashboardSummary,
   HealthStatus,
+  InstagramActionResponse,
+  InstagramPostActionInput,
+  InstagramPostsResponse,
+  InstagramProfileResponse,
+  InstagramReelActionInput,
+  InstagramReelsResponse,
+  InstagramStatusResponse,
+  InstagramStoriesResponse,
+  InstagramStoryActionInput,
   ListTrackedUsersParams,
   LoginRequest,
   MonitoringStatus,
@@ -1401,5 +1410,745 @@ export const useRecordTrackedUserVisit = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRecordTrackedUserVisitMutationOptions(options));
+    }
+
+export const getGetInstagramStatusUrl = () => {
+
+
+
+
+  return `/api/instagram/status`
+}
+
+/**
+ * @summary Get the current Instagram client session status
+ */
+export const getInstagramStatus = async ( options?: RequestInit): Promise<InstagramStatusResponse> => {
+
+  return customFetch<InstagramStatusResponse>(getGetInstagramStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInstagramStatusQueryKey = () => {
+    return [
+    `/api/instagram/status`
+    ] as const;
+    }
+
+
+export const getGetInstagramStatusQueryOptions = <TData = Awaited<ReturnType<typeof getInstagramStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInstagramStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInstagramStatus>>> = ({ signal }) => getInstagramStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInstagramStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInstagramStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getInstagramStatus>>>
+export type GetInstagramStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the current Instagram client session status
+ */
+
+export function useGetInstagramStatus<TData = Awaited<ReturnType<typeof getInstagramStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInstagramStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getLoginInstagramUrl = () => {
+
+
+
+
+  return `/api/instagram/login`
+}
+
+/**
+ * @summary Initialize the configured Instagram session
+ */
+export const loginInstagram = async ( options?: RequestInit): Promise<InstagramActionResponse> => {
+
+  return customFetch<InstagramActionResponse>(getLoginInstagramUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getLoginInstagramMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof loginInstagram>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof loginInstagram>>, TError,void, TContext> => {
+
+const mutationKey = ['loginInstagram'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof loginInstagram>>, void> = () => {
+
+
+          return  loginInstagram(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LoginInstagramMutationResult = NonNullable<Awaited<ReturnType<typeof loginInstagram>>>
+
+    export type LoginInstagramMutationError = ErrorType<void>
+
+    /**
+ * @summary Initialize the configured Instagram session
+ */
+export const useLoginInstagram = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof loginInstagram>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof loginInstagram>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getLoginInstagramMutationOptions(options));
+    }
+
+export const getLogoutInstagramUrl = () => {
+
+
+
+
+  return `/api/instagram/logout`
+}
+
+/**
+ * @summary Close the active Instagram session
+ */
+export const logoutInstagram = async ( options?: RequestInit): Promise<InstagramActionResponse> => {
+
+  return customFetch<InstagramActionResponse>(getLogoutInstagramUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getLogoutInstagramMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logoutInstagram>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof logoutInstagram>>, TError,void, TContext> => {
+
+const mutationKey = ['logoutInstagram'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logoutInstagram>>, void> = () => {
+
+
+          return  logoutInstagram(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LogoutInstagramMutationResult = NonNullable<Awaited<ReturnType<typeof logoutInstagram>>>
+
+    export type LogoutInstagramMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Close the active Instagram session
+ */
+export const useLogoutInstagram = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logoutInstagram>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof logoutInstagram>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getLogoutInstagramMutationOptions(options));
+    }
+
+export const getGetInstagramProfileUrl = (username: string,) => {
+
+
+
+
+  return `/api/instagram/profile/${username}`
+}
+
+/**
+ * @summary Get an Instagram profile
+ */
+export const getInstagramProfile = async (username: string, options?: RequestInit): Promise<InstagramProfileResponse> => {
+
+  return customFetch<InstagramProfileResponse>(getGetInstagramProfileUrl(username),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInstagramProfileQueryKey = (username: string,) => {
+    return [
+    `/api/instagram/profile/${username}`
+    ] as const;
+    }
+
+
+export const getGetInstagramProfileQueryOptions = <TData = Awaited<ReturnType<typeof getInstagramProfile>>, TError = ErrorType<void>>(username: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInstagramProfileQueryKey(username);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInstagramProfile>>> = ({ signal }) => getInstagramProfile(username, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: username !== null && username !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInstagramProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInstagramProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getInstagramProfile>>>
+export type GetInstagramProfileQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get an Instagram profile
+ */
+
+export function useGetInstagramProfile<TData = Awaited<ReturnType<typeof getInstagramProfile>>, TError = ErrorType<void>>(
+ username: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInstagramProfileQueryOptions(username,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetInstagramPostsUrl = (username: string,) => {
+
+
+
+
+  return `/api/instagram/posts/${username}`
+}
+
+/**
+ * @summary Get recent Instagram posts
+ */
+export const getInstagramPosts = async (username: string, options?: RequestInit): Promise<InstagramPostsResponse> => {
+
+  return customFetch<InstagramPostsResponse>(getGetInstagramPostsUrl(username),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInstagramPostsQueryKey = (username: string,) => {
+    return [
+    `/api/instagram/posts/${username}`
+    ] as const;
+    }
+
+
+export const getGetInstagramPostsQueryOptions = <TData = Awaited<ReturnType<typeof getInstagramPosts>>, TError = ErrorType<void>>(username: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramPosts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInstagramPostsQueryKey(username);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInstagramPosts>>> = ({ signal }) => getInstagramPosts(username, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: username !== null && username !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInstagramPosts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInstagramPostsQueryResult = NonNullable<Awaited<ReturnType<typeof getInstagramPosts>>>
+export type GetInstagramPostsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get recent Instagram posts
+ */
+
+export function useGetInstagramPosts<TData = Awaited<ReturnType<typeof getInstagramPosts>>, TError = ErrorType<void>>(
+ username: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramPosts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInstagramPostsQueryOptions(username,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetInstagramStoriesUrl = (username: string,) => {
+
+
+
+
+  return `/api/instagram/stories/${username}`
+}
+
+/**
+ * @summary Get active Instagram stories
+ */
+export const getInstagramStories = async (username: string, options?: RequestInit): Promise<InstagramStoriesResponse> => {
+
+  return customFetch<InstagramStoriesResponse>(getGetInstagramStoriesUrl(username),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInstagramStoriesQueryKey = (username: string,) => {
+    return [
+    `/api/instagram/stories/${username}`
+    ] as const;
+    }
+
+
+export const getGetInstagramStoriesQueryOptions = <TData = Awaited<ReturnType<typeof getInstagramStories>>, TError = ErrorType<void>>(username: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramStories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInstagramStoriesQueryKey(username);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInstagramStories>>> = ({ signal }) => getInstagramStories(username, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: username !== null && username !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInstagramStories>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInstagramStoriesQueryResult = NonNullable<Awaited<ReturnType<typeof getInstagramStories>>>
+export type GetInstagramStoriesQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get active Instagram stories
+ */
+
+export function useGetInstagramStories<TData = Awaited<ReturnType<typeof getInstagramStories>>, TError = ErrorType<void>>(
+ username: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramStories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInstagramStoriesQueryOptions(username,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetInstagramReelsUrl = (username: string,) => {
+
+
+
+
+  return `/api/instagram/reels/${username}`
+}
+
+/**
+ * @summary Get recent Instagram video posts and Reels
+ */
+export const getInstagramReels = async (username: string, options?: RequestInit): Promise<InstagramReelsResponse> => {
+
+  return customFetch<InstagramReelsResponse>(getGetInstagramReelsUrl(username),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInstagramReelsQueryKey = (username: string,) => {
+    return [
+    `/api/instagram/reels/${username}`
+    ] as const;
+    }
+
+
+export const getGetInstagramReelsQueryOptions = <TData = Awaited<ReturnType<typeof getInstagramReels>>, TError = ErrorType<void>>(username: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramReels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInstagramReelsQueryKey(username);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInstagramReels>>> = ({ signal }) => getInstagramReels(username, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: username !== null && username !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInstagramReels>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInstagramReelsQueryResult = NonNullable<Awaited<ReturnType<typeof getInstagramReels>>>
+export type GetInstagramReelsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get recent Instagram video posts and Reels
+ */
+
+export function useGetInstagramReels<TData = Awaited<ReturnType<typeof getInstagramReels>>, TError = ErrorType<void>>(
+ username: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramReels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInstagramReelsQueryOptions(username,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getLikeInstagramPostUrl = () => {
+
+
+
+
+  return `/api/instagram/like-post`
+}
+
+/**
+ * @summary Like one Instagram post after an explicit user action
+ */
+export const likeInstagramPost = async (instagramPostActionInput: InstagramPostActionInput, options?: RequestInit): Promise<InstagramActionResponse> => {
+
+  return customFetch<InstagramActionResponse>(getLikeInstagramPostUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(instagramPostActionInput)
+  }
+);}
+
+
+
+
+
+export const getLikeInstagramPostMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof likeInstagramPost>>, TError,{data: BodyType<InstagramPostActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof likeInstagramPost>>, TError,{data: BodyType<InstagramPostActionInput>}, TContext> => {
+
+const mutationKey = ['likeInstagramPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof likeInstagramPost>>, {data: BodyType<InstagramPostActionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  likeInstagramPost(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LikeInstagramPostMutationResult = NonNullable<Awaited<ReturnType<typeof likeInstagramPost>>>
+    export type LikeInstagramPostMutationBody = BodyType<InstagramPostActionInput>
+    export type LikeInstagramPostMutationError = ErrorType<void>
+
+    /**
+ * @summary Like one Instagram post after an explicit user action
+ */
+export const useLikeInstagramPost = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof likeInstagramPost>>, TError,{data: BodyType<InstagramPostActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof likeInstagramPost>>,
+        TError,
+        {data: BodyType<InstagramPostActionInput>},
+        TContext
+      > => {
+      return useMutation(getLikeInstagramPostMutationOptions(options));
+    }
+
+export const getLikeInstagramStoryUrl = () => {
+
+
+
+
+  return `/api/instagram/like-story`
+}
+
+/**
+ * @summary Like one Instagram story after an explicit user action
+ */
+export const likeInstagramStory = async (instagramStoryActionInput: InstagramStoryActionInput, options?: RequestInit): Promise<InstagramActionResponse> => {
+
+  return customFetch<InstagramActionResponse>(getLikeInstagramStoryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(instagramStoryActionInput)
+  }
+);}
+
+
+
+
+
+export const getLikeInstagramStoryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof likeInstagramStory>>, TError,{data: BodyType<InstagramStoryActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof likeInstagramStory>>, TError,{data: BodyType<InstagramStoryActionInput>}, TContext> => {
+
+const mutationKey = ['likeInstagramStory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof likeInstagramStory>>, {data: BodyType<InstagramStoryActionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  likeInstagramStory(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LikeInstagramStoryMutationResult = NonNullable<Awaited<ReturnType<typeof likeInstagramStory>>>
+    export type LikeInstagramStoryMutationBody = BodyType<InstagramStoryActionInput>
+    export type LikeInstagramStoryMutationError = ErrorType<void>
+
+    /**
+ * @summary Like one Instagram story after an explicit user action
+ */
+export const useLikeInstagramStory = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof likeInstagramStory>>, TError,{data: BodyType<InstagramStoryActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof likeInstagramStory>>,
+        TError,
+        {data: BodyType<InstagramStoryActionInput>},
+        TContext
+      > => {
+      return useMutation(getLikeInstagramStoryMutationOptions(options));
+    }
+
+export const getLikeInstagramReelUrl = () => {
+
+
+
+
+  return `/api/instagram/like-reel`
+}
+
+/**
+ * @summary Like one Instagram Reel after an explicit user action
+ */
+export const likeInstagramReel = async (instagramReelActionInput: InstagramReelActionInput, options?: RequestInit): Promise<InstagramActionResponse> => {
+
+  return customFetch<InstagramActionResponse>(getLikeInstagramReelUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(instagramReelActionInput)
+  }
+);}
+
+
+
+
+
+export const getLikeInstagramReelMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof likeInstagramReel>>, TError,{data: BodyType<InstagramReelActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof likeInstagramReel>>, TError,{data: BodyType<InstagramReelActionInput>}, TContext> => {
+
+const mutationKey = ['likeInstagramReel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof likeInstagramReel>>, {data: BodyType<InstagramReelActionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  likeInstagramReel(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LikeInstagramReelMutationResult = NonNullable<Awaited<ReturnType<typeof likeInstagramReel>>>
+    export type LikeInstagramReelMutationBody = BodyType<InstagramReelActionInput>
+    export type LikeInstagramReelMutationError = ErrorType<void>
+
+    /**
+ * @summary Like one Instagram Reel after an explicit user action
+ */
+export const useLikeInstagramReel = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof likeInstagramReel>>, TError,{data: BodyType<InstagramReelActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof likeInstagramReel>>,
+        TError,
+        {data: BodyType<InstagramReelActionInput>},
+        TContext
+      > => {
+      return useMutation(getLikeInstagramReelMutationOptions(options));
     }
 

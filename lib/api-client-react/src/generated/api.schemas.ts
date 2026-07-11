@@ -5,6 +5,83 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface InstagramStatusResponse {
+  authenticated: boolean;
+}
+
+export interface InstagramActionResponse {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+export interface InstagramProfile {
+  username: string;
+  pk: string;
+  fullName: string;
+  profilePicUrl?: string;
+}
+
+export interface InstagramProfileResponse {
+  success: boolean;
+  profile: InstagramProfile;
+}
+
+export interface InstagramPost {
+  id: string;
+  code?: string;
+  mediaType: number;
+  caption?: string;
+  likeCount: number;
+  displayUrl?: string;
+  videoUrl?: string;
+  hasLiked: boolean;
+}
+
+export interface InstagramPostsResponse {
+  success: boolean;
+  posts: InstagramPost[];
+}
+
+export interface InstagramStory {
+  id: string;
+  mediaType: number;
+  thumbnailUrl?: string;
+  videoUrl?: string;
+  displayUrl?: string;
+  timestamp: number;
+}
+
+export interface InstagramStoriesResponse {
+  success: boolean;
+  stories: InstagramStory[];
+}
+
+export type InstagramReel = InstagramPost & {
+  playCount: number;
+  timestamp: number;
+};
+
+export interface InstagramReelsResponse {
+  success: boolean;
+  reels: InstagramReel[];
+}
+
+export interface InstagramPostActionInput {
+  /** @minLength 1 */
+  postId: string;
+}
+
+export interface InstagramStoryActionInput {
+  /** @minLength 1 */
+  storyId: string;
+}
+
+export interface InstagramReelActionInput {
+  /** @minLength 1 */
+  reelId: string;
+}
+
 export interface HealthStatus {
   status: string;
   /** When the current server process started. */

@@ -6,6 +6,7 @@ import trackedUsersRouter from "./trackedUsers";
 import dashboardRouter from "./dashboard";
 import settingsRouter from "./settings";
 import automationJobsRouter from "./automationJobs";
+import instagramRouter from "./instagram";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(trackedUsersRouter);
 router.use(dashboardRouter);
 router.use(settingsRouter);
 router.use(automationJobsRouter);
+router.use(instagramRouter);
 
 export default router;

@@ -2,7 +2,7 @@ import { useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSumma
 import { Link } from "wouter"
 import { Button, Card } from "../components/ui/core"
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/radix"
-import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio, Settings } from "lucide-react"
+import { Activity, Users, Heart, Image as ImageIcon, Instagram, LogOut, Radio, Settings } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { TrackedUserList } from "../components/tracked-user-list"
@@ -53,6 +53,12 @@ export default function DashboardPage() {
                 {me?.username ?? "hesabım"}
               </span>
             </div>
+            <Link href="/instagram">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                <Instagram className="w-4 h-4 mr-2" />
+                Instagram
+              </Button>
+            </Link>
             <Link href="/settings">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
                 <Settings className="w-4 h-4 mr-2" />

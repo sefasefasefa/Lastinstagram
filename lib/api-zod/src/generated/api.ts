@@ -279,3 +279,179 @@ export const RecordTrackedUserVisitResponse = zod.object({
 })
 
 
+/**
+ * @summary Get the current Instagram client session status
+ */
+export const GetInstagramStatusResponse = zod.object({
+  "authenticated": zod.boolean()
+})
+
+
+/**
+ * @summary Initialize the configured Instagram session
+ */
+export const LoginInstagramResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string(),
+  "error": zod.string().optional()
+})
+
+
+/**
+ * @summary Close the active Instagram session
+ */
+export const LogoutInstagramResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string(),
+  "error": zod.string().optional()
+})
+
+
+/**
+ * @summary Get an Instagram profile
+ */
+
+
+
+export const GetInstagramProfileParams = zod.object({
+  "username": zod.coerce.string().min(1)
+})
+
+export const GetInstagramProfileResponse = zod.object({
+  "success": zod.boolean(),
+  "profile": zod.object({
+  "username": zod.string(),
+  "pk": zod.string(),
+  "fullName": zod.string(),
+  "profilePicUrl": zod.string().optional()
+})
+})
+
+
+/**
+ * @summary Get recent Instagram posts
+ */
+
+
+
+export const GetInstagramPostsParams = zod.object({
+  "username": zod.coerce.string().min(1)
+})
+
+export const GetInstagramPostsResponse = zod.object({
+  "success": zod.boolean(),
+  "posts": zod.array(zod.object({
+  "id": zod.string(),
+  "code": zod.string().optional(),
+  "mediaType": zod.number(),
+  "caption": zod.string().optional(),
+  "likeCount": zod.number(),
+  "displayUrl": zod.string().optional(),
+  "videoUrl": zod.string().optional(),
+  "hasLiked": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Get active Instagram stories
+ */
+
+
+
+export const GetInstagramStoriesParams = zod.object({
+  "username": zod.coerce.string().min(1)
+})
+
+export const GetInstagramStoriesResponse = zod.object({
+  "success": zod.boolean(),
+  "stories": zod.array(zod.object({
+  "id": zod.string(),
+  "mediaType": zod.number(),
+  "thumbnailUrl": zod.string().optional(),
+  "videoUrl": zod.string().optional(),
+  "displayUrl": zod.string().optional(),
+  "timestamp": zod.number()
+}))
+})
+
+
+/**
+ * @summary Get recent Instagram video posts and Reels
+ */
+
+
+
+export const GetInstagramReelsParams = zod.object({
+  "username": zod.coerce.string().min(1)
+})
+
+export const GetInstagramReelsResponse = zod.object({
+  "success": zod.boolean(),
+  "reels": zod.array(zod.object({
+  "id": zod.string(),
+  "code": zod.string().optional(),
+  "mediaType": zod.number(),
+  "caption": zod.string().optional(),
+  "likeCount": zod.number(),
+  "displayUrl": zod.string().optional(),
+  "videoUrl": zod.string().optional(),
+  "hasLiked": zod.boolean()
+}).and(zod.object({
+  "playCount": zod.number(),
+  "timestamp": zod.number()
+})))
+})
+
+
+/**
+ * @summary Like one Instagram post after an explicit user action
+ */
+
+
+
+export const LikeInstagramPostBody = zod.object({
+  "postId": zod.string().min(1)
+})
+
+export const LikeInstagramPostResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string(),
+  "error": zod.string().optional()
+})
+
+
+/**
+ * @summary Like one Instagram story after an explicit user action
+ */
+
+
+
+export const LikeInstagramStoryBody = zod.object({
+  "storyId": zod.string().min(1)
+})
+
+export const LikeInstagramStoryResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string(),
+  "error": zod.string().optional()
+})
+
+
+/**
+ * @summary Like one Instagram Reel after an explicit user action
+ */
+
+
+
+export const LikeInstagramReelBody = zod.object({
+  "reelId": zod.string().min(1)
+})
+
+export const LikeInstagramReelResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string(),
+  "error": zod.string().optional()
+})
+
+

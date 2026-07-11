@@ -4,10 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "hello": "tsx ./src/hello.ts",
+    "instagram:auto-like": "tsx ./src/instagram-auto-like.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "dependencies": {
+    "@workspace/instagram-client": "workspace:*",
+    "dotenv": "^16.4.7",
+    "node-cron": "^3.0.3"
+  },
   "devDependencies": {
+    "@types/node-cron": "^3.0.11",
     "@types/node": "catalog:",
     "tsx": "catalog:"
   }
