@@ -1,0 +1,114 @@
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { Browser, Page } from 'puppeteer';
+
+puppeteer.use(StealthPlugin());
+
+export class InstagramBot {
+  private browser: Browser | null = null;
+  private page: Page | null = null;
+
+  // 1. Tarayıcıyı Başlat ve Oturum Çerezlerini (Cookie) Yükle
+  async init(savedCookies: Record<string, string>): Promise<boolean> {
+    this.browser = await puppeteer.launch({
+      headless: true, // Sunucuda çalışması için true olmalı
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled'
+      ]
+    });
+    
+    this.page = await this.browser.newPage();
+    await this.page.setViewport({ width: 1280, height: 800 });
+
+    // Panelden gelen cookie'leri tarayıcıya enjekte et (Şifre girmeden oturum açma)
+    const puppeteerCookies = Object.entries(savedCookies).map(([name, value]) => ({
+      name,
+      value,
+      domain: '.instagram.com',
+      path: '/'
+    }));
+
+    if (puppeteerCookies.length > 0) {
+      await this.page.setCookie(...puppeteerCookies);
+      return true;
+    }
+    return false;
+  }
+
+  // 2. Belirli Bir Gönderiyi / Reels'i Beğen ve Yorum Yap
+  async interactWithPost(postUrl: string, commentText?: string): Promise<boolean> {
+    if (!this.page) return false;
+
+    try {
+      await this.page.goto(postUrl, { waitUntil: 'networkidle2' });
+      await this.delay(3000); // İnsan gibi bekle
+
+      // Beğeni Butonunu Bul ve Tıkla (Instagram'ın güncel SVG kalp ikonu seçici sınıfı)
+      const likeButtonSelector = "article span button [aria-label='Beğen'], article span button [aria-label='Like']";
+      await this.page.waitForSelector(likeButtonSelector, { timeout: 5000 });
+      await this.page.click(likeButtonSelector);
+      console.log(`[BOT] Gönderi beğenildi: ${postUrl}`);
+      await this.delay(2000);
+
+      // Eğer yorum metni gönderilmişse yorum yap
+      if (commentText) {
+        const commentSelector = "textarea[aria-label='Yorum ekle...'], textarea[aria-label='Add a comment…']";
+        await this.page.waitForSelector(commentSelector, { timeout: 5000 });
+        await this.page.type(commentSelector, commentText, { delay: 100 }); // Harf harf yazarak insan simülasyonu yap
+        await this.page.keyboard.press('Enter');
+        console.log(`[BOT] Yorum yapıldı: ${commentText}`);
+        await this.delay(3000);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[BOT ERROR] Gönderi etkileşim hatası:', error);
+      return false;
+    }
+  }
+
+  // 3. Hedef Kullanıcının Hikayesini (Story) İzle
+  async viewUserStories(username: string): Promise<boolean> {
+    if (!this.page) return false;
+
+    try {
+      await this.page.goto(`https://www.instagram.com/${username}/`, { waitUntil: 'networkidle2' });
+      await this.delay(4000);
+
+      // Profil resminde hikaye halkası var mı kontrol et
+      const storyRingSelector = "header role['button'], canvas"; 
+      const hasStory = await this.page.$(storyRingSelector);
+
+      if (hasStory) {
+        await this.page.click('header img'); // Profil resmine tıklayarak hikayeyi aç
+        console.log(`[BOT] ${username} hikayeleri izleniyor...`);
+        
+        // 10 saniye boyunca hikayeleri geçerek izle
+        for (let i = 0; i < 3; i++) {
+          await this.delay(3000);
+          await this.page.click('body'); // Ekrana tıklayarak sonraki hikayeye geç
+        }
+        return true;
+      }
+      console.log(`[BOT] ${username} kullanıcısının aktif hikayesi yok.`);
+      return false;
+    } catch (error) {
+      console.error('[BOT ERROR] Hikaye izleme hatası:', error);
+      return false;
+    }
+  }
+
+  // Kapatma Mekanizması
+  async shutdown() {
+    if (this.browser) {
+      await this.browser.close();
+    }
+  }
+
+  // İnsan gecikmesi simülasyonu
+  private delay(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
