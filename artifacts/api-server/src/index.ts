@@ -1,3 +1,7 @@
+// Load .env before anything else — required when running outside Replit
+// (e.g. on your own computer), where env vars aren't injected automatically.
+import "dotenv/config";
+
 import app from "./app";
 import { logger } from "./lib/logger";
 
