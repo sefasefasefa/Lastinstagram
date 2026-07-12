@@ -2,3 +2,4 @@
 - [connect-pg-simple + esbuild](connect-pg-simple-esbuild-bundle.md) — createTableIfMissing throws ENOENT when bundled; declare the session table yourself instead.
 - [Dev proxy caching non-GET](dev-proxy-caching-non-get.md) — preview proxy can return stale cached responses for POST endpoints; set Cache-Control: no-store in dev.
 - [Corrupted generated/source files](corrupted-generated-source-files.md) — imported project had hand-edited garbage in generated codegen output and in a frontend entry file; git diff vs HEAD + regenerate/restore fixed it.
+- [pnpm firewall blocks transitive package](pnpm-firewall-transitive-block.md) — a vulnerable version deep in an abandoned dependency (e.g. `request`) can 403; pin it via root `pnpm.overrides`.
