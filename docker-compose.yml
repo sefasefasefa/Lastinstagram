@@ -1,0 +1,24 @@
+version: "3.9"
+
+# Local-only Postgres for running this project on your own computer.
+# Not used on Replit — Replit already provides a managed Postgres database.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: takipci
+      POSTGRES_PASSWORD: takipci
+      POSTGRES_DB: takipci_paneli
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U takipci -d takipci_paneli"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:
