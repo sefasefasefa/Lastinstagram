@@ -61,12 +61,18 @@ export default function LoginPage() {
           queryClient.invalidateQueries()
         },
         onError: (err: unknown) => {
-          const data = (err as { response?: { data?: {
+          // The generated API client (@workspace/api-client-react) throws an
+          // ApiError whose parsed JSON body lives directly on `.data` — NOT
+          // nested under `.response.data` (that's an axios convention this
+          // client doesn't follow; `.response` here is the raw Fetch
+          // Response object). Reading `.response.data` silently returns
+          // undefined, which is why isCaptcha/captchaType never surfaced.
+          const data = (err as { data?: {
             error?: string
             twoFactorRequired?: boolean
             isCaptcha?: boolean
             captchaType?: string | null
-          } } })?.response?.data
+          } })?.data
 
           if (data?.twoFactorRequired) {
             setTwoFactorRequired(true)
@@ -96,7 +102,7 @@ export default function LoginPage() {
         },
         onError: (err: unknown) => {
           const msg =
-            (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+            (err as { data?: { error?: string } })?.data?.error
             ?? "Doğrulama kodu kabul edilmedi. Lütfen tekrar deneyin."
           setError(msg)
         },
