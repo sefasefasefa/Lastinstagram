@@ -12,6 +12,11 @@ import {
   fetchUserInfo,
   fetchUserFeed,
   fetchUserClips,
+  fetchUserStories,
+  markStorySeenRaw,
+  likeMediaRaw,
+  unlikeMediaRaw,
+  fetchMediaInfo,
   type SessionCookies,
   type RawFeedItem,
 } from "./direct-login";
@@ -495,12 +500,41 @@ export class InstagramClient {
     });
   }
 
+  /**
+   * Adım 1: Aktif Hikaye Listesini Çekme.
+   *   GET https://i.instagram.com/api/v1/feed/reels_media/?user_ids={user_id}
+   * Tam Cookie header'ı mevcutsa ham istek kullanılır; aksi halde
+   * instagram-private-api'ye geri dönülür.
+   */
   async getUserStories(username: string): Promise<InstagramStory[]> {
     await this.ensureAuthenticated();
     return this.withErrorRecovery(async () => {
       const user = await this.client.user.searchExact(username);
+      const userId = String(user.pk);
+
+      if (this.session?.cookieHeader) {
+        const result = await fetchUserStories(
+          userId,
+          this.session.cookieHeader,
+          this.client.state.deviceString,
+        );
+        if (result.success && result.items) {
+          return result.items.map((media) => ({
+            id: String(media.pk ?? media.id ?? ""),
+            mediaType: media.media_type ?? 1,
+            thumbnailUrl: media.image_versions2?.candidates?.[0]?.url,
+            videoUrl: media.video_versions?.[0]?.url,
+            displayUrl: media.image_versions2?.candidates?.[0]?.url,
+            timestamp: (media.taken_at ?? 0) * 1000,
+            ownerId: userId,
+            takenAt: media.taken_at,
+          }));
+        }
+        // Ham istek başarısız — kütüphane tabanlı yönteme geri dön.
+      }
+
       const items = await this.client.feed
-        .reelsMedia({ userIds: [String(user.pk)] })
+        .reelsMedia({ userIds: [userId] })
         .items();
       return items.map((media) => ({
         id: String(media.pk),
@@ -509,7 +543,7 @@ export class InstagramClient {
         videoUrl: media.video_versions?.[0]?.url,
         displayUrl: media.image_versions2?.candidates?.[0]?.url,
         timestamp: media.taken_at * 1000,
-        ownerId: String(user.pk),
+        ownerId: userId,
         takenAt: media.taken_at,
       }));
     });
@@ -565,13 +599,34 @@ export class InstagramClient {
   }
 
   /**
-   * Tekil medya metrikleri — belgede tanımlanan Media Info endpoint:
+   * 5. Beğenilme ve Görüntülenme Verilerini Çekme (Metrics) — belgede
+   * tanımlanan Media Info endpoint:
    *   GET /api/v1/media/{media_id}/info/
    *   Döner: like_count, has_liked, play_count, view_count, comment_count
    */
   async getMediaInfo(mediaId: string): Promise<InstagramMediaInfo> {
     await this.ensureAuthenticated();
     return this.withErrorRecovery(async () => {
+      if (this.session?.cookieHeader) {
+        const result = await fetchMediaInfo(
+          mediaId,
+          this.session.cookieHeader,
+          this.client.state.deviceString,
+        );
+        if (result.success && result.item) {
+          const item = result.item;
+          return {
+            id: String(item.id ?? mediaId),
+            likeCount: Number(item.like_count ?? 0),
+            hasLiked: Boolean(item.has_liked),
+            commentCount: Number(item.comment_count ?? 0),
+            playCount: Number(item.play_count ?? 0) || undefined,
+            viewCount: Number(item.view_count ?? 0) || undefined,
+          };
+        }
+        // Ham istek başarısız — kütüphane tabanlı yönteme geri dön.
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (this.client.media as any).info(mediaId) as { items: Record<string, unknown>[] };
       const item = result.items?.[0] ?? {};
@@ -587,8 +642,8 @@ export class InstagramClient {
   }
 
   /**
-   * Hikayeyi "görüldü" olarak işaretle — belgede tanımlanan Seen API:
-   *   POST /api/v2/media/seen/
+   * Adım 2: Hikayeyi "görüldü" olarak işaretle — belgede tanımlanan Seen API:
+   *   POST /api/v1/media/seen/  (signed_body: container_module, reels, live_vods, _uuid, _uid)
    *   reels key: "{story_owner_id}_{kendi_user_id}"
    *   list item: "{media_id}_{story_owner_id}_{taken_at}"
    */
@@ -601,6 +656,20 @@ export class InstagramClient {
     return this.withErrorRecovery(async () => {
       const selfUser = await this.client.account.currentUser();
       const selfId = String(selfUser.pk);
+
+      if (this.session?.cookieHeader) {
+        const result = await markStorySeenRaw(
+          storyId,
+          ownerId,
+          selfId,
+          this.client.state.uuid,
+          this.session.cookieHeader,
+          { takenAt, userAgent: this.client.state.deviceString },
+        );
+        if (result.success) return true;
+        // Ham istek başarısız — kütüphane tabanlı yönteme geri dön.
+      }
+
       const ts = takenAt ?? Math.floor(Date.now() / 1000);
       const reelsKey = `${ownerId}_${selfId}`;
       const reelsValue = [`${storyId}_${ownerId}_${ts}`];
@@ -610,9 +679,24 @@ export class InstagramClient {
     }).catch(() => false);
   }
 
+  /**
+   * 4. Gönderi ve Reels Beğenme (Like API) — belgede tanımlanan imzalı
+   * POST isteği: /api/v1/media/{media_id}/like/ ve /unlike/.
+   */
   async likePost(postId: string): Promise<boolean> {
     await this.ensureAuthenticated();
     return this.withErrorRecovery(async () => {
+      if (this.session?.cookieHeader) {
+        const result = await likeMediaRaw(postId, this.session.cookieHeader, {
+          src: "timeline",
+          d: 0,
+          moduleInfo: { module_name: "feed_timeline" },
+          userAgent: this.client.state.deviceString,
+        });
+        if (result.success) return true;
+        // Ham istek başarısız — kütüphane tabanlı yönteme geri dön.
+      }
+
       await this.client.media.like({
         mediaId: postId,
         moduleInfo: { module_name: "feed_timeline" },
@@ -625,6 +709,17 @@ export class InstagramClient {
   async unlikePost(postId: string): Promise<boolean> {
     await this.ensureAuthenticated();
     return this.withErrorRecovery(async () => {
+      if (this.session?.cookieHeader) {
+        const result = await unlikeMediaRaw(postId, this.session.cookieHeader, {
+          src: "timeline",
+          d: 0,
+          moduleInfo: { module_name: "feed_timeline" },
+          userAgent: this.client.state.deviceString,
+        });
+        if (result.success) return true;
+        // Ham istek başarısız — kütüphane tabanlı yönteme geri dön.
+      }
+
       await this.client.media.unlike({
         mediaId: postId,
         moduleInfo: { module_name: "feed_timeline" },

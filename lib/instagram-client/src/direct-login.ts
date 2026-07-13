@@ -690,6 +690,319 @@ export async function fetchUserClips(
   }
 }
 
+// ── İmzalı istekler (signed_body) ────────────────────────────────────────────
+
+/**
+ * İmzalama Standardı: payload nesnesi JSON dizesine çevrildikten sonra,
+ * oturumun imzalama anahtarı ile HMAC-SHA256 algoritmasından geçirilir:
+ *   signed_body = HMAC-SHA256(signing_key, JSON_payload) + "." + JSON_payload
+ */
+function signPayload(payload: Record<string, unknown>): string {
+  const json = JSON.stringify(payload);
+  const hmac = crypto.createHmac("sha256", IG_SIG_KEY).update(json).digest("hex");
+  return `${hmac}.${json}`;
+}
+
+function buildSignedBodyForm(payload: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  params.set("signed_body", signPayload(payload));
+  params.set("ig_sig_key_version", IG_SIG_KEY_VERSION);
+  return params.toString();
+}
+
+export interface RawActionResult {
+  success: boolean;
+  error?: string;
+}
+
+async function extractErrorMessage(res: Response): Promise<string> {
+  try {
+    const data = (await res.json()) as Record<string, unknown>;
+    if (typeof data.message === "string") return data.message;
+  } catch {
+    /* yanıt JSON değil */
+  }
+  return `HTTP ${res.status}`;
+}
+
+// ── 3. Hikaye Görüntüleme ve "Görüldü" (Seen) İşaretleme ────────────────────
+
+/** feed/reels_media yanıtındaki ham hikaye öğesi. */
+export interface RawStoryItem {
+  pk?: number | string;
+  id?: string;
+  media_type?: number;
+  taken_at?: number;
+  image_versions2?: { candidates?: { url?: string }[] };
+  video_versions?: { url?: string }[];
+}
+
+export interface UserStoriesResult {
+  success: boolean;
+  items?: RawStoryItem[];
+  error?: string;
+}
+
+/**
+ * Adım 1: Aktif Hikaye Listesini Çekme — belgede tanımlanan doğrudan
+ * mobil API çağrısı:
+ *
+ *   GET https://i.instagram.com/api/v1/feed/reels_media/?user_ids={user_id}
+ *
+ * Yanıt, kullanıcının media_id ve taken_at değerlerini içeren yayındaki
+ * hikayelerin listesini (reels[user_id].items) döner.
+ */
+export async function fetchUserStories(
+  userId: string,
+  cookieHeader: string,
+  userAgent: string = MOBILE_UA,
+): Promise<UserStoriesResult> {
+  try {
+    const res = await fetch(
+      `https://i.instagram.com/api/v1/feed/reels_media/?user_ids=${userId}`,
+      {
+        method: "GET",
+        headers: {
+          "User-Agent": userAgent,
+          "X-IG-App-ID": IG_APP_ID,
+          "Cookie": cookieHeader,
+          "Accept-Language": "tr-TR",
+        },
+      },
+    );
+
+    let data: Record<string, unknown> = {};
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      return { success: false, error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    }
+
+    if (!res.ok || data.status !== "ok") {
+      const msg =
+        typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+      return { success: false, error: `User Stories API: ${msg}` };
+    }
+
+    const reelsMap = data.reels as
+      | Record<string, { items?: RawStoryItem[] }>
+      | undefined;
+    const items = reelsMap?.[userId]?.items ?? [];
+    return { success: true, items };
+  } catch (e) {
+    return {
+      success: false,
+      error: `Ağ hatası (user stories): ${e instanceof Error ? e.message : e}`,
+    };
+  }
+}
+
+/**
+ * Adım 2: Hikayeyi "Görüldü" Olarak İşaretleme — belgede tanımlanan Seen API:
+ *
+ *   POST https://i.instagram.com/api/v1/media/seen/
+ *   Body (signed_body içinde paketlenir):
+ *     {
+ *       "container_module": "feed_contextual_post",
+ *       "reels": { "{hikaye_sahibi_id}_{kendi_id}": ["{media_id}_{sahibi_id}_{taken_at}"] },
+ *       "live_vods": [],
+ *       "_uuid": "...",
+ *       "_uid": "..."
+ *     }
+ */
+export async function markStorySeenRaw(
+  storyId: string,
+  ownerId: string,
+  selfUserId: string,
+  clientUuid: string,
+  cookieHeader: string,
+  options: { takenAt?: number; userAgent?: string } = {},
+): Promise<RawActionResult> {
+  try {
+    const ts = options.takenAt ?? Math.floor(Date.now() / 1000);
+    const reelsKey = `${ownerId}_${selfUserId}`;
+    const payload = {
+      container_module: "feed_contextual_post",
+      reels: { [reelsKey]: [`${storyId}_${ownerId}_${ts}`] },
+      live_vods: [],
+      _uuid: clientUuid,
+      _uid: selfUserId,
+    };
+
+    const res = await fetch("https://i.instagram.com/api/v1/media/seen/", {
+      method: "POST",
+      headers: {
+        "User-Agent": options.userAgent ?? MOBILE_UA,
+        "X-IG-App-ID": IG_APP_ID,
+        "Cookie": cookieHeader,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      },
+      body: buildSignedBodyForm(payload),
+    });
+
+    if (!res.ok) {
+      return { success: false, error: `Seen API: ${await extractErrorMessage(res)}` };
+    }
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: `Ağ hatası (seen): ${e instanceof Error ? e.message : e}`,
+    };
+  }
+}
+
+// ── 4. Gönderi ve Reels Beğenme (Like API) ───────────────────────────────────
+
+export interface MediaActionModuleInfo {
+  module_name: string;
+  user_id?: string | number;
+  username?: string;
+}
+
+/**
+ * Beğenme / beğeniyi kaldırma — belgede tanımlanan imzalı POST isteği:
+ *
+ *   POST https://i.instagram.com/api/v1/media/{media_id}/like/
+ *   POST https://i.instagram.com/api/v1/media/{media_id}/unlike/
+ *   Payload (signed_body): { media_id, src, d, module_info }
+ *
+ * d: çift tıklama simülasyonu (0 = butonla, 1 = çift dokunuşla beğenildi).
+ * src: içeriğin görüldüğü yüzey (timeline, profile veya clips).
+ */
+async function postMediaLikeAction(
+  action: "like" | "unlike",
+  mediaId: string,
+  cookieHeader: string,
+  options: {
+    src?: string;
+    d?: 0 | 1;
+    moduleInfo?: MediaActionModuleInfo;
+    userAgent?: string;
+  } = {},
+): Promise<RawActionResult> {
+  try {
+    const payload = {
+      media_id: mediaId,
+      src: options.src ?? "timeline",
+      d: options.d ?? 0,
+      module_info: options.moduleInfo ?? { module_name: "profile" },
+    };
+
+    const res = await fetch(
+      `https://i.instagram.com/api/v1/media/${mediaId}/${action}/`,
+      {
+        method: "POST",
+        headers: {
+          "User-Agent": options.userAgent ?? MOBILE_UA,
+          "X-IG-App-ID": IG_APP_ID,
+          "Cookie": cookieHeader,
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        body: buildSignedBodyForm(payload),
+      },
+    );
+
+    if (!res.ok) {
+      return {
+        success: false,
+        error: `${action === "like" ? "Like" : "Unlike"} API: ${await extractErrorMessage(res)}`,
+      };
+    }
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: `Ağ hatası (${action}): ${e instanceof Error ? e.message : e}`,
+    };
+  }
+}
+
+export function likeMediaRaw(
+  mediaId: string,
+  cookieHeader: string,
+  options?: { src?: string; d?: 0 | 1; moduleInfo?: MediaActionModuleInfo; userAgent?: string },
+): Promise<RawActionResult> {
+  return postMediaLikeAction("like", mediaId, cookieHeader, options);
+}
+
+export function unlikeMediaRaw(
+  mediaId: string,
+  cookieHeader: string,
+  options?: { src?: string; d?: 0 | 1; moduleInfo?: MediaActionModuleInfo; userAgent?: string },
+): Promise<RawActionResult> {
+  return postMediaLikeAction("unlike", mediaId, cookieHeader, options);
+}
+
+// ── 5. Beğenilme ve Görüntülenme Verilerini Çekme (Metrics) ─────────────────
+
+/** media/{id}/info/ yanıtındaki items[0] alanları. */
+export interface RawMediaInfoItem {
+  id?: string;
+  media_type?: number;
+  product_type?: string;
+  like_count?: number;
+  has_liked?: boolean;
+  play_count?: number;
+  view_count?: number;
+  comment_count?: number;
+}
+
+export interface MediaInfoResult {
+  success: boolean;
+  item?: RawMediaInfoItem;
+  error?: string;
+}
+
+/**
+ * Media Info — belgede tanımlanan doğrudan mobil API çağrısı:
+ *
+ *   GET https://i.instagram.com/api/v1/media/{media_id}/info/
+ *
+ * Kritik alanlar: like_count, has_liked, play_count (Reels/video),
+ * view_count (standart video), comment_count.
+ */
+export async function fetchMediaInfo(
+  mediaId: string,
+  cookieHeader: string,
+  userAgent: string = MOBILE_UA,
+): Promise<MediaInfoResult> {
+  try {
+    const res = await fetch(
+      `https://i.instagram.com/api/v1/media/${mediaId}/info/`,
+      {
+        method: "GET",
+        headers: {
+          "User-Agent": userAgent,
+          "X-IG-App-ID": IG_APP_ID,
+          "Cookie": cookieHeader,
+          "Accept-Language": "tr-TR",
+        },
+      },
+    );
+
+    let data: Record<string, unknown> = {};
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      return { success: false, error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    }
+
+    if (!res.ok || data.status !== "ok" || !Array.isArray(data.items)) {
+      const msg =
+        typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+      return { success: false, error: `Media Info API: ${msg}` };
+    }
+
+    return { success: true, item: (data.items as RawMediaInfoItem[])[0] };
+  } catch (e) {
+    return {
+      success: false,
+      error: `Ağ hatası (media info): ${e instanceof Error ? e.message : e}`,
+    };
+  }
+}
+
 /**
  * Oturum canlı tutma — belgede tanımlanan keep-alive endpoint:
  *   GET /api/v1/accounts/current_user/
