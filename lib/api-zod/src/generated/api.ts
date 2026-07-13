@@ -43,7 +43,9 @@ export const TestRequestConfigResponse = zod.object({
   "status": zod.number(),
   "statusText": zod.string(),
   "headers": zod.record(zod.string(), zod.string()),
-  "bodyPreview": zod.string()
+  "bodyPreview": zod.string(),
+  "isCaptcha": zod.boolean().describe('True if the response looks like a captcha or anti-bot challenge.'),
+  "captchaType": zod.string().nullable().describe('Detected captcha\/challenge name (e.g. recaptcha, hcaptcha, checkpoint, generic), or null if none detected.')
 })
 
 

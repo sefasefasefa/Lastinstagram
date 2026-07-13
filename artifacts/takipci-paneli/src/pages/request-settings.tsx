@@ -10,7 +10,8 @@ import {
 } from "@workspace/api-client-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Button, Card, Input, Label, cn } from "../components/ui/core"
-import { ArrowLeft, Plus, Trash2, Send, Clock } from "lucide-react"
+import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert"
+import { ArrowLeft, Plus, Trash2, Send, Clock, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 
 const REMINDER_THRESHOLD_MINUTES = 15
@@ -150,6 +151,13 @@ export default function SettingsPage() {
         setTestResult(result)
         queryClient.invalidateQueries({ queryKey: getGetRequestConfigQueryKey() })
         queryClient.invalidateQueries({ queryKey: getGetRequestRunHistoryQueryKey() })
+
+        if (result.isCaptcha) {
+          toast.warning(
+            `Captcha / anti-bot koruması tespit edildi! (${result.captchaType ?? "genel"})`,
+            { duration: 8000 },
+          )
+        }
       },
       onError: (err: unknown) => {
         const message = err instanceof Error ? err.message : "İstek başarısız oldu"
@@ -246,7 +254,17 @@ export default function SettingsPage() {
             <h3 className="font-medium mb-3">Test Sonucu</h3>
             {testError && <p className="text-sm text-destructive">{testError}</p>}
             {testResult && (
-              <div className="space-y-2 text-sm">
+              <div className="space-y-4 text-sm">
+                {testResult.isCaptcha && (
+                  <Alert variant="destructive" className="border-amber-500/50 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-500">
+                    <ShieldAlert className="h-4 w-4" />
+                    <AlertTitle>Captcha / Anti-Bot Koruması Tespit Edildi</AlertTitle>
+                    <AlertDescription>
+                      Hedef site ({testResult.captchaType ?? "bilinmeyen"}) bir captcha veya bot
+                      koruması gösteriyor. Cookie/header değerlerini güncelleyip tekrar deneyin.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <p>
                   <span className="text-muted-foreground">Durum: </span>
                   <span className="font-mono">{testResult.status} {testResult.statusText}</span>

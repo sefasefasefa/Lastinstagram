@@ -1112,7 +1112,7 @@ components:
             type: string
     RequestConfigTestResult:
       type: object
-      required: [status, statusText, headers, bodyPreview]
+      required: [status, statusText, headers, bodyPreview, isCaptcha, captchaType]
       properties:
         status:
           type: integer
@@ -1124,4 +1124,11 @@ components:
             type: string
         bodyPreview:
           type: string
+        isCaptcha:
+          type: boolean
+          description: True if the response looks like a captcha or anti-bot challenge.
+        captchaType:
+          type: string
+          nullable: true
+          description: Detected captcha/challenge name (e.g. recaptcha, hcaptcha, checkpoint, generic), or null if none detected.
 

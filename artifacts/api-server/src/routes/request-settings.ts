@@ -15,6 +15,7 @@ import {
   listRequestRunLog,
   recordRequestRun,
 } from "../lib/requestConfig";
+import { detectCaptcha } from "../lib/captchaDetection";
 import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -127,11 +128,25 @@ router.post(
         responseHeaders[key] = value;
       });
 
-      await recordRequestRun({
-        success: true,
-        status: response.status,
-        statusText: response.statusText,
-      });
+      const { isCaptcha, captchaType } = detectCaptcha(
+        response.status,
+        response.statusText,
+        responseHeaders,
+        text,
+      );
+
+      if (isCaptcha) {
+        await recordRequestRun({
+          success: false,
+          errorMessage: `Captcha / ${captchaType ?? "generic"}`,
+        });
+      } else {
+        await recordRequestRun({
+          success: true,
+          status: response.status,
+          statusText: response.statusText,
+        });
+      }
 
       res.json(
         TestRequestConfigResponse.parse({
@@ -139,6 +154,8 @@ router.post(
           statusText: response.statusText,
           headers: responseHeaders,
           bodyPreview: text.slice(0, MAX_BODY_PREVIEW_LENGTH),
+          isCaptcha,
+          captchaType,
         }),
       );
     } catch (err) {

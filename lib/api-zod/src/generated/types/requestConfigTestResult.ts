@@ -12,4 +12,8 @@ export interface RequestConfigTestResult {
   statusText: string;
   headers: RequestConfigTestResultHeaders;
   bodyPreview: string;
+  /** True if the response looks like a captcha or anti-bot challenge. */
+  isCaptcha: boolean;
+  /** Detected captcha/challenge name (e.g. recaptcha, hcaptcha, checkpoint, generic), or null if none detected. */
+  captchaType: string | null;
 }
