@@ -84,6 +84,26 @@ export const LoginResponse = zod.object({
 
 
 /**
+ * @summary Complete an Instagram login after /auth/login responded with twoFactorRequired: true, by submitting the code sent via SMS/TOTP or a backup code.
+
+ */
+
+export const verifyTwoFactorBodyMethodDefault = `totp`;
+
+export const VerifyTwoFactorBody = zod.object({
+  "verificationCode": zod.string().min(1).describe('6-digit TOTP\/SMS code, or 8-digit backup code.'),
+  "method": zod.enum(['totp', 'sms', 'backup_codes']).default(verifyTwoFactorBodyMethodDefault)
+})
+
+export const VerifyTwoFactorResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "sessionExpiry": zod.coerce.date().describe('When the current session cookie expires.'),
+  "deviceProfile": zod.string().nullish().describe('Optional client-supplied device\/browser identifier, echoed back as received. Not used for anything server-side.')
+})
+
+
+/**
  * @summary Log out the current session. Idempotent - returns 204 even if not authenticated.
  */
 export const LogoutResponse = zod.void()

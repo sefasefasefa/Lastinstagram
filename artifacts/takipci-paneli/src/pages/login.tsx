@@ -1,7 +1,15 @@
 import { useState, type FormEvent } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { useLogin } from "@workspace/api-client-react"
+import { useLogin, useVerifyTwoFactor, type VerifyTwoFactorRequestMethod } from "@workspace/api-client-react"
 import { Button, Card, Input, Label } from "../components/ui/core"
+
+type TwoFactorMethod = VerifyTwoFactorRequestMethod
+
+const TWO_FACTOR_METHODS: { value: TwoFactorMethod; label: string }[] = [
+  { value: "totp", label: "Authenticator uygulaması (TOTP)" },
+  { value: "sms", label: "SMS ile kod" },
+  { value: "backup_codes", label: "Yedek kod" },
+]
 
 // Instagram gradient logo (inline SVG, no external deps)
 function InstagramIcon({ className }: { className?: string }) {
@@ -27,9 +35,15 @@ function InstagramIcon({ className }: { className?: string }) {
 export default function LoginPage() {
   const queryClient = useQueryClient()
   const login = useLogin()
+  const verifyTwoFactor = useVerifyTwoFactor()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+
+  // İki adımlı doğrulama gerektiğinde /auth/login yerine bu adıma geçilir.
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false)
+  const [twoFactorMethod, setTwoFactorMethod] = useState<TwoFactorMethod>("totp")
+  const [verificationCode, setVerificationCode] = useState("")
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -41,9 +55,36 @@ export default function LoginPage() {
           queryClient.invalidateQueries()
         },
         onError: (err: unknown) => {
+          const data = (err as { response?: { data?: {
+            error?: string
+            twoFactorRequired?: boolean
+          } } })?.response?.data
+
+          if (data?.twoFactorRequired) {
+            setTwoFactorRequired(true)
+            setError(null)
+            return
+          }
+
+          setError(data?.error ?? "Giriş başarısız. Kullanıcı adı veya şifrenizi kontrol edin.")
+        },
+      },
+    )
+  }
+
+  const handleVerify = (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    verifyTwoFactor.mutate(
+      { data: { verificationCode, method: twoFactorMethod } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries()
+        },
+        onError: (err: unknown) => {
           const msg =
             (err as { response?: { data?: { error?: string } } })?.response?.data?.error
-            ?? "Giriş başarısız. Kullanıcı adı veya şifrenizi kontrol edin."
+            ?? "Doğrulama kodu kabul edilmedi. Lütfen tekrar deneyin."
           setError(msg)
         },
       },
@@ -57,51 +98,113 @@ export default function LoginPage() {
         {/* Logo + heading */}
         <div className="flex flex-col items-center mb-7">
           <InstagramIcon className="w-14 h-14 mb-4" />
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Instagram ile Giriş Yap</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            {twoFactorRequired ? "İki Adımlı Doğrulama" : "Instagram ile Giriş Yap"}
+          </h1>
           <p className="text-sm text-muted-foreground mt-1 text-center">
-            Instagram kullanıcı adı ve şifrenizi girin
+            {twoFactorRequired
+              ? "Instagram hesabınız için gönderilen doğrulama kodunu girin"
+              : "Instagram kullanıcı adı ve şifrenizi girin"}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="username">Instagram Kullanıcı Adı</Label>
-            <Input
-              id="username"
-              autoComplete="username"
-              placeholder="kullaniciadi"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Şifre</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          {error && (
-            <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5">
-              <p className="text-sm text-destructive leading-snug">{error}</p>
+        {twoFactorRequired ? (
+          <form onSubmit={handleVerify} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="two-factor-method">Doğrulama Yöntemi</Label>
+              <select
+                id="two-factor-method"
+                value={twoFactorMethod}
+                onChange={(e) => setTwoFactorMethod(e.target.value as TwoFactorMethod)}
+                className="flex h-10 w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                {TWO_FACTOR_METHODS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
             </div>
-          )}
+            <div className="space-y-2">
+              <Label htmlFor="verification-code">Doğrulama Kodu</Label>
+              <Input
+                id="verification-code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder={twoFactorMethod === "backup_codes" ? "12345678" : "123456"}
+                maxLength={twoFactorMethod === "backup_codes" ? 8 : 6}
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
+                required
+                autoFocus
+              />
+            </div>
 
-          <Button
-            type="submit"
-            className="w-full bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
-            disabled={login.isPending}
-          >
-            {login.isPending ? "Giriş yapılıyor..." : "Giriş Yap"}
-          </Button>
-        </form>
+            {error && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5">
+                <p className="text-sm text-destructive leading-snug">{error}</p>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
+              disabled={verifyTwoFactor.isPending}
+            >
+              {verifyTwoFactor.isPending ? "Doğrulanıyor..." : "Doğrula"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => {
+                setTwoFactorRequired(false)
+                setVerificationCode("")
+                setError(null)
+              }}
+            >
+              Geri dön
+            </Button>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Instagram Kullanıcı Adı</Label>
+              <Input
+                id="username"
+                autoComplete="username"
+                placeholder="kullaniciadi"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Şifre</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            {error && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5">
+                <p className="text-sm text-destructive leading-snug">{error}</p>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
+              disabled={login.isPending}
+            >
+              {login.isPending ? "Giriş yapılıyor..." : "Giriş Yap"}
+            </Button>
+          </form>
+        )}
 
         <p className="mt-5 text-center text-xs text-muted-foreground leading-relaxed">
           Giriş bilgileriniz yalnızca bu cihazda kullanılır

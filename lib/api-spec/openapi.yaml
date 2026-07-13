@@ -107,7 +107,38 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuthUser"
         "401":
-          description: Invalid username or password
+          description: >
+            Invalid username or password, or Instagram two-factor authentication is
+            required (twoFactorRequired: true; call /auth/verify-2fa next).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginError"
+  /auth/verify-2fa:
+    post:
+      operationId: verifyTwoFactor
+      tags: [auth]
+      summary: >
+        Complete an Instagram login after /auth/login responded with
+        twoFactorRequired: true, by submitting the code sent via SMS/TOTP or
+        a backup code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyTwoFactorRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Missing verification code, or no pending two-factor flow to complete
+        "401":
+          description: Verification code rejected by Instagram
   /auth/logout:
     post:
       operationId: logout
@@ -875,6 +906,36 @@ components:
         deviceProfile:
           type: string
           description: Optional client-supplied device/browser identifier. Echoed back on login, not persisted or used server-side.
+    LoginError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        twoFactorRequired:
+          type: boolean
+          description: True when Instagram requires a 2FA code — call /auth/verify-2fa next.
+        twoFactorInfo:
+          type: object
+          additionalProperties: true
+          description: Raw two_factor_info object from Instagram's login response.
+        twoFactorIdentifier:
+          type: string
+        twoStepVerificationContext:
+          type: string
+          description: Opaque context required by the Bloks verification chain; passed through automatically server-side.
+    VerifyTwoFactorRequest:
+      type: object
+      required: [verificationCode]
+      properties:
+        verificationCode:
+          type: string
+          minLength: 1
+          description: 6-digit TOTP/SMS code, or 8-digit backup code.
+        method:
+          type: string
+          enum: [totp, sms, backup_codes]
+          default: totp
     AuthUser:
       type: object
       required: [id, username, sessionExpiry]

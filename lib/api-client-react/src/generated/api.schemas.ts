@@ -197,6 +197,40 @@ export interface LoginRequest {
   deviceProfile?: string;
 }
 
+/**
+ * Raw two_factor_info object from Instagram's login response.
+ */
+export type LoginErrorTwoFactorInfo = { [key: string]: unknown };
+
+export interface LoginError {
+  error: string;
+  /** True when Instagram requires a 2FA code — call /auth/verify-2fa next. */
+  twoFactorRequired?: boolean;
+  /** Raw two_factor_info object from Instagram's login response. */
+  twoFactorInfo?: LoginErrorTwoFactorInfo;
+  twoFactorIdentifier?: string;
+  /** Opaque context required by the Bloks verification chain; passed through automatically server-side. */
+  twoStepVerificationContext?: string;
+}
+
+export type VerifyTwoFactorRequestMethod = typeof VerifyTwoFactorRequestMethod[keyof typeof VerifyTwoFactorRequestMethod];
+
+
+export const VerifyTwoFactorRequestMethod = {
+  totp: 'totp',
+  sms: 'sms',
+  backup_codes: 'backup_codes',
+} as const;
+
+export interface VerifyTwoFactorRequest {
+  /**
+     * 6-digit TOTP/SMS code, or 8-digit backup code.
+     * @minLength 1
+     */
+  verificationCode: string;
+  method?: VerifyTwoFactorRequestMethod;
+}
+
 export interface AuthUser {
   id: number;
   username: string;

@@ -38,6 +38,7 @@ import type {
   InstagramStorySeenInput,
   LikedMedia,
   ListTrackedUsersParams,
+  LoginError,
   LoginRequest,
   MonitoringStatus,
   MonitoringUpdate,
@@ -46,7 +47,8 @@ import type {
   RequestConfigTestResult,
   RequestRunLogEntry,
   TrackedUser,
-  TrackedUserInput
+  TrackedUserInput,
+  VerifyTwoFactorRequest
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -399,7 +401,7 @@ export const login = async (loginRequest: LoginRequest, options?: RequestInit): 
 
 
 
-export const getLoginMutationOptions = <TError = ErrorType<void>,
+export const getLoginMutationOptions = <TError = ErrorType<LoginError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginRequest>}, TContext> => {
 
@@ -428,12 +430,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>
     export type LoginMutationBody = BodyType<LoginRequest>
-    export type LoginMutationError = ErrorType<void>
+    export type LoginMutationError = ErrorType<LoginError>
 
     /**
  * @summary Log in with a username and password
  */
-export const useLogin = <TError = ErrorType<void>,
+export const useLogin = <TError = ErrorType<LoginError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<LoginRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof login>>,
@@ -442,6 +444,79 @@ export const useLogin = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getLoginMutationOptions(options));
+    }
+
+export const getVerifyTwoFactorUrl = () => {
+
+
+
+
+  return `/api/auth/verify-2fa`
+}
+
+/**
+ * @summary Complete an Instagram login after /auth/login responded with twoFactorRequired: true, by submitting the code sent via SMS/TOTP or a backup code.
+
+ */
+export const verifyTwoFactor = async (verifyTwoFactorRequest: VerifyTwoFactorRequest, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getVerifyTwoFactorUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(verifyTwoFactorRequest)
+  }
+);}
+
+
+
+
+
+export const getVerifyTwoFactorMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyTwoFactor>>, TError,{data: BodyType<VerifyTwoFactorRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyTwoFactor>>, TError,{data: BodyType<VerifyTwoFactorRequest>}, TContext> => {
+
+const mutationKey = ['verifyTwoFactor'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyTwoFactor>>, {data: BodyType<VerifyTwoFactorRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyTwoFactor(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyTwoFactorMutationResult = NonNullable<Awaited<ReturnType<typeof verifyTwoFactor>>>
+    export type VerifyTwoFactorMutationBody = BodyType<VerifyTwoFactorRequest>
+    export type VerifyTwoFactorMutationError = ErrorType<void>
+
+    /**
+ * @summary Complete an Instagram login after /auth/login responded with twoFactorRequired: true, by submitting the code sent via SMS/TOTP or a backup code.
+
+ */
+export const useVerifyTwoFactor = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyTwoFactor>>, TError,{data: BodyType<VerifyTwoFactorRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyTwoFactor>>,
+        TError,
+        {data: BodyType<VerifyTwoFactorRequest>},
+        TContext
+      > => {
+      return useMutation(getVerifyTwoFactorMutationOptions(options));
     }
 
 export const getLogoutUrl = () => {
