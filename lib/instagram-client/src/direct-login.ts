@@ -279,6 +279,18 @@ async function loginViaWeb(
     csrfCookie?.match(/^csrftoken=([^;]+)/)?.[1] ?? "missing";
   const cookieHeader = initCookies.map((c) => c.split(";")[0]).join("; ");
 
+  // Extract the build/rollout ID that Instagram embeds in the login page HTML.
+  // Instagram injects it as  "rollout_hash":"<id>"  inside an inline <script>.
+  // This value is what browsers send as X-Instagram-AJAX on every AJAX request.
+  let ajaxBuildId = "1";
+  try {
+    const html = await initRes.text();
+    const match =
+      html.match(/"rollout_hash"\s*:\s*"([^"]+)"/) ??
+      html.match(/["']rollout_hash["']\s*:\s*["']([^"']+)["']/);
+    if (match?.[1]) ajaxBuildId = match[1];
+  } catch { /* keep default "1" if parsing fails */ }
+
   // Step 2: POST credentials to the AJAX endpoint
   const params = new URLSearchParams({
     username,
@@ -295,13 +307,14 @@ async function loginViaWeb(
       method: "POST",
       headers: {
         "User-Agent": DESKTOP_UA,
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-CSRFToken": csrfToken,
-        "X-Instagram-AJAX": "1",
+        "X-Instagram-AJAX": ajaxBuildId,
         "X-Requested-With": "XMLHttpRequest",
         "Accept-Language": "tr-TR,tr;q=0.9",
-        Referer: "https://www.instagram.com/accounts/login/",
-        Cookie: cookieHeader,
+        "Referer": "https://www.instagram.com/accounts/login/",
+        "Origin": "https://www.instagram.com",
+        "Cookie": cookieHeader,
       },
       body: params.toString(),
     });
