@@ -149,4 +149,58 @@ router.post("/instagram/like-reel", async (req, res): Promise<void> => {
   });
 });
 
+router.post("/instagram/unlike-post", async (req, res): Promise<void> => {
+  const postId = typeof req.body?.postId === "string" ? req.body.postId : "";
+  if (!postId) {
+    res.status(400).json({ success: false, error: "postId is required" });
+    return;
+  }
+
+  const success = await getClient().unlikePost(postId);
+  res.status(success ? 200 : 502).json({
+    success,
+    message: success ? "Post unliked" : "Instagram rejected the unlike request",
+  });
+});
+
+router.post("/instagram/unlike-reel", async (req, res): Promise<void> => {
+  const reelId = typeof req.body?.reelId === "string" ? req.body.reelId : "";
+  if (!reelId) {
+    res.status(400).json({ success: false, error: "reelId is required" });
+    return;
+  }
+
+  const success = await getClient().unlikeReel(reelId);
+  res.status(success ? 200 : 502).json({
+    success,
+    message: success ? "Reel unliked" : "Instagram rejected the unlike request",
+  });
+});
+
+router.post("/instagram/story-seen", async (req, res): Promise<void> => {
+  const storyId = typeof req.body?.storyId === "string" ? req.body.storyId : "";
+  const ownerId = typeof req.body?.ownerId === "string" ? req.body.ownerId : "";
+  const takenAt = typeof req.body?.takenAt === "number" ? req.body.takenAt : undefined;
+
+  if (!storyId || !ownerId) {
+    res.status(400).json({ success: false, error: "storyId and ownerId are required" });
+    return;
+  }
+
+  const success = await getClient().markStorySeen(storyId, ownerId, takenAt);
+  res.status(success ? 200 : 502).json({
+    success,
+    message: success ? "Story marked as seen" : "Instagram rejected the seen request",
+  });
+});
+
+router.get("/instagram/media/:mediaId/info", async (req, res): Promise<void> => {
+  try {
+    const info = await getClient().getMediaInfo(req.params.mediaId);
+    res.json({ success: true, info });
+  } catch (error) {
+    res.status(502).json({ success: false, error: errorMessage(error) });
+  }
+});
+
 export default router;

@@ -26,6 +26,16 @@ export interface InstagramProfile {
   pk: string;
   fullName: string;
   profilePicUrl?: string;
+  /** Takipçi sayısı */
+  followerCount?: number;
+  /** Takip edilen sayısı */
+  followingCount?: number;
+  /** Toplam gönderi sayısı */
+  mediaCount?: number;
+  /** Profil biyografisi */
+  biography?: string;
+  /** Profildeki dış bağlantı */
+  externalUrl?: string;
 }
 
 export interface InstagramPost {
@@ -34,6 +44,7 @@ export interface InstagramPost {
   mediaType: number;
   caption?: string;
   likeCount: number;
+  commentCount?: number;
   displayUrl?: string;
   videoUrl?: string;
   hasLiked: boolean;
@@ -46,11 +57,24 @@ export interface InstagramStory {
   videoUrl?: string;
   displayUrl?: string;
   timestamp: number;
+  /** Hikaye sahibinin user_id değeri (markStorySeen için gerekli) */
+  ownerId?: string;
+  takenAt?: number;
 }
 
 export interface InstagramReel extends InstagramPost {
   playCount: number;
+  viewCount?: number;
   timestamp: number;
+}
+
+export interface InstagramMediaInfo {
+  id: string;
+  likeCount: number;
+  hasLiked: boolean;
+  commentCount: number;
+  playCount?: number;
+  viewCount?: number;
 }
 
 export class InstagramClient {
@@ -346,12 +370,19 @@ export class InstagramClient {
   async getProfile(username: string): Promise<InstagramProfile> {
     await this.ensureAuthenticated();
     return this.withErrorRecovery(async () => {
-      const user = await this.client.user.searchExact(username);
+      // searchExact returns basic fields; userInfo gives full stats
+      const basic = await this.client.user.searchExact(username);
+      const info = await this.client.user.info(basic.pk);
       return {
-        username: user.username,
-        pk: String(user.pk),
-        fullName: user.full_name,
-        profilePicUrl: user.profile_pic_url,
+        username: info.username,
+        pk: String(info.pk),
+        fullName: info.full_name,
+        profilePicUrl: info.profile_pic_url,
+        followerCount: info.follower_count,
+        followingCount: info.following_count,
+        mediaCount: info.media_count,
+        biography: info.biography ?? undefined,
+        externalUrl: info.external_url ?? undefined,
       };
     });
   }
@@ -368,6 +399,7 @@ export class InstagramClient {
         mediaType: media.media_type,
         caption: media.caption?.text,
         likeCount: media.like_count ?? 0,
+        commentCount: media.comment_count ?? 0,
         displayUrl: media.image_versions2?.candidates?.[0]?.url,
         videoUrl: media.video_versions?.[0]?.url,
         hasLiked: media.has_liked ?? false,
@@ -389,6 +421,8 @@ export class InstagramClient {
         videoUrl: media.video_versions?.[0]?.url,
         displayUrl: media.image_versions2?.candidates?.[0]?.url,
         timestamp: media.taken_at * 1000,
+        ownerId: String(user.pk),
+        takenAt: media.taken_at,
       }));
     });
   }
@@ -399,7 +433,53 @@ export class InstagramClient {
     return posts
       .filter((post) => post.mediaType === 2 && post.videoUrl)
       .slice(0, safeLimit)
-      .map((post) => ({ ...post, playCount: 0, timestamp: Date.now() }));
+      .map((post) => ({ ...post, playCount: 0, viewCount: 0, timestamp: Date.now() }));
+  }
+
+  /**
+   * Tekil medya metrikleri — belgede tanımlanan Media Info endpoint:
+   *   GET /api/v1/media/{media_id}/info/
+   *   Döner: like_count, has_liked, play_count, view_count, comment_count
+   */
+  async getMediaInfo(mediaId: string): Promise<InstagramMediaInfo> {
+    await this.ensureAuthenticated();
+    return this.withErrorRecovery(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (this.client.media as any).info(mediaId) as { items: Record<string, unknown>[] };
+      const item = result.items?.[0] ?? {};
+      return {
+        id: String(item.id ?? mediaId),
+        likeCount: Number(item.like_count ?? 0),
+        hasLiked: Boolean(item.has_liked),
+        commentCount: Number(item.comment_count ?? 0),
+        playCount: Number(item.play_count ?? 0) || undefined,
+        viewCount: Number(item.view_count ?? 0) || undefined,
+      };
+    });
+  }
+
+  /**
+   * Hikayeyi "görüldü" olarak işaretle — belgede tanımlanan Seen API:
+   *   POST /api/v2/media/seen/
+   *   reels key: "{story_owner_id}_{kendi_user_id}"
+   *   list item: "{media_id}_{story_owner_id}_{taken_at}"
+   */
+  async markStorySeen(
+    storyId: string,
+    ownerId: string,
+    takenAt?: number,
+  ): Promise<boolean> {
+    await this.ensureAuthenticated();
+    return this.withErrorRecovery(async () => {
+      const selfUser = await this.client.account.currentUser();
+      const selfId = String(selfUser.pk);
+      const ts = takenAt ?? Math.floor(Date.now() / 1000);
+      const reelsKey = `${ownerId}_${selfId}`;
+      const reelsValue = [`${storyId}_${ownerId}_${ts}`];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (this.client.media as any).seen({ [reelsKey]: reelsValue });
+      return true;
+    }).catch(() => false);
   }
 
   async likePost(postId: string): Promise<boolean> {
@@ -408,7 +488,19 @@ export class InstagramClient {
       await this.client.media.like({
         mediaId: postId,
         moduleInfo: { module_name: "feed_timeline" },
-        d: 1,
+        d: 0,
+      });
+      return true;
+    }).catch(() => false);
+  }
+
+  async unlikePost(postId: string): Promise<boolean> {
+    await this.ensureAuthenticated();
+    return this.withErrorRecovery(async () => {
+      await this.client.media.unlike({
+        mediaId: postId,
+        moduleInfo: { module_name: "feed_timeline" },
+        d: 0,
       });
       return true;
     }).catch(() => false);
@@ -420,6 +512,10 @@ export class InstagramClient {
 
   async likeReel(reelId: string): Promise<boolean> {
     return this.likePost(reelId);
+  }
+
+  async unlikeReel(reelId: string): Promise<boolean> {
+    return this.unlikePost(reelId);
   }
 
   async logout(): Promise<void> {

@@ -506,6 +506,93 @@ paths:
           description: Invalid request
         "502":
           description: Instagram rejected the request
+  /instagram/unlike-post:
+    post:
+      operationId: unlikeInstagramPost
+      tags: [instagram]
+      summary: Remove a like from an Instagram post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstagramPostActionInput"
+      responses:
+        "200":
+          description: Unlike request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramActionResponse"
+        "400":
+          description: Invalid request
+        "502":
+          description: Instagram rejected the request
+  /instagram/unlike-reel:
+    post:
+      operationId: unlikeInstagramReel
+      tags: [instagram]
+      summary: Remove a like from an Instagram Reel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstagramReelActionInput"
+      responses:
+        "200":
+          description: Unlike request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramActionResponse"
+        "400":
+          description: Invalid request
+        "502":
+          description: Instagram rejected the request
+  /instagram/story-seen:
+    post:
+      operationId: markInstagramStorySeen
+      tags: [instagram]
+      summary: Mark an Instagram story as seen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstagramStorySeenInput"
+      responses:
+        "200":
+          description: Story marked as seen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramActionResponse"
+        "400":
+          description: Invalid request
+        "502":
+          description: Instagram rejected the request
+  /instagram/media/{mediaId}/info:
+    get:
+      operationId: getInstagramMediaInfo
+      tags: [instagram]
+      summary: Get detailed metrics for a single media item
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: Media info and metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstagramMediaInfoResponse"
+        "502":
+          description: Instagram request failed
 components:
   parameters:
     InstagramUsername:
@@ -544,6 +631,21 @@ components:
           type: string
         profilePicUrl:
           type: string
+        followerCount:
+          type: integer
+          description: Takipçi sayısı
+        followingCount:
+          type: integer
+          description: Takip edilen sayısı
+        mediaCount:
+          type: integer
+          description: Toplam gönderi sayısı
+        biography:
+          type: string
+          description: Profil biyografisi
+        externalUrl:
+          type: string
+          description: Profildeki dış bağlantı
     InstagramProfileResponse:
       type: object
       required: [success, profile]
@@ -566,6 +668,9 @@ components:
           type: string
         likeCount:
           type: integer
+        commentCount:
+          type: integer
+          description: Toplam yorum sayısı
         displayUrl:
           type: string
         videoUrl:
@@ -617,9 +722,56 @@ components:
           properties:
             playCount:
               type: integer
+              description: Toplam oynatma sayısı
+            viewCount:
+              type: integer
+              description: Tekil izlenme sayısı
             timestamp:
               type: integer
               format: int64
+    InstagramMediaInfo:
+      type: object
+      required: [id, likeCount, hasLiked, commentCount]
+      description: Tekil medya istatistikleri (Media Info API)
+      properties:
+        id:
+          type: string
+        likeCount:
+          type: integer
+        hasLiked:
+          type: boolean
+        playCount:
+          type: integer
+          description: Reels/video oynatma sayısı
+        viewCount:
+          type: integer
+          description: Standart video izlenme sayısı
+        commentCount:
+          type: integer
+    InstagramMediaInfoResponse:
+      type: object
+      required: [success, info]
+      properties:
+        success:
+          type: boolean
+        info:
+          $ref: "#/components/schemas/InstagramMediaInfo"
+    InstagramStorySeenInput:
+      type: object
+      required: [storyId, ownerId]
+      description: Hikayeyi "görüldü" olarak işaretle
+      properties:
+        storyId:
+          type: string
+          minLength: 1
+          description: Hikayenin media_id değeri
+        ownerId:
+          type: string
+          minLength: 1
+          description: Hikaye sahibinin user_id değeri
+        takenAt:
+          type: integer
+          description: Hikayenin taken_at Unix zaman damgası (sn)
     InstagramReelsResponse:
       type: object
       required: [success, reels]
