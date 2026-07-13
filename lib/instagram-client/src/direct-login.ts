@@ -25,7 +25,11 @@ const IG_SIG_KEY =
   "9193488027538fd3450b83b7d05286d4ca9599a0f7eeed90d8c85925698a05dc";
 const IG_SIG_KEY_VERSION = "4";
 
-const IG_APP_ID = "567067343352427";
+const IG_APP_ID = "1217981644879628";
+
+/** Fixed mobile User-Agent matching an OnePlus 6 running Android 10. */
+const MOBILE_UA =
+  "Instagram 269.0.0.18.230 Android (29/10; 480dpi; 1080x2280; OnePlus; ONEPLUS A6003; OnePlus6; qcom; en_US; 443213192)";
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
@@ -191,12 +195,14 @@ async function loginViaMobile(
     res = await fetch(MOBILE_LOGIN_URL, {
       method: "POST",
       headers: {
-        "User-Agent": s.deviceString,
-        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": MOBILE_UA,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "Accept-Language": "tr-TR",
         "X-IG-App-ID": IG_APP_ID,
-        "X-IG-Capabilities": "3brTvwM=",
+        "X-IG-Capabilities": "3brTvw==",
         "X-IG-Connection-Type": "WIFI",
+        "X-IG-Connection-Speed": "-1kbps",
+        "X-CSRFToken": s.csrfToken,
         "X-FB-HTTP-Engine": "Liger",
       },
       body: new URLSearchParams({ ig_sig_key_version, signed_body }).toString(),
