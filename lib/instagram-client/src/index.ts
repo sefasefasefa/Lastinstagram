@@ -9,6 +9,7 @@ import {
   refreshCsrfToken,
   pingKeepAlive,
   updateCsrfInHeader,
+  fetchUserInfo,
   type SessionCookies,
 } from "./direct-login";
 
@@ -369,15 +370,50 @@ export class InstagramClient {
     }
   }
 
+  /**
+   * Kullanıcı Profili Görüntüleme (User Info API).
+   *
+   * 1. Kullanıcı adını user_id'ye çevir (arama).
+   * 2. Ham mobil API isteğiyle profil detaylarını çek:
+   *      GET https://i.instagram.com/api/v1/users/{user_id}/info/
+   *    Gerekli başlıklar: User-Agent, X-IG-App-ID, Cookie
+   *      (sessionid, mid, ig_did, csrftoken).
+   *    Yanıt: { "user": { pk, username, full_name, is_private, media_count,
+   *              follower_count, following_count, biography, external_url },
+   *             "status": "ok" }
+   * 3. Ham istek başarısız olursa (örn. session-cookie girişinde tam
+   *    Cookie header'ı yoksa) instagram-private-api istemcisine geri dön.
+   */
   async getProfile(username: string): Promise<InstagramProfile> {
     await this.ensureAuthenticated();
     return this.withErrorRecovery(async () => {
-      // 1. Resolve username to user_id via search.
-      // 2. Fetch full profile from the mobile User Info API:
-      //    GET /api/v1/users/{user_id}/info/
-      //    Returns: follower_count, following_count, media_count, biography,
-      //    is_private, etc.
       const basic = await this.client.user.searchExact(username);
+      const pk = String(basic.pk);
+
+      if (this.session?.cookieHeader) {
+        const result = await fetchUserInfo(
+          pk,
+          this.session.cookieHeader,
+          this.client.state.deviceString,
+        );
+        if (result.success && result.user) {
+          const u = result.user;
+          return {
+            username: u.username,
+            pk: String(u.pk),
+            fullName: u.full_name ?? "",
+            profilePicUrl: u.profile_pic_url,
+            followerCount: u.follower_count,
+            followingCount: u.following_count,
+            mediaCount: u.media_count,
+            biography: u.biography ?? undefined,
+            externalUrl: u.external_url ?? undefined,
+            isPrivate: u.is_private,
+          };
+        }
+        // Ham istek başarısız — kütüphane tabanlı yönteme geri dön.
+      }
+
       const info = await this.client.user.info(basic.pk);
       return {
         username: info.username,

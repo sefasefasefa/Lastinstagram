@@ -438,6 +438,91 @@ export async function refreshCsrfToken(
   }
 }
 
+// ── User Info API (doğrudan HTTP) ────────────────────────────────────────────
+
+/**
+ * Belgede tanımlanan ham kullanıcı bilgisi yanıtı:
+ *   GET /api/v1/users/{user_id}/info/
+ *   { "user": { pk, username, full_name, is_private, media_count,
+ *                follower_count, following_count, biography, external_url, ... },
+ *     "status": "ok" }
+ */
+export interface RawInstagramUser {
+  pk: number | string;
+  username: string;
+  full_name?: string;
+  is_private?: boolean;
+  media_count?: number;
+  follower_count?: number;
+  following_count?: number;
+  biography?: string;
+  external_url?: string;
+  profile_pic_url?: string;
+}
+
+export interface UserInfoResult {
+  success: boolean;
+  user?: RawInstagramUser;
+  error?: string;
+}
+
+/**
+ * Kullanıcı Profili Görüntüleme (User Info API) — belgede tanımlanan
+ * doğrudan mobil API çağrısı:
+ *
+ *   GET https://i.instagram.com/api/v1/users/{user_id}/info/
+ *
+ * Gerekli HTTP başlıkları:
+ *   User-Agent   — mobil uygulama parmak izi (Instagram Android istemcisi)
+ *   X-IG-App-ID  — Android uygulama ID'si (1217981644879628)
+ *   Cookie       — giriş sonrası elde edilen sessionid, mid, ig_did,
+ *                  csrftoken bileşenleri (cookieHeader)
+ *
+ * @param userId       Sorgulanacak hesabın pk (user_id) değeri.
+ * @param cookieHeader Aktif oturumun Cookie header string'i (sessionid; mid; ig_did; csrftoken; ...).
+ * @param userAgent    Giriş sırasında kullanılan mobil User-Agent (varsayılan: MOBILE_UA).
+ */
+export async function fetchUserInfo(
+  userId: string,
+  cookieHeader: string,
+  userAgent: string = MOBILE_UA,
+): Promise<UserInfoResult> {
+  try {
+    const res = await fetch(
+      `https://i.instagram.com/api/v1/users/${userId}/info/`,
+      {
+        method: "GET",
+        headers: {
+          "User-Agent": userAgent,
+          "X-IG-App-ID": IG_APP_ID,
+          "Cookie": cookieHeader,
+          "Accept-Language": "tr-TR",
+        },
+      },
+    );
+
+    let data: Record<string, unknown> = {};
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      return { success: false, error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    }
+
+    if (!res.ok || data.status !== "ok" || !data.user) {
+      const msg =
+        typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+      return { success: false, error: `User Info API: ${msg}` };
+    }
+
+    return { success: true, user: data.user as RawInstagramUser };
+  } catch (e) {
+    return {
+      success: false,
+      error: `Ağ hatası (user info): ${e instanceof Error ? e.message : e}`,
+    };
+  }
+}
+
 /**
  * Oturum canlı tutma — belgede tanımlanan keep-alive endpoint:
  *   GET /api/v1/accounts/current_user/
