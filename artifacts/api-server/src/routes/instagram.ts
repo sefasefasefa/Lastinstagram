@@ -22,6 +22,20 @@ function getClient(): InstagramClient {
   return client;
 }
 
+/** Called by auth.ts after a successful Instagram credential login. */
+export function initClientWithCredentials(
+  username: string,
+  password: string,
+): InstagramClient {
+  client = new InstagramClient({
+    instagramUsername: username,
+    instagramPassword: password,
+    proxyUrl: process.env.PROXY_URL,
+    useProxy: process.env.USE_PROXY === "true",
+  });
+  return client;
+}
+
 function parseLimit(value: unknown, fallback: number, maximum: number): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) return fallback;

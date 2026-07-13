@@ -3,16 +3,38 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { LoginBody, LoginResponse, GetMeResponse } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth";
+import { initClientWithCredentials } from "./instagram";
 
-// express-session sets cookie.expires once a session is established. Reads
-// as an absolute timestamp so the client knows when it'll be signed out.
+// express-session sets cookie.expires once a session is established.
 function sessionExpiryOf(req: import("express").Request): string {
   const expires = req.session.cookie.expires;
   return (expires instanceof Date ? expires : new Date(expires!)).toISOString();
 }
-import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
+
+/**
+ * Upsert a user row for an Instagram-authenticated account.
+ * We never use the stored hash to verify — it's a sentinel that
+ * bcrypt.compare will always reject, so password login is impossible
+ * for Instagram-only accounts.
+ */
+async function upsertInstagramUser(username: string): Promise<typeof usersTable.$inferSelect> {
+  const existing = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.username, username));
+
+  if (existing[0]) return existing[0];
+
+  const [created] = await db
+    .insert(usersTable)
+    .values({ username, passwordHash: "$instagram$" })
+    .returning();
+
+  return created;
+}
 
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
@@ -21,44 +43,70 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  const [user] = await db
+  const { username, password } = parsed.data;
+
+  // ── 1. Try local DB auth (admin accounts) ──────────────────────────────
+  const [localUser] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.username, parsed.data.username));
+    .where(eq(usersTable.username, username));
 
-  const passwordMatches = user
-    ? await bcrypt.compare(parsed.data.password, user.passwordHash)
-    : false;
+  const isLocalAuth =
+    localUser &&
+    localUser.passwordHash !== "$instagram$" &&
+    (await bcrypt.compare(password, localUser.passwordHash));
 
-  if (!user || !passwordMatches) {
-    res.status(401).json({ error: "Invalid username or password" });
+  if (isLocalAuth) {
+    req.session.regenerate((err) => {
+      if (err) { res.status(500).json({ error: "Failed to establish session" }); return; }
+      req.session.userId = localUser.id;
+      res.json(LoginResponse.parse({
+        id: localUser.id,
+        username: localUser.username,
+        sessionExpiry: sessionExpiryOf(req),
+        deviceProfile: parsed.data.deviceProfile,
+      }));
+    });
     return;
   }
 
-  // Regenerate the session id on login so an attacker who fixated a session
-  // id before authentication cannot reuse it afterwards (session fixation).
-  req.session.regenerate((err) => {
-    if (err) {
-      res.status(500).json({ error: "Failed to establish session" });
-      return;
+  // ── 2. Try Instagram auth ───────────────────────────────────────────────
+  try {
+    const igClient = initClientWithCredentials(username, password);
+    await igClient.login();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Instagram login failed";
+
+    // Give a friendlier message for the most common errors
+    if (msg.includes("checkpoint")) {
+      res.status(401).json({ error: "Instagram hesabında güvenlik doğrulaması gerekiyor. Instagram uygulamasından giriş yapıp doğrulamayı tamamlayın." });
+    } else if (msg.includes("two-factor") || msg.includes("2fa") || msg.includes("Two Factor")) {
+      res.status(401).json({ error: "Instagram hesabında iki faktörlü doğrulama açık. Lütfen Instagram uygulamasından oturum çerezi alarak giriş yapın." });
+    } else if (msg.includes("password") || msg.includes("Invalid") || msg.includes("incorrect")) {
+      res.status(401).json({ error: "Instagram kullanıcı adı veya şifresi hatalı." });
+    } else {
+      res.status(401).json({ error: "Giriş başarısız: " + msg });
     }
-    req.session.userId = user.id;
-    res.json(
-      LoginResponse.parse({
-        id: user.id,
-        username: user.username,
-        sessionExpiry: sessionExpiryOf(req),
-        // Echoed back verbatim if the client sends one; never persisted or
-        // used for anything server-side.
-        deviceProfile: parsed.data.deviceProfile,
-      }),
-    );
+    return;
+  }
+
+  // Instagram login succeeded — create/find a local user record
+  const igUser = await upsertInstagramUser(username);
+
+  req.session.regenerate((err) => {
+    if (err) { res.status(500).json({ error: "Failed to establish session" }); return; }
+    req.session.userId = igUser.id;
+    res.json(LoginResponse.parse({
+      id: igUser.id,
+      username: igUser.username,
+      sessionExpiry: sessionExpiryOf(req),
+      deviceProfile: parsed.data.deviceProfile,
+    }));
   });
 });
 
 router.post("/auth/logout", (req, res): void => {
   if (!req.session?.userId) {
-    // Already logged out; logout is idempotent.
     res.sendStatus(204);
     return;
   }
@@ -79,13 +127,11 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(
-    GetMeResponse.parse({
-      id: user.id,
-      username: user.username,
-      sessionExpiry: sessionExpiryOf(req),
-    }),
-  );
+  res.json(GetMeResponse.parse({
+    id: user.id,
+    username: user.username,
+    sessionExpiry: sessionExpiryOf(req),
+  }));
 });
 
 export default router;
