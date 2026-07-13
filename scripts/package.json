@@ -6,6 +6,7 @@
   "scripts": {
     "instagram:auto-like": "tsx ./src/instagram-auto-like.ts",
     "db:restore": "tsx ./src/db-restore.ts",
+    "db:seed": "tsx ./src/seed.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
