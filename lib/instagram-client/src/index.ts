@@ -17,9 +17,12 @@ import {
   likeMediaRaw,
   unlikeMediaRaw,
   fetchMediaInfo,
+  completeTwoFactorLogin,
+  extractSessionCookies,
   type SessionCookies,
   type RawFeedItem,
   type TwoFactorInfo,
+  type TwoFactorMethod,
 } from "./direct-login";
 
 /**
@@ -27,6 +30,11 @@ import {
  * fırlatılır. Yanıt gövdesindeki ham two_factor_info, two_factor_identifier
  * ve two_step_verification_context alanlarını taşır — çağıran taraf (örn.
  * API route) bunları okuyup bir doğrulama kodu isteme akışı tetikleyebilir.
+ * two_step_verification_context, CAA/Bloks yönlendirme zincirinin
+ * (entrypoint → method_picker → select_method → verify_code.async)
+ * anahtarıdır; bu bağlam olmadan sonraki adımlar "Invalid Parameters"
+ * hatasıyla engellenir — bu yüzden InstagramClient.completeTwoFactorLogin()
+ * çağrısı için de burada saklanır (bkz. pendingTwoFactor).
  */
 export class InstagramTwoFactorRequiredError extends Error {
   readonly twoFactorInfo?: TwoFactorInfo;
@@ -46,7 +54,7 @@ export class InstagramTwoFactorRequiredError extends Error {
   }
 }
 
-export type { TwoFactorInfo };
+export type { TwoFactorInfo, TwoFactorMethod };
 
 /** Ham feed/clips öğesini InstagramPost şekline dönüştürür. */
 function mapRawMediaToPost(item: RawFeedItem): InstagramPost {
@@ -136,6 +144,12 @@ export class InstagramClient {
   private loginPromise: Promise<void> | null = null;
   /** Oturum cookie'lerinin tamamı — keep-alive ve CSRF yenileme için kullanılır */
   private session: SessionCookies | null = null;
+  /**
+   * 2FA gerektiğinde login() bir InstagramTwoFactorRequiredError fırlatır;
+   * completeTwoFactorLogin() çağrısı için gereken two_step_verification_context
+   * ve ön oturum cookie'leri (csrftoken/mid) burada saklanır.
+   */
+  private pendingTwoFactor: { context: string; cookieHeader: string } | null = null;
   /** Keep-alive zamanlayıcısı (clearInterval ile durdurulur) */
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   /** Keep-alive aralığı: belgede önerilen 15-30 dakika → 20 dakika */
@@ -175,6 +189,51 @@ export class InstagramClient {
     }
   }
 
+  /**
+   * CAA/Bloks İki Adımlı Doğrulama Yönlendirme Protokolü — login() bir
+   * InstagramTwoFactorRequiredError fırlattıktan sonra, kullanıcının girdiği
+   * doğrulama koduyla oturumu tamamlar:
+   *   entrypoint → method_picker → select_method → [enter_backup_code]
+   *   → verify_code.async → bloks_extract_login_response()
+   * Başarılı olursa ayıklanan sessionid/csrftoken bloks_apply_login_response()
+   * eşdeğeri olarak istemcinin aktif oturum belleğine (cookie jar) yüklenir.
+   *
+   * @param verificationCode TOTP/SMS için 6 hane, backup_codes için 8 hane.
+   * @param method "totp" | "sms" | "backup_codes" (varsayılan: "totp").
+   */
+  async completeTwoFactorLogin(
+    verificationCode: string,
+    method: TwoFactorMethod = "totp",
+  ): Promise<void> {
+    if (!this.pendingTwoFactor) {
+      throw new Error(
+        "Tamamlanacak bekleyen bir iki adımlı doğrulama akışı yok. Önce login() çağrılmalı.",
+      );
+    }
+
+    const { context, cookieHeader } = this.pendingTwoFactor;
+    const result = await completeTwoFactorLogin(
+      context,
+      method,
+      verificationCode,
+      cookieHeader,
+      this.client.state.deviceString,
+    );
+
+    if (!result.success || !result.extraction?.sessionCookies) {
+      throw new Error(
+        `İki adımlı doğrulama başarısız (${result.step ?? "unknown"}): ${result.error ?? "bilinmeyen hata"}`,
+      );
+    }
+
+    this.pendingTwoFactor = null;
+    this.session = result.extraction.sessionCookies;
+    await this.restoreFullSession(result.extraction.sessionCookies);
+    await this.client.account.currentUser();
+    this.loggedIn = true;
+    this.startKeepAlive();
+  }
+
   private async performLogin(): Promise<void> {
     try {
       if (this.config.instagramSessionCookie) {
@@ -199,6 +258,14 @@ export class InstagramClient {
 
       if (!result.success) {
         if (result.errorType === "2fa") {
+          if (result.twoStepVerificationContext) {
+            this.pendingTwoFactor = {
+              context: result.twoStepVerificationContext,
+              cookieHeader: result.cookies
+                ? extractSessionCookies(result.cookies).cookieHeader
+                : "",
+            };
+          }
           throw new InstagramTwoFactorRequiredError({
             twoFactorInfo: result.twoFactorInfo,
             twoFactorIdentifier: result.twoFactorIdentifier,
@@ -782,6 +849,16 @@ export class InstagramClient {
 
   isAuthenticated(): boolean {
     return this.loggedIn;
+  }
+
+  /** Yapılandırılan Instagram kullanıcı adı — 2FA doğrulaması sonrası yerel kullanıcı eşleme için. */
+  getUsername(): string {
+    return this.config.instagramUsername;
+  }
+
+  /** login() bir InstagramTwoFactorRequiredError fırlattıysa true döner. */
+  hasPendingTwoFactor(): boolean {
+    return this.pendingTwoFactor !== null;
   }
 }
 

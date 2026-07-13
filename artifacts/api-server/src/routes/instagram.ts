@@ -36,6 +36,14 @@ export function initClientWithCredentials(
   return client;
 }
 
+/**
+ * Bekleyen bir 2FA akışını (login() sonrası InstagramTwoFactorRequiredError)
+ * tamamlamak için auth.ts'in kullandığı, en son oluşturulan istemci örneği.
+ */
+export function getActiveClient(): InstagramClient | null {
+  return client;
+}
+
 function parseLimit(value: unknown, fallback: number, maximum: number): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) return fallback;

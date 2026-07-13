@@ -4,8 +4,8 @@ import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { LoginBody, LoginResponse, GetMeResponse } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
-import { initClientWithCredentials } from "./instagram";
-import { InstagramTwoFactorRequiredError } from "@workspace/instagram-client";
+import { initClientWithCredentials, getActiveClient } from "./instagram";
+import { InstagramTwoFactorRequiredError, type TwoFactorMethod } from "@workspace/instagram-client";
 
 // express-session sets cookie.expires once a session is established.
 function sessionExpiryOf(req: import("express").Request): string {
@@ -114,6 +114,51 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       username: igUser.username,
       sessionExpiry: sessionExpiryOf(req),
       deviceProfile: parsed.data.deviceProfile,
+    }));
+  });
+});
+
+/**
+ * CAA/Bloks İki Adımlı Doğrulama — /auth/login bir twoFactorRequired yanıtı
+ * döndürdükten sonra, kullanıcının girdiği doğrulama koduyla oturumu
+ * tamamlar (entrypoint → method_picker → select_method → verify_code.async).
+ */
+router.post("/auth/verify-2fa", async (req, res): Promise<void> => {
+  const verificationCode =
+    typeof req.body?.verificationCode === "string" ? req.body.verificationCode.trim() : "";
+  const method: TwoFactorMethod =
+    req.body?.method === "sms" || req.body?.method === "backup_codes"
+      ? req.body.method
+      : "totp";
+
+  if (!verificationCode) {
+    res.status(400).json({ error: "verificationCode is required" });
+    return;
+  }
+
+  const igClient = getActiveClient();
+  if (!igClient || !igClient.hasPendingTwoFactor()) {
+    res.status(400).json({ error: "Tamamlanacak bekleyen bir doğrulama isteği bulunamadı. Lütfen tekrar giriş yapın." });
+    return;
+  }
+
+  try {
+    await igClient.completeTwoFactorLogin(verificationCode, method);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "İki adımlı doğrulama başarısız";
+    res.status(401).json({ error: msg });
+    return;
+  }
+
+  const igUser = await upsertInstagramUser(igClient.getUsername());
+
+  req.session.regenerate((err) => {
+    if (err) { res.status(500).json({ error: "Failed to establish session" }); return; }
+    req.session.userId = igUser.id;
+    res.json(LoginResponse.parse({
+      id: igUser.id,
+      username: igUser.username,
+      sessionExpiry: sessionExpiryOf(req),
     }));
   });
 });

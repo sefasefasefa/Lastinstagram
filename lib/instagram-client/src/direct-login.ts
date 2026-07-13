@@ -1003,6 +1003,262 @@ export async function fetchMediaInfo(
   }
 }
 
+// ── CAA/Bloks İki Adımlı Doğrulama (2FA) Yönlendirme Protokolü ──────────────
+
+/**
+ * two_step_verification_context, doğrulama kodunun gönderilebileceği statik
+ * bir endpoint olmadığı için sonraki tüm adımların (entrypoint → method_picker
+ * → select_method → [enter_backup_code] → verify_code.async) anahtarıdır.
+ * Bu bağlam yakalanamazsa istemci "Invalid Parameters" hatasıyla engellenir.
+ */
+const BLOKS_APPS_URL = "https://i.instagram.com/api/v1/bloks/apps/";
+
+export type TwoFactorMethod = "totp" | "sms" | "backup_codes";
+
+export interface BloksStepResult {
+  success: boolean;
+  /** Adımın Set-Cookie ile döndürdüğü ham çerezler (varsa) */
+  cookies?: string[];
+  /** Ham yanıt gövdesi — Bloks UI ağacı/JSON (ayıklama ve hata ayıklama için) */
+  raw?: unknown;
+  error?: string;
+}
+
+async function postBloksAction(
+  appId: string,
+  params: Record<string, unknown>,
+  cookieHeader: string,
+  userAgent: string = MOBILE_UA,
+): Promise<BloksStepResult> {
+  try {
+    const res = await fetch(`${BLOKS_APPS_URL}${appId}/`, {
+      method: "POST",
+      headers: {
+        "User-Agent": userAgent,
+        "X-IG-App-ID": IG_APP_ID,
+        "Cookie": cookieHeader,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ params: JSON.stringify(params) }).toString(),
+    });
+
+    const cookies = getSetCookies(res);
+    const text = await res.text();
+    let raw: unknown = text;
+    try { raw = JSON.parse(text); } catch { /* Bloks UI ağacı düz metin/binary olabilir */ }
+
+    if (!res.ok) {
+      const msg =
+        typeof (raw as Record<string, unknown>)?.message === "string"
+          ? (raw as Record<string, unknown>).message
+          : `HTTP ${res.status}`;
+      return { success: false, cookies, raw, error: `Bloks (${appId}): ${msg}` };
+    }
+    return { success: true, cookies, raw };
+  } catch (e) {
+    return {
+      success: false,
+      error: `Ağ hatası (bloks ${appId}): ${e instanceof Error ? e.message : e}`,
+    };
+  }
+}
+
+/** 1. Giriş Noktası Aktivasyonu (Entrypoint) */
+export function bloksTwoFactorEntrypoint(
+  twoStepVerificationContext: string,
+  cookieHeader: string,
+  userAgent?: string,
+): Promise<BloksStepResult> {
+  return postBloksAction(
+    "com.bloks.www.two_step_verification.entrypoint",
+    { server_params: { two_step_verification_context: twoStepVerificationContext } },
+    cookieHeader,
+    userAgent,
+  );
+}
+
+/** 2. Yöntem Seçici (Method Picker) — aktif 2FA yöntemlerini (telefon/authenticator/yedek kod) tespit eder. */
+export function bloksTwoFactorMethodPicker(
+  twoStepVerificationContext: string,
+  cookieHeader: string,
+  userAgent?: string,
+): Promise<BloksStepResult> {
+  return postBloksAction(
+    "com.bloks.www.two_step_verification.method_picker",
+    { server_params: { two_step_verification_context: twoStepVerificationContext } },
+    cookieHeader,
+    userAgent,
+  );
+}
+
+/** 3. Yöntem Seçimi ve Tetikleme — selected_method: totp | sms | backup_codes */
+export function bloksTwoFactorSelectMethod(
+  twoStepVerificationContext: string,
+  selectedMethod: TwoFactorMethod,
+  cookieHeader: string,
+  userAgent?: string,
+): Promise<BloksStepResult> {
+  return postBloksAction(
+    "com.bloks.www.two_step_verification.select_method",
+    {
+      client_input_params: { selected_method: selectedMethod },
+      server_params: { two_step_verification_context: twoStepVerificationContext },
+    },
+    cookieHeader,
+    userAgent,
+  );
+}
+
+/** 4a. Kod Giriş Ekranı Yüklemesi — yalnızca backup_codes yöntemi seçildiyse gerekli ön adım. */
+export function bloksTwoFactorEnterBackupCode(
+  twoStepVerificationContext: string,
+  cookieHeader: string,
+  userAgent?: string,
+): Promise<BloksStepResult> {
+  return postBloksAction(
+    "com.bloks.www.two_step_verification.enter_backup_code",
+    { server_params: { two_step_verification_context: twoStepVerificationContext } },
+    cookieHeader,
+    userAgent,
+  );
+}
+
+/**
+ * 4b. Doğrulama kodunun gönderildiği ana gizli endpoint:
+ *   POST /api/v1/bloks/apps/com.bloks.www.two_step_verification.verify_code.async/
+ *   Body: params={"client_input_params":{"verification_code":"...","challenge_type":"..."},
+ *                 "server_params":{"two_step_verification_context":"..."}}
+ *
+ * verification_code: TOTP/SMS için 6 hane, backup_codes için 8 hane.
+ */
+export function bloksTwoFactorVerifyCode(
+  twoStepVerificationContext: string,
+  verificationCode: string,
+  challengeType: TwoFactorMethod,
+  cookieHeader: string,
+  userAgent?: string,
+): Promise<BloksStepResult> {
+  return postBloksAction(
+    "com.bloks.www.two_step_verification.verify_code.async",
+    {
+      client_input_params: { verification_code: verificationCode, challenge_type: challengeType },
+      server_params: { two_step_verification_context: twoStepVerificationContext },
+    },
+    cookieHeader,
+    userAgent,
+  );
+}
+
+export interface BloksLoginExtraction {
+  sessionCookies?: SessionCookies;
+  userId?: string;
+  username?: string;
+}
+
+/**
+ * 5. Oturum Ayıklama — bloks_extract_login_response().
+ *
+ * Kod doğrulama başarılı olduğunda sunucu ham oturum çerezleri yerine
+ * karmaşık bir Bloks nesnesi döndürür. Öncelik HTTP Set-Cookie
+ * başlıklarındadır (asıl oturum verisi genelde buradan gelir); bulunamazsa
+ * ham yanıt gövdesindeki iç içe geçmiş sessionid/user_id/username alanları
+ * taranarak çıkarılır.
+ */
+export function bloksExtractLoginResponse(
+  result: BloksStepResult,
+): BloksLoginExtraction {
+  const extraction: BloksLoginExtraction = {};
+
+  if (result.cookies?.length) {
+    const sessionCookies = extractSessionCookies(result.cookies);
+    if (sessionCookies.sessionid) extraction.sessionCookies = sessionCookies;
+    if (sessionCookies.ds_user_id) extraction.userId = sessionCookies.ds_user_id;
+  }
+
+  const text = typeof result.raw === "string" ? result.raw : JSON.stringify(result.raw ?? "");
+  if (!extraction.sessionCookies) {
+    const sessionIdMatch = text.match(/"sessionid["\\]*\s*:\s*\\?"([^"\\]+)/);
+    if (sessionIdMatch?.[1]) {
+      const csrfMatch = text.match(/"csrftoken["\\]*\s*:\s*\\?"([^"\\]+)/);
+      extraction.sessionCookies = {
+        sessionid: sessionIdMatch[1],
+        csrftoken: csrfMatch?.[1],
+        cookieHeader: `sessionid=${sessionIdMatch[1]}${csrfMatch ? `; csrftoken=${csrfMatch[1]}` : ""}`,
+        raw: result.cookies ?? [],
+      };
+    }
+  }
+
+  if (!extraction.userId) {
+    const userIdMatch =
+      text.match(/"pk["\\]*\s*:\s*\\?"?(\d+)/) ?? text.match(/"user_id["\\]*\s*:\s*\\?"?(\d+)/);
+    if (userIdMatch?.[1]) extraction.userId = userIdMatch[1];
+  }
+
+  const usernameMatch = text.match(/"username["\\]*\s*:\s*\\?"([^"\\]+)/);
+  if (usernameMatch?.[1]) extraction.username = usernameMatch[1];
+
+  return extraction;
+}
+
+/**
+ * Belgede tanımlanan uçtan uca 2FA yönlendirme zinciri: entrypoint →
+ * method_picker → select_method → [enter_backup_code] → verify_code.async
+ * → bloks_extract_login_response(). Başarılı olursa çağıran taraf
+ * (InstagramClient) bloks_apply_login_response() eşdeğeri olarak
+ * extraction.sessionCookies'i kendi oturum belleğine yükler.
+ */
+export async function completeTwoFactorLogin(
+  twoStepVerificationContext: string,
+  method: TwoFactorMethod,
+  verificationCode: string,
+  cookieHeader: string,
+  userAgent: string = MOBILE_UA,
+): Promise<{ success: boolean; extraction?: BloksLoginExtraction; error?: string; step?: string }> {
+  let cookies = cookieHeader;
+
+  const entry = await bloksTwoFactorEntrypoint(twoStepVerificationContext, cookies, userAgent);
+  if (!entry.success) return { success: false, error: entry.error, step: "entrypoint" };
+  if (entry.cookies?.length) cookies = extractSessionCookies([...splitCookieHeader(cookies), ...entry.cookies]).cookieHeader;
+
+  const picker = await bloksTwoFactorMethodPicker(twoStepVerificationContext, cookies, userAgent);
+  if (!picker.success) return { success: false, error: picker.error, step: "method_picker" };
+  if (picker.cookies?.length) cookies = extractSessionCookies([...splitCookieHeader(cookies), ...picker.cookies]).cookieHeader;
+
+  const select = await bloksTwoFactorSelectMethod(twoStepVerificationContext, method, cookies, userAgent);
+  if (!select.success) return { success: false, error: select.error, step: "select_method" };
+  if (select.cookies?.length) cookies = extractSessionCookies([...splitCookieHeader(cookies), ...select.cookies]).cookieHeader;
+
+  if (method === "backup_codes") {
+    const backup = await bloksTwoFactorEnterBackupCode(twoStepVerificationContext, cookies, userAgent);
+    if (!backup.success) return { success: false, error: backup.error, step: "enter_backup_code" };
+    if (backup.cookies?.length) cookies = extractSessionCookies([...splitCookieHeader(cookies), ...backup.cookies]).cookieHeader;
+  }
+
+  const verify = await bloksTwoFactorVerifyCode(
+    twoStepVerificationContext,
+    verificationCode,
+    method,
+    cookies,
+    userAgent,
+  );
+  if (!verify.success) return { success: false, error: verify.error, step: "verify_code" };
+
+  const extraction = bloksExtractLoginResponse(verify);
+  if (!extraction.sessionCookies?.sessionid) {
+    return { success: false, error: "Bloks yanıtından oturum çerezleri ayıklanamadı", step: "extract" };
+  }
+  return { success: true, extraction };
+}
+
+/** "a=b; c=d" formatındaki Cookie header'ını Set-Cookie benzeri bir diziye çevirir (birleştirme amaçlı). */
+function splitCookieHeader(cookieHeader: string): string[] {
+  return cookieHeader
+    .split(";")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
 /**
  * Oturum canlı tutma — belgede tanımlanan keep-alive endpoint:
  *   GET /api/v1/accounts/current_user/
@@ -1154,6 +1410,9 @@ async function loginViaMobile(
       twoFactorInfo: info,
       twoFactorIdentifier: info?.two_factor_identifier,
       twoStepVerificationContext: info?.two_step_verification_context,
+      // Bloks doğrulama zincirinin ilk adımı için gerekli csrftoken/mid gibi
+      // ön oturum cookie'leri — henüz sessionid içermez.
+      cookies: setCookies,
     };
   }
   if (data.error_type === "checkpoint_required" || data.checkpoint_url) {
@@ -1268,6 +1527,7 @@ async function loginViaWeb(
       twoFactorInfo: info,
       twoFactorIdentifier: info?.two_factor_identifier,
       twoStepVerificationContext: info?.two_step_verification_context,
+      cookies: [...initCookies, ...setCookies],
     };
   }
   if (data.checkpoint_url) {
