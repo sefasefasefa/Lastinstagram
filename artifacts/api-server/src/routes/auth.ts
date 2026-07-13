@@ -5,6 +5,7 @@ import { db, usersTable } from "@workspace/db";
 import { LoginBody, LoginResponse, GetMeResponse } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { initClientWithCredentials, getActiveClient } from "./instagram";
+import { logger } from "../lib/logger";
 import {
   InstagramTwoFactorRequiredError,
   InstagramCaptchaChallengeError,
@@ -80,6 +81,22 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     const igClient = initClientWithCredentials(username, password);
     await igClient.login();
   } catch (err) {
+    // Diagnostic logging: captures exactly which error class/type Instagram
+    // login failed with, so real-world captcha/checkpoint responses we
+    // haven't classified correctly yet can be identified and fixed. Never
+    // logs the password.
+    logger.warn(
+      {
+        username,
+        errName: err instanceof Error ? err.name : typeof err,
+        errMessage: err instanceof Error ? err.message : String(err),
+        captchaType:
+          err instanceof InstagramCaptchaChallengeError ? err.captchaType : undefined,
+        isTwoFactor: err instanceof InstagramTwoFactorRequiredError,
+      },
+      "Instagram login failed",
+    );
+
     // TwoFactorRequired (HTTP 400): yanıt gövdesindeki two_factor_info,
     // two_factor_identifier ve two_step_verification_context alanlarını oku
     // ve çağırana ilet — ileride bir doğrulama kodu ekranı bunları kullanabilir.

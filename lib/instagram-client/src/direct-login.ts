@@ -1525,6 +1525,16 @@ async function loginViaMobile(
       data.error_type === "bad_password" ? "bad_password" : "unknown";
     const msg =
       typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+    // Diagnostic: an "unknown" failure (not classified as bad_password) is
+    // exactly the case where a real captcha/checkpoint might be slipping
+    // through unrecognized. Log the safe (password-free) shape of the raw
+    // response so the classifier's keyword/field lists can be extended.
+    if (errorType === "unknown") {
+      console.error(
+        "[instagram-client] Unclassified mobile login failure — raw response:",
+        JSON.stringify({ status: res.status, error_type: data.error_type, message: data.message, keys: Object.keys(data) }),
+      );
+    }
     return { success: false, error: `Mobil API: ${msg}`, errorType };
   }
 
@@ -1641,6 +1651,10 @@ async function loginViaWeb(
   if (!res.ok || !data.authenticated) {
     const msg =
       typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+    console.error(
+      "[instagram-client] Unclassified web login failure — raw response:",
+      JSON.stringify({ status: res.status, message: data.message, keys: Object.keys(data) }),
+    );
     return { success: false, error: `Web API: ${msg}`, errorType: "unknown" };
   }
 
