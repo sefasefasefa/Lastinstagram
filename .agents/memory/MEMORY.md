@@ -3,3 +3,4 @@
 - [Dev proxy caching non-GET](dev-proxy-caching-non-get.md) — preview proxy can return stale cached responses for POST endpoints; set Cache-Control: no-store in dev.
 - [Corrupted generated/source files](corrupted-generated-source-files.md) — imported project had hand-edited garbage in generated codegen output and in a frontend entry file; git diff vs HEAD + regenerate/restore fixed it.
 - [pnpm firewall blocks transitive package](pnpm-firewall-transitive-block.md) — a vulnerable version deep in an abandoned dependency (e.g. `request`) can 403; pin it via root `pnpm.overrides`.
+- [Fresh re-import empty database](fresh-reimport-empty-database.md) — re-import provisions a brand-new empty DB; backup SQL isn't auto-restored, so seed rows (default login) may be missing.
