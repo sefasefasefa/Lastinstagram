@@ -20,6 +20,18 @@ export interface InstagramProfile {
   pk: string;
   fullName: string;
   profilePicUrl?: string;
+  /** Takipçi sayısı */
+  followerCount?: number;
+  /** Takip edilen sayısı */
+  followingCount?: number;
+  /** Toplam gönderi sayısı */
+  mediaCount?: number;
+  /** Profil biyografisi */
+  biography?: string;
+  /** Profildeki dış bağlantı */
+  externalUrl?: string;
+  /** Hesap gizli (private) ise true, açık (public) hesap ise false */
+  isPrivate?: boolean;
 }
 
 export interface InstagramProfileResponse {
@@ -33,6 +45,8 @@ export interface InstagramPost {
   mediaType: number;
   caption?: string;
   likeCount: number;
+  /** Toplam yorum sayısı */
+  commentCount?: number;
   displayUrl?: string;
   videoUrl?: string;
   hasLiked: boolean;
@@ -58,9 +72,49 @@ export interface InstagramStoriesResponse {
 }
 
 export type InstagramReel = InstagramPost & {
+  /** Toplam oynatma sayısı */
   playCount: number;
+  /** Tekil izlenme sayısı */
+  viewCount?: number;
   timestamp: number;
 };
+
+/**
+ * Tekil medya istatistikleri (Media Info API)
+ */
+export interface InstagramMediaInfo {
+  id: string;
+  likeCount: number;
+  hasLiked: boolean;
+  /** Reels/video oynatma sayısı */
+  playCount?: number;
+  /** Standart video izlenme sayısı */
+  viewCount?: number;
+  commentCount: number;
+}
+
+export interface InstagramMediaInfoResponse {
+  success: boolean;
+  info: InstagramMediaInfo;
+}
+
+/**
+ * Hikayeyi "görüldü" olarak işaretle
+ */
+export interface InstagramStorySeenInput {
+  /**
+     * Hikayenin media_id değeri
+     * @minLength 1
+     */
+  storyId: string;
+  /**
+     * Hikaye sahibinin user_id değeri
+     * @minLength 1
+     */
+  ownerId: string;
+  /** Hikayenin taken_at Unix zaman damgası (sn) */
+  takenAt?: number;
+}
 
 export interface InstagramReelsResponse {
   success: boolean;

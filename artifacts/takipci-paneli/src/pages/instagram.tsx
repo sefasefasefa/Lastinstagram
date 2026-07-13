@@ -176,9 +176,36 @@ export default function InstagramPage() {
             ) : (
               <div className="h-16 w-16 rounded-full bg-muted" />
             )}
-            <div>
-              <h2 className="text-lg font-semibold">{profile.data.profile.fullName}</h2>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold">{profile.data.profile.fullName}</h2>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    profile.data.profile.isPrivate
+                      ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                  }`}
+                >
+                  {profile.data.profile.isPrivate ? "Gizli Hesap" : "Açık Hesap"}
+                </span>
+              </div>
               <p className="text-sm text-muted-foreground">@{profile.data.profile.username}</p>
+              {(profile.data.profile.followerCount !== undefined || profile.data.profile.followingCount !== undefined || profile.data.profile.mediaCount !== undefined) && (
+                <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                  {profile.data.profile.followerCount !== undefined && (
+                    <span><strong className="text-foreground">{profile.data.profile.followerCount.toLocaleString()}</strong> takipçi</span>
+                  )}
+                  {profile.data.profile.followingCount !== undefined && (
+                    <span><strong className="text-foreground">{profile.data.profile.followingCount.toLocaleString()}</strong> takip</span>
+                  )}
+                  {profile.data.profile.mediaCount !== undefined && (
+                    <span><strong className="text-foreground">{profile.data.profile.mediaCount.toLocaleString()}</strong> gönderi</span>
+                  )}
+                </div>
+              )}
+              {profile.data.profile.biography && (
+                <p className="mt-2 text-sm text-foreground">{profile.data.profile.biography}</p>
+              )}
             </div>
           </Card>
         )}

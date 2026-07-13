@@ -36,6 +36,8 @@ export interface InstagramProfile {
   biography?: string;
   /** Profildeki dış bağlantı */
   externalUrl?: string;
+  /** Hesap gizli mi (private)? */
+  isPrivate?: boolean;
 }
 
 export interface InstagramPost {
@@ -370,7 +372,11 @@ export class InstagramClient {
   async getProfile(username: string): Promise<InstagramProfile> {
     await this.ensureAuthenticated();
     return this.withErrorRecovery(async () => {
-      // searchExact returns basic fields; userInfo gives full stats
+      // 1. Resolve username to user_id via search.
+      // 2. Fetch full profile from the mobile User Info API:
+      //    GET /api/v1/users/{user_id}/info/
+      //    Returns: follower_count, following_count, media_count, biography,
+      //    is_private, etc.
       const basic = await this.client.user.searchExact(username);
       const info = await this.client.user.info(basic.pk);
       return {
@@ -383,6 +389,7 @@ export class InstagramClient {
         mediaCount: info.media_count,
         biography: info.biography ?? undefined,
         externalUrl: info.external_url ?? undefined,
+        isPrivate: info.is_private,
       };
     });
   }

@@ -8,6 +8,9 @@
 import type { InstagramPost } from './instagramPost';
 
 export type InstagramReel = InstagramPost & {
+  /** Toplam oynatma sayısı */
   playCount: number;
+  /** Tekil izlenme sayısı */
+  viewCount?: number;
   timestamp: bigint;
 };

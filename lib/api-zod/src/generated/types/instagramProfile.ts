@@ -11,4 +11,16 @@ export interface InstagramProfile {
   pk: string;
   fullName: string;
   profilePicUrl?: string;
+  /** Takipçi sayısı */
+  followerCount?: number;
+  /** Takip edilen sayısı */
+  followingCount?: number;
+  /** Toplam gönderi sayısı */
+  mediaCount?: number;
+  /** Profil biyografisi */
+  biography?: string;
+  /** Profildeki dış bağlantı */
+  externalUrl?: string;
+  /** Hesap gizli (private) ise true, açık (public) hesap ise false */
+  isPrivate?: boolean;
 }

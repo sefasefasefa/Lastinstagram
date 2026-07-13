@@ -12,6 +12,8 @@ export interface InstagramPost {
   mediaType: number;
   caption?: string;
   likeCount: number;
+  /** Toplam yorum sayısı */
+  commentCount?: number;
   displayUrl?: string;
   videoUrl?: string;
   hasLiked: boolean;

@@ -344,7 +344,13 @@ export const GetInstagramProfileResponse = zod.object({
   "username": zod.string(),
   "pk": zod.string(),
   "fullName": zod.string(),
-  "profilePicUrl": zod.string().optional()
+  "profilePicUrl": zod.string().optional(),
+  "followerCount": zod.number().optional().describe('Takipçi sayısı'),
+  "followingCount": zod.number().optional().describe('Takip edilen sayısı'),
+  "mediaCount": zod.number().optional().describe('Toplam gönderi sayısı'),
+  "biography": zod.string().optional().describe('Profil biyografisi'),
+  "externalUrl": zod.string().optional().describe('Profildeki dış bağlantı'),
+  "isPrivate": zod.boolean().optional().describe('Hesap gizli (private) ise true, açık (public) hesap ise false')
 })
 })
 
@@ -367,6 +373,7 @@ export const GetInstagramPostsResponse = zod.object({
   "mediaType": zod.number(),
   "caption": zod.string().optional(),
   "likeCount": zod.number(),
+  "commentCount": zod.number().optional().describe('Toplam yorum sayısı'),
   "displayUrl": zod.string().optional(),
   "videoUrl": zod.string().optional(),
   "hasLiked": zod.boolean()
@@ -415,11 +422,13 @@ export const GetInstagramReelsResponse = zod.object({
   "mediaType": zod.number(),
   "caption": zod.string().optional(),
   "likeCount": zod.number(),
+  "commentCount": zod.number().optional().describe('Toplam yorum sayısı'),
   "displayUrl": zod.string().optional(),
   "videoUrl": zod.string().optional(),
   "hasLiked": zod.boolean()
 }).and(zod.object({
-  "playCount": zod.number(),
+  "playCount": zod.number().describe('Toplam oynatma sayısı'),
+  "viewCount": zod.number().optional().describe('Tekil izlenme sayısı'),
   "timestamp": zod.number()
 })))
 })
@@ -473,6 +482,83 @@ export const LikeInstagramReelResponse = zod.object({
   "success": zod.boolean(),
   "message": zod.string(),
   "error": zod.string().optional()
+})
+
+
+/**
+ * @summary Remove a like from an Instagram post
+ */
+
+
+
+export const UnlikeInstagramPostBody = zod.object({
+  "postId": zod.string().min(1)
+})
+
+export const UnlikeInstagramPostResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string(),
+  "error": zod.string().optional()
+})
+
+
+/**
+ * @summary Remove a like from an Instagram Reel
+ */
+
+
+
+export const UnlikeInstagramReelBody = zod.object({
+  "reelId": zod.string().min(1)
+})
+
+export const UnlikeInstagramReelResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string(),
+  "error": zod.string().optional()
+})
+
+
+/**
+ * @summary Mark an Instagram story as seen
+ */
+
+
+
+
+export const MarkInstagramStorySeenBody = zod.object({
+  "storyId": zod.string().min(1).describe('Hikayenin media_id değeri'),
+  "ownerId": zod.string().min(1).describe('Hikaye sahibinin user_id değeri'),
+  "takenAt": zod.number().optional().describe('Hikayenin taken_at Unix zaman damgası (sn)')
+}).describe('Hikayeyi \"görüldü\" olarak işaretle')
+
+export const MarkInstagramStorySeenResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string(),
+  "error": zod.string().optional()
+})
+
+
+/**
+ * @summary Get detailed metrics for a single media item
+ */
+
+
+
+export const GetInstagramMediaInfoParams = zod.object({
+  "mediaId": zod.coerce.string().min(1)
+})
+
+export const GetInstagramMediaInfoResponse = zod.object({
+  "success": zod.boolean(),
+  "info": zod.object({
+  "id": zod.string(),
+  "likeCount": zod.number(),
+  "hasLiked": zod.boolean(),
+  "playCount": zod.number().optional().describe('Reels\/video oynatma sayısı'),
+  "viewCount": zod.number().optional().describe('Standart video izlenme sayısı'),
+  "commentCount": zod.number()
+}).describe('Tekil medya istatistikleri (Media Info API)')
 })
 
 

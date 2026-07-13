@@ -646,6 +646,9 @@ components:
         externalUrl:
           type: string
           description: Profildeki dış bağlantı
+        isPrivate:
+          type: boolean
+          description: Hesap gizli (private) ise true, açık (public) hesap ise false
     InstagramProfileResponse:
       type: object
       required: [success, profile]

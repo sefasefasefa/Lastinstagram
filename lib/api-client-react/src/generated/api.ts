@@ -26,6 +26,7 @@ import type {
   DashboardSummary,
   HealthStatus,
   InstagramActionResponse,
+  InstagramMediaInfoResponse,
   InstagramPostActionInput,
   InstagramPostsResponse,
   InstagramProfileResponse,
@@ -34,6 +35,7 @@ import type {
   InstagramStatusResponse,
   InstagramStoriesResponse,
   InstagramStoryActionInput,
+  InstagramStorySeenInput,
   LikedMedia,
   ListTrackedUsersParams,
   LoginRequest,
@@ -2229,4 +2231,294 @@ export const useLikeInstagramReel = <TError = ErrorType<void>,
       > => {
       return useMutation(getLikeInstagramReelMutationOptions(options));
     }
+
+export const getUnlikeInstagramPostUrl = () => {
+
+
+
+
+  return `/api/instagram/unlike-post`
+}
+
+/**
+ * @summary Remove a like from an Instagram post
+ */
+export const unlikeInstagramPost = async (instagramPostActionInput: InstagramPostActionInput, options?: RequestInit): Promise<InstagramActionResponse> => {
+
+  return customFetch<InstagramActionResponse>(getUnlikeInstagramPostUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(instagramPostActionInput)
+  }
+);}
+
+
+
+
+
+export const getUnlikeInstagramPostMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlikeInstagramPost>>, TError,{data: BodyType<InstagramPostActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unlikeInstagramPost>>, TError,{data: BodyType<InstagramPostActionInput>}, TContext> => {
+
+const mutationKey = ['unlikeInstagramPost'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unlikeInstagramPost>>, {data: BodyType<InstagramPostActionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  unlikeInstagramPost(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnlikeInstagramPostMutationResult = NonNullable<Awaited<ReturnType<typeof unlikeInstagramPost>>>
+    export type UnlikeInstagramPostMutationBody = BodyType<InstagramPostActionInput>
+    export type UnlikeInstagramPostMutationError = ErrorType<void>
+
+    /**
+ * @summary Remove a like from an Instagram post
+ */
+export const useUnlikeInstagramPost = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlikeInstagramPost>>, TError,{data: BodyType<InstagramPostActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unlikeInstagramPost>>,
+        TError,
+        {data: BodyType<InstagramPostActionInput>},
+        TContext
+      > => {
+      return useMutation(getUnlikeInstagramPostMutationOptions(options));
+    }
+
+export const getUnlikeInstagramReelUrl = () => {
+
+
+
+
+  return `/api/instagram/unlike-reel`
+}
+
+/**
+ * @summary Remove a like from an Instagram Reel
+ */
+export const unlikeInstagramReel = async (instagramReelActionInput: InstagramReelActionInput, options?: RequestInit): Promise<InstagramActionResponse> => {
+
+  return customFetch<InstagramActionResponse>(getUnlikeInstagramReelUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(instagramReelActionInput)
+  }
+);}
+
+
+
+
+
+export const getUnlikeInstagramReelMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlikeInstagramReel>>, TError,{data: BodyType<InstagramReelActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unlikeInstagramReel>>, TError,{data: BodyType<InstagramReelActionInput>}, TContext> => {
+
+const mutationKey = ['unlikeInstagramReel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unlikeInstagramReel>>, {data: BodyType<InstagramReelActionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  unlikeInstagramReel(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnlikeInstagramReelMutationResult = NonNullable<Awaited<ReturnType<typeof unlikeInstagramReel>>>
+    export type UnlikeInstagramReelMutationBody = BodyType<InstagramReelActionInput>
+    export type UnlikeInstagramReelMutationError = ErrorType<void>
+
+    /**
+ * @summary Remove a like from an Instagram Reel
+ */
+export const useUnlikeInstagramReel = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlikeInstagramReel>>, TError,{data: BodyType<InstagramReelActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unlikeInstagramReel>>,
+        TError,
+        {data: BodyType<InstagramReelActionInput>},
+        TContext
+      > => {
+      return useMutation(getUnlikeInstagramReelMutationOptions(options));
+    }
+
+export const getMarkInstagramStorySeenUrl = () => {
+
+
+
+
+  return `/api/instagram/story-seen`
+}
+
+/**
+ * @summary Mark an Instagram story as seen
+ */
+export const markInstagramStorySeen = async (instagramStorySeenInput: InstagramStorySeenInput, options?: RequestInit): Promise<InstagramActionResponse> => {
+
+  return customFetch<InstagramActionResponse>(getMarkInstagramStorySeenUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(instagramStorySeenInput)
+  }
+);}
+
+
+
+
+
+export const getMarkInstagramStorySeenMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markInstagramStorySeen>>, TError,{data: BodyType<InstagramStorySeenInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markInstagramStorySeen>>, TError,{data: BodyType<InstagramStorySeenInput>}, TContext> => {
+
+const mutationKey = ['markInstagramStorySeen'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markInstagramStorySeen>>, {data: BodyType<InstagramStorySeenInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  markInstagramStorySeen(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkInstagramStorySeenMutationResult = NonNullable<Awaited<ReturnType<typeof markInstagramStorySeen>>>
+    export type MarkInstagramStorySeenMutationBody = BodyType<InstagramStorySeenInput>
+    export type MarkInstagramStorySeenMutationError = ErrorType<void>
+
+    /**
+ * @summary Mark an Instagram story as seen
+ */
+export const useMarkInstagramStorySeen = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markInstagramStorySeen>>, TError,{data: BodyType<InstagramStorySeenInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markInstagramStorySeen>>,
+        TError,
+        {data: BodyType<InstagramStorySeenInput>},
+        TContext
+      > => {
+      return useMutation(getMarkInstagramStorySeenMutationOptions(options));
+    }
+
+export const getGetInstagramMediaInfoUrl = (mediaId: string,) => {
+
+
+
+
+  return `/api/instagram/media/${mediaId}/info`
+}
+
+/**
+ * @summary Get detailed metrics for a single media item
+ */
+export const getInstagramMediaInfo = async (mediaId: string, options?: RequestInit): Promise<InstagramMediaInfoResponse> => {
+
+  return customFetch<InstagramMediaInfoResponse>(getGetInstagramMediaInfoUrl(mediaId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInstagramMediaInfoQueryKey = (mediaId: string,) => {
+    return [
+    `/api/instagram/media/${mediaId}/info`
+    ] as const;
+    }
+
+
+export const getGetInstagramMediaInfoQueryOptions = <TData = Awaited<ReturnType<typeof getInstagramMediaInfo>>, TError = ErrorType<void>>(mediaId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramMediaInfo>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInstagramMediaInfoQueryKey(mediaId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInstagramMediaInfo>>> = ({ signal }) => getInstagramMediaInfo(mediaId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: mediaId !== null && mediaId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInstagramMediaInfo>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInstagramMediaInfoQueryResult = NonNullable<Awaited<ReturnType<typeof getInstagramMediaInfo>>>
+export type GetInstagramMediaInfoQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get detailed metrics for a single media item
+ */
+
+export function useGetInstagramMediaInfo<TData = Awaited<ReturnType<typeof getInstagramMediaInfo>>, TError = ErrorType<void>>(
+ mediaId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInstagramMediaInfo>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInstagramMediaInfoQueryOptions(mediaId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
