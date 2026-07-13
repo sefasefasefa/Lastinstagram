@@ -1,52 +1,143 @@
 /**
- * Direct Instagram login using:
- *   - PWD_INSTAGRAM:4 password encryption (AES-256-GCM + RSA-PKCS1)
- *   - signed_body HMAC-SHA256 (mobile API)
- *   - Mobile endpoint first, web endpoint as fallback
+ * Direct Instagram login with #PWD_INSTAGRAM:4 encryption.
  *
- * Wire format (from Instagram private API):
- *   #PWD_INSTAGRAM:4:<timestamp>:<base64(
- *     [0x01, keyId, iv(12), rsaKeyLen(2 LE), rsaEncKey, gcmTag(16), ciphertext]
- *   )>
+ * Şifreleme algoritması:
+ *   1. Ephemeral EC key pair (P-256 / Secp256r1) üret
+ *   2. ECDH shared secret = ECDH(ephPrivate, instagramPublic)
+ *   3. AES-256 key = SHA-256(sharedSecret)
+ *   4. Şifreyi AES-256-GCM ile şifrele  (AAD = timestamp string)
+ *   5. Payload = [0x01, keyId, ephPubKey(65), iv(12), gcmTag(16), ciphertext]
+ *   6. enc_password = "#PWD_INSTAGRAM:4:<timestamp>:<base64(payload)>"
+ *
+ * Anahtar kaynakları (öncelik sırasıyla):
+ *   1. /api/v1/accounts/contact_point_prefill/  (mobil, cevap gövdesi / header)
+ *   2. www.instagram.com/data/shared_data/      (web sharedData JSON)
+ *   3. /api/v1/qe/sync/                         (qe header fallback)
+ *
+ * Giriş akışı:
+ *   Mobil API  →  Web API (fallback)
  */
 
 import crypto from "node:crypto";
 import type { IgApiClient } from "instagram-private-api";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Sabitler ──────────────────────────────────────────────────────────────────
 
 const MOBILE_LOGIN_URL =
   "https://i.instagram.com/api/v1/accounts/login/";
 const WEB_LOGIN_URL =
   "https://www.instagram.com/api/v1/web/accounts/login/ajax/";
+const CONTACT_POINT_URL =
+  "https://i.instagram.com/api/v1/accounts/contact_point_prefill/";
+const SHARED_DATA_URL =
+  "https://www.instagram.com/data/shared_data/";
 
-/** HMAC-SHA256 key for signed_body (public, from instagram-private-api constants) */
+/** signed_body HMAC anahtarı (instagram-private-api constants.js'den) */
 const IG_SIG_KEY =
   "9193488027538fd3450b83b7d05286d4ca9599a0f7eeed90d8c85925698a05dc";
 const IG_SIG_KEY_VERSION = "4";
 
 const IG_APP_ID = "1217981644879628";
 
-/** Fixed mobile User-Agent matching an OnePlus 6 running Android 10. */
+/** OnePlus 6 / Android 10 mobil UA */
 const MOBILE_UA =
-  "Instagram 269.0.0.18.230 Android (29/10; 480dpi; 1080x2280; OnePlus; ONEPLUS A6003; OnePlus6; qcom; en_US; 443213192)";
+  "Instagram 269.0.0.18.230 Android (29/10; 480dpi; 1080x2280;" +
+  " OnePlus; ONEPLUS A6003; OnePlus6; qcom; en_US; 443213192)";
 
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-// ── PWD_INSTAGRAM:4 encryption ────────────────────────────────────────────────
+// ── Şifreleme anahtar tipi ────────────────────────────────────────────────────
+
+interface EncryptionKey {
+  keyId: number;
+  /** Base64 ile kodlanmış DER/SPKI formatında public key */
+  pubKeyBase64: string;
+  /** Anahtar tipi — EC ise ECIES, RSA ise PKCS1 yöntemi kullanılır */
+  keyType: "ec" | "rsa";
+}
 
 /**
- * Encrypt the plaintext password into #PWD_INSTAGRAM:4 format.
- *
- * Steps:
- *   1. Generate random 32-byte AES key + 12-byte IV
- *   2. Encrypt password with AES-256-GCM (AAD = timestamp string)
- *   3. Encrypt AES key with RSA-PKCS1 using Instagram's public key
- *   4. Concatenate and base64-encode the payload
+ * Base64/DER public key'in EC mi RSA mi olduğunu belirler.
+ * Bilinmiyorsa "rsa" döner (geriye dönük uyumluluk).
  */
-function encryptPassword(
+function detectKeyType(pubKeyBase64: string): "ec" | "rsa" {
+  try {
+    const keyObj = crypto.createPublicKey({
+      key: Buffer.from(pubKeyBase64, "base64"),
+      format: "der",
+      type: "spki",
+    });
+    return keyObj.asymmetricKeyType === "ec" ? "ec" : "rsa";
+  } catch {
+    return "rsa";
+  }
+}
+
+// ── #PWD_INSTAGRAM:4 şifreleme ────────────────────────────────────────────────
+
+/**
+ * ECIES şifrelemesi: Secp256r1 (P-256) eğrisi üzerinde ECDH.
+ *
+ * Wire format:
+ *   [0x01][keyId(1)][ephPubKey(65)][iv(12)][gcmTag(16)][ciphertext]
+ */
+function encryptWithEC(
+  password: string,
+  keyId: number,
+  pubKeyBase64: string,
+  timestamp: number,
+): string {
+  // Instagram'ın EC public key'ini parse et (SPKI DER)
+  const pubKeyObj = crypto.createPublicKey({
+    key: Buffer.from(pubKeyBase64, "base64"),
+    format: "der",
+    type: "spki",
+  });
+
+  // SPKI DER'deki ham EC noktasını çıkar — P-256 için son 65 bayt (04 || x || y)
+  const spkiDer = pubKeyObj.export({ format: "der", type: "spki" }) as Buffer;
+  const ecPoint = spkiDer.slice(-65);
+
+  // Ephemeral P-256 key pair üret
+  const ecdh = crypto.createECDH("prime256v1");
+  ecdh.generateKeys();
+  const ephPubKey = ecdh.getPublicKey(); // 65 bayt, sıkıştırılmamış
+
+  // ECDH shared secret → AES-256 anahtar türetme (SHA-256)
+  const sharedSecret = ecdh.computeSecret(ecPoint);
+  const aesKey = crypto.createHash("sha256").update(sharedSecret).digest();
+
+  // AES-256-GCM şifreleme; AAD = timestamp string
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", aesKey, iv);
+  cipher.setAAD(Buffer.from(String(timestamp)));
+  const ciphertext = Buffer.concat([
+    cipher.update(password, "utf8"),
+    cipher.final(),
+  ]);
+  const gcmTag = cipher.getAuthTag(); // 16 bayt
+
+  // Wire format: [0x01, keyId] | ephPubKey(65) | iv(12) | gcmTag(16) | ciphertext
+  const payload = Buffer.concat([
+    Buffer.from([1, keyId]),
+    ephPubKey,
+    iv,
+    gcmTag,
+    ciphertext,
+  ]);
+
+  return `#PWD_INSTAGRAM:4:${timestamp}:${payload.toString("base64")}`;
+}
+
+/**
+ * RSA-PKCS1 şifrelemesi — eski anahtar formatı için fallback.
+ *
+ * Wire format (instagram-private-api ile aynı):
+ *   [0x01][keyId(1)][iv(12)][rsaKeyLen(2 LE)][rsaEncKey][gcmTag(16)][ciphertext]
+ */
+function encryptWithRSA(
   password: string,
   keyId: number,
   pubKeyBase64: string,
@@ -55,7 +146,6 @@ function encryptPassword(
   const randKey = crypto.randomBytes(32);
   const iv = crypto.randomBytes(12);
 
-  // RSA-PKCS1 — matches what instagram-private-api uses internally
   const rsaEncrypted = crypto.publicEncrypt(
     {
       key: Buffer.from(pubKeyBase64, "base64").toString(),
@@ -64,20 +154,17 @@ function encryptPassword(
     randKey,
   );
 
-  // AES-256-GCM; AAD is the timestamp string (not bytes)
   const cipher = crypto.createCipheriv("aes-256-gcm", randKey, iv);
   cipher.setAAD(Buffer.from(String(timestamp)));
   const aesEncrypted = Buffer.concat([
     cipher.update(password, "utf8"),
     cipher.final(),
   ]);
-  const authTag = cipher.getAuthTag(); // always 16 bytes
+  const authTag = cipher.getAuthTag();
 
-  // 2-byte LE: length of the RSA-encrypted AES key
   const sizeBuffer = Buffer.alloc(2, 0);
   sizeBuffer.writeInt16LE(rsaEncrypted.byteLength, 0);
 
-  // Wire format: [0x01, keyId] | iv(12) | sizeLE(2) | rsaKey | gcmTag(16) | ciphertext
   const payload = Buffer.concat([
     Buffer.from([1, keyId]),
     iv,
@@ -90,7 +177,136 @@ function encryptPassword(
   return `#PWD_INSTAGRAM:4:${timestamp}:${payload.toString("base64")}`;
 }
 
-// ── signed_body (mobile API) ──────────────────────────────────────────────────
+/** Anahtar tipine göre doğru şifreleme yöntemini seçer. */
+function encryptPassword(
+  password: string,
+  key: EncryptionKey,
+  timestamp: number,
+): string {
+  return key.keyType === "ec"
+    ? encryptWithEC(password, key.keyId, key.pubKeyBase64, timestamp)
+    : encryptWithRSA(password, key.keyId, key.pubKeyBase64, timestamp);
+}
+
+// ── Anahtar kaynakları ────────────────────────────────────────────────────────
+
+/**
+ * 1. Kaynak: /api/v1/accounts/contact_point_prefill/
+ *    Mobil API'ye POST atar; cevap headerı veya gövdesinden şifreleme
+ *    anahtarını çeker.
+ */
+async function fetchKeyFromContactPointPrefill(
+  ig: IgApiClient,
+): Promise<EncryptionKey | null> {
+  try {
+    const s = readDeviceState(ig);
+    const json = JSON.stringify({ id: s.uuid, _csrftoken: s.csrfToken });
+    const { signed_body, ig_sig_key_version } = signBody(json);
+
+    const res = await fetch(CONTACT_POINT_URL, {
+      method: "POST",
+      headers: {
+        "User-Agent": MOBILE_UA,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-IG-App-ID": IG_APP_ID,
+        "X-IG-Capabilities": "3brTvw==",
+        "X-IG-Connection-Type": "WIFI",
+      },
+      body: new URLSearchParams({ ig_sig_key_version, signed_body }).toString(),
+    });
+
+    // Cevap headerından anahtar
+    const hdrKeyId = res.headers.get("ig-set-password-encryption-key-id");
+    const hdrPubKey = res.headers.get("ig-set-password-encryption-pub-key");
+    if (hdrKeyId && hdrPubKey) {
+      const keyId = Number(hdrKeyId);
+      return { keyId, pubKeyBase64: hdrPubKey, keyType: detectKeyType(hdrPubKey) };
+    }
+
+    // Cevap gövdesinden anahtar
+    let body: Record<string, unknown> = {};
+    try { body = (await res.json()) as Record<string, unknown>; } catch {}
+    const enc = body.encryption as Record<string, string> | undefined;
+    if (enc?.key_id && enc?.public_key) {
+      const pubKeyBase64 = enc.public_key;
+      return {
+        keyId: Number(enc.key_id),
+        pubKeyBase64,
+        keyType: detectKeyType(pubKeyBase64),
+      };
+    }
+  } catch { /* ağ/parse hatası — sonraki kaynağa geç */ }
+  return null;
+}
+
+/**
+ * 2. Kaynak: www.instagram.com/data/shared_data/
+ *    Web tarafının sharedData JSON nesnesinden şifreleme anahtarını çeker.
+ */
+async function fetchKeyFromWebSharedData(): Promise<EncryptionKey | null> {
+  try {
+    const res = await fetch(SHARED_DATA_URL, {
+      headers: {
+        "User-Agent": DESKTOP_UA,
+        "Accept": "application/json",
+      },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as Record<string, unknown>;
+    const enc = data.encryption as Record<string, string> | undefined;
+    if (enc?.key_id && enc?.public_key) {
+      const pubKeyBase64 = enc.public_key;
+      return {
+        keyId: Number(enc.key_id),
+        pubKeyBase64,
+        keyType: detectKeyType(pubKeyBase64),
+      };
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * 3. Kaynak: qe/sync (instagram-private-api ile) — son fallback.
+ *    ig.state.passwordEncryptionPubKey headerını doldurur.
+ */
+async function fetchKeyFromQeSync(
+  ig: IgApiClient,
+): Promise<EncryptionKey | null> {
+  try {
+    if (!ig.state.passwordEncryptionPubKey) {
+      await ig.qe.syncLoginExperiments();
+    }
+    const pubKeyBase64 = ig.state.passwordEncryptionPubKey;
+    const keyId = Number(ig.state.passwordEncryptionKeyId) || 0;
+    if (pubKeyBase64 && keyId) {
+      return { keyId, pubKeyBase64, keyType: detectKeyType(pubKeyBase64) };
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Tüm anahtar kaynaklarını sırayla dener ve ilk başarılı sonucu döner.
+ * Öncelik: contact_point_prefill → sharedData → qe/sync
+ */
+async function resolveEncryptionKey(
+  ig: IgApiClient,
+): Promise<EncryptionKey> {
+  const key =
+    (await fetchKeyFromContactPointPrefill(ig)) ??
+    (await fetchKeyFromWebSharedData()) ??
+    (await fetchKeyFromQeSync(ig));
+
+  if (!key) {
+    throw new Error(
+      "Instagram şifreleme anahtarı hiçbir kaynaktan alınamadı.",
+    );
+  }
+  return key;
+}
+
+// ── signed_body ───────────────────────────────────────────────────────────────
 
 function signBody(json: string): {
   signed_body: string;
@@ -106,9 +322,8 @@ function signBody(json: string): {
   };
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Yardımcı fonksiyonlar ─────────────────────────────────────────────────────
 
-/** Node 20+ supports Headers.getSetCookie(); fall back to empty array on older. */
 function getSetCookies(res: Response): string[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (res.headers as any).getSetCookie?.() ?? [];
@@ -120,42 +335,30 @@ function extractSessionId(cookies: string[]): string | undefined {
     ?.match(/^sessionid=([^;]+)/)?.[1];
 }
 
-/**
- * Safely read device state from the IgApiClient.
- * Some fields throw if not yet initialized (e.g. cookieCsrfToken before login).
- */
 function readDeviceState(ig: IgApiClient) {
   const uuid = ig.state.uuid ?? crypto.randomUUID();
   const phoneId = ig.state.phoneId ?? crypto.randomUUID();
   const deviceId =
     ig.state.deviceId ?? `android-${crypto.randomBytes(8).toString("hex")}`;
   const adid = ig.state.adid ?? crypto.randomUUID();
-  const deviceString = ig.state.deviceString ?? "";
 
   let csrfToken = "missing";
-  try {
-    csrfToken = ig.state.cookieCsrfToken;
-  } catch {
-    /* not yet set — will be "missing", Instagram usually accepts this pre-login */
-  }
+  try { csrfToken = ig.state.cookieCsrfToken; } catch {}
 
-  /** jazoest = "2" + sum of char codes of phoneId (Instagram's own formula) */
   const jazoest =
     "2" +
     Array.from(phoneId).reduce((sum, c) => sum + c.charCodeAt(0), 0);
 
-  return { uuid, phoneId, deviceId, adid, deviceString, csrfToken, jazoest };
+  return { uuid, phoneId, deviceId, adid, csrfToken, jazoest };
 }
 
-// ── Result type ───────────────────────────────────────────────────────────────
+// ── Sonuç tipi ────────────────────────────────────────────────────────────────
 
 export type LoginErrorType = "checkpoint" | "2fa" | "bad_password" | "unknown";
 
 export interface DirectLoginResult {
   success: boolean;
-  /** Raw Set-Cookie header values returned by Instagram */
   cookies?: string[];
-  /** Extracted sessionid value (ready to pass to restoreSession) */
   sessionId?: string;
   userId?: string;
   username?: string;
@@ -164,7 +367,7 @@ export interface DirectLoginResult {
   errorType?: LoginErrorType;
 }
 
-// ── Mobile API path ───────────────────────────────────────────────────────────
+// ── Mobil API girişi ──────────────────────────────────────────────────────────
 
 async function loginViaMobile(
   username: string,
@@ -217,18 +420,14 @@ async function loginViaMobile(
 
   const setCookies = getSetCookies(res);
   let data: Record<string, unknown> = {};
-  try {
-    data = (await res.json()) as Record<string, unknown>;
-  } catch { /* ignore parse errors */ }
+  try { data = (await res.json()) as Record<string, unknown>; } catch {}
 
-  // Hard errors — don't bother trying web API
   if (data.two_factor_required) {
     return { success: false, error: "two-factor", errorType: "2fa" };
   }
   if (data.error_type === "checkpoint_required" || data.checkpoint_url) {
     return { success: false, error: "checkpoint", errorType: "checkpoint" };
   }
-
   if (!res.ok || data.status === "fail") {
     const errorType: LoginErrorType =
       data.error_type === "bad_password" ? "bad_password" : "unknown";
@@ -248,21 +447,20 @@ async function loginViaMobile(
   };
 }
 
-// ── Web API path ──────────────────────────────────────────────────────────────
+// ── Web API girişi ────────────────────────────────────────────────────────────
 
 async function loginViaWeb(
   username: string,
   encPassword: string,
 ): Promise<DirectLoginResult> {
-  // Step 1: GET the login page to receive a CSRF cookie
+  // Adım 1: Login sayfasından CSRF token ve rollout_hash al
   let initRes: Response;
   try {
     initRes = await fetch("https://www.instagram.com/accounts/login/", {
       headers: {
         "User-Agent": DESKTOP_UA,
         "Accept-Language": "tr-TR,tr;q=0.9",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
     });
   } catch (e) {
@@ -274,14 +472,12 @@ async function loginViaWeb(
   }
 
   const initCookies = getSetCookies(initRes);
-  const csrfCookie = initCookies.find((c) => c.startsWith("csrftoken="));
   const csrfToken =
-    csrfCookie?.match(/^csrftoken=([^;]+)/)?.[1] ?? "missing";
+    initCookies.find((c) => c.startsWith("csrftoken="))
+      ?.match(/^csrftoken=([^;]+)/)?.[1] ?? "missing";
   const cookieHeader = initCookies.map((c) => c.split(";")[0]).join("; ");
 
-  // Extract the build/rollout ID that Instagram embeds in the login page HTML.
-  // Instagram injects it as  "rollout_hash":"<id>"  inside an inline <script>.
-  // This value is what browsers send as X-Instagram-AJAX on every AJAX request.
+  // X-Instagram-AJAX: sayfa HTML'inden dinamik rollout_hash değeri
   let ajaxBuildId = "1";
   try {
     const html = await initRes.text();
@@ -289,9 +485,9 @@ async function loginViaWeb(
       html.match(/"rollout_hash"\s*:\s*"([^"]+)"/) ??
       html.match(/["']rollout_hash["']\s*:\s*["']([^"']+)["']/);
     if (match?.[1]) ajaxBuildId = match[1];
-  } catch { /* keep default "1" if parsing fails */ }
+  } catch {}
 
-  // Step 2: POST credentials to the AJAX endpoint
+  // Adım 2: AJAX login endpoint'ine POST
   const params = new URLSearchParams({
     username,
     enc_password: encPassword,
@@ -328,9 +524,7 @@ async function loginViaWeb(
 
   const setCookies = getSetCookies(res);
   let data: Record<string, unknown> = {};
-  try {
-    data = (await res.json()) as Record<string, unknown>;
-  } catch { /* ignore parse errors */ }
+  try { data = (await res.json()) as Record<string, unknown>; } catch {}
 
   if (data.two_factor_required) {
     return { success: false, error: "two-factor", errorType: "2fa" };
@@ -355,47 +549,37 @@ async function loginViaWeb(
   };
 }
 
-// ── Public entry point ────────────────────────────────────────────────────────
+// ── Genel giriş fonksiyonu ────────────────────────────────────────────────────
 
 /**
- * Log in to Instagram using direct HTTP requests with proper cryptographic signing.
+ * Instagram'a doğrudan HTTP ile giriş yapar.
  *
- * Algorithm:
- *   1. Fetch Instagram's RSA public key via /api/v1/qe/sync/ (once per client)
- *   2. Encrypt password: AES-256-GCM key → RSA-PKCS1 wrapped → #PWD_INSTAGRAM:4
- *   3. Sign request body with HMAC-SHA256 (mobile path only)
- *   4. Try Mobile API (https://i.instagram.com/api/v1/accounts/login/)
- *   5. Fall back to Web API (https://www.instagram.com/api/v1/web/accounts/login/ajax/)
+ * Şifreleme:
+ *   EC key  → ECIES: ECDH (P-256) + SHA-256 key derivation + AES-256-GCM
+ *   RSA key → RSA-PKCS1 wrapped AES-256-GCM (geriye dönük uyumluluk)
  *
- * Hard errors (2FA, checkpoint) are returned immediately without trying the fallback.
+ * Anahtar kaynağı:
+ *   contact_point_prefill → sharedData → qe/sync (öncelik sırasıyla)
+ *
+ * Giriş akışı:
+ *   Mobil API → Web API (fallback; 2FA/checkpoint hatalarında kısa devre)
  */
 export async function loginToInstagram(
   username: string,
   password: string,
   ig: IgApiClient,
 ): Promise<DirectLoginResult> {
-  // Ensure the encryption public key is loaded
-  if (!ig.state.passwordEncryptionPubKey) {
-    await ig.qe.syncLoginExperiments();
-  }
+  // Şifreleme anahtarını al (EC veya RSA, kaynaktan bağımsız otomatik algılama)
+  const key = await resolveEncryptionKey(ig);
 
   const timestamp = Math.floor(Date.now() / 1000);
-  const keyId = Number(ig.state.passwordEncryptionKeyId) || 0;
-  const pubKey = ig.state.passwordEncryptionPubKey;
+  const encPassword = encryptPassword(password, key, timestamp);
 
-  if (!pubKey || !keyId) {
-    throw new Error(
-      "Instagram şifreleme anahtarı alınamadı — lütfen tekrar deneyin.",
-    );
-  }
-
-  const encPassword = encryptPassword(password, keyId, pubKey, timestamp);
-
-  // ── Mobile API first ──────────────────────────────────────────────────────
+  // ── Mobil API ─────────────────────────────────────────────────────────────
   const mobileResult = await loginViaMobile(username, encPassword, ig);
   if (mobileResult.success) return mobileResult;
 
-  // Propagate hard errors immediately (2FA, checkpoint)
+  // 2FA / checkpoint → web API'yi denemeye gerek yok
   if (
     mobileResult.errorType === "2fa" ||
     mobileResult.errorType === "checkpoint"
@@ -403,7 +587,7 @@ export async function loginToInstagram(
     return mobileResult;
   }
 
-  // ── Web API fallback ──────────────────────────────────────────────────────
+  // ── Web API (fallback) ────────────────────────────────────────────────────
   const webResult = await loginViaWeb(username, encPassword);
   if (webResult.success) return webResult;
 
