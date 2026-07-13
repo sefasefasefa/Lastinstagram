@@ -167,6 +167,7 @@ export const TrackedUserCategory = {
   follower: 'follower',
   liked_post: 'liked_post',
   liked_story: 'liked_story',
+  liked_reel: 'liked_reel',
 } as const;
 
 export interface TrackedUser {
@@ -211,6 +212,7 @@ export interface DashboardSummary {
   followerCount: number;
   likedPostCount: number;
   likedStoryCount: number;
+  likedReelCount: number;
   monitoringEnabled: boolean;
   /** Static placeholder ("safe") - no real request-rate tracking exists in this codebase. */
   rateLimitStatus: DashboardSummaryRateLimitStatus;

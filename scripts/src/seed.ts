@@ -58,6 +58,12 @@ async function main() {
     // liked_story
     { username: "merve.koc_", fullName: "Merve Koç", avatarUrl: "https://i.pravatar.cc/150?u=merve", category: "liked_story", addedAt: daysAgo(4), lastInteraction: daysAgo(4), interactionCount: 1, autoLike: false },
     { username: "omer.polat", fullName: "Ömer Polat", avatarUrl: "https://i.pravatar.cc/150?u=omer", category: "liked_story", addedAt: daysAgo(2), lastInteraction: daysAgo(2), interactionCount: 1, autoLike: true },
+    // liked_reel
+    { username: "kerem.videos", fullName: "Kerem Yıldız", avatarUrl: "https://i.pravatar.cc/150?u=kerem", category: "liked_reel", addedAt: daysAgo(14), lastInteraction: daysAgo(14), interactionCount: 1, autoLike: false },
+    { username: "dilan.reels_", fullName: "Dilan Çetin", avatarUrl: "https://i.pravatar.cc/150?u=dilan", category: "liked_reel", addedAt: daysAgo(10), lastInteraction: daysAgo(10), interactionCount: 2, autoLike: true },
+    { username: "berk.content", fullName: "Berk Aydın", avatarUrl: "https://i.pravatar.cc/150?u=berk", category: "liked_reel", addedAt: daysAgo(7), lastInteraction: daysAgo(7), interactionCount: 1, autoLike: false },
+    { username: "nazli.clips", fullName: "Nazlı Şen", avatarUrl: "https://i.pravatar.cc/150?u=nazli", category: "liked_reel", addedAt: daysAgo(3), lastInteraction: daysAgo(3), interactionCount: 3, autoLike: true },
+    { username: "ugur.studio", fullName: "Uğur Demirci", avatarUrl: "https://i.pravatar.cc/150?u=ugur", category: "liked_reel", addedAt: daysAgo(1), lastInteraction: daysAgo(1), interactionCount: 1, autoLike: false },
   ];
 
   for (const u of trackedUsers) {

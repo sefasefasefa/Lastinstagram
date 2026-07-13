@@ -728,7 +728,7 @@ components:
           type: boolean
     TrackedUserCategory:
       type: string
-      enum: [follower, liked_post, liked_story]
+      enum: [follower, liked_post, liked_story, liked_reel]
     TrackedUser:
       type: object
       required: [id, username, fullName, avatarUrl, category, addedAt, interactionCount, autoLikeEnabled]
@@ -777,13 +777,15 @@ components:
           description: Stored preference flag only - no automated liking exists in this codebase.
     DashboardSummary:
       type: object
-      required: [followerCount, likedPostCount, likedStoryCount, monitoringEnabled, rateLimitStatus]
+      required: [followerCount, likedPostCount, likedStoryCount, likedReelCount, monitoringEnabled, rateLimitStatus]
       properties:
         followerCount:
           type: integer
         likedPostCount:
           type: integer
         likedStoryCount:
+          type: integer
+        likedReelCount:
           type: integer
         monitoringEnabled:
           type: boolean

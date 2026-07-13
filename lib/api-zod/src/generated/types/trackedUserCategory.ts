@@ -13,4 +13,5 @@ export const TrackedUserCategory = {
   follower: 'follower',
   liked_post: 'liked_post',
   liked_story: 'liked_story',
+  liked_reel: 'liked_reel',
 } as const;

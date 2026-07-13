@@ -11,6 +11,7 @@ export interface DashboardSummary {
   followerCount: number;
   likedPostCount: number;
   likedStoryCount: number;
+  likedReelCount: number;
   monitoringEnabled: boolean;
   /** Static placeholder ("safe") - no real request-rate tracking exists in this codebase. */
   rateLimitStatus: DashboardSummaryRateLimitStatus;

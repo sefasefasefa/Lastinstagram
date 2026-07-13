@@ -11,8 +11,8 @@ import LoginPage from './pages/login';
 import DashboardPage from './pages/dashboard';
 import RequestSettingsPage from './pages/request-settings';
 import SettingsPage from './pages/settings';
-import InstagramPage from './pages/instagram';
 import NotFound from './pages/not-found';
+import { useAdminMode } from './hooks/use-admin-mode';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,9 +49,11 @@ function DashboardRoute() {
 
 function RequestSettingsRoute() {
   const { data: me, isPending } = useGetMe();
+  const isAdmin = useAdminMode();
 
   if (isPending) return null;
   if (!me) return <Redirect to="/login" />;
+  if (!isAdmin) return <Redirect to="/dashboard" />;
   return <RequestSettingsPage />;
 }
 
@@ -64,14 +66,6 @@ function SettingsRoute() {
   return <SettingsPage />;
 }
 
-function InstagramRoute() {
-  const { data: me, isPending } = useGetMe();
-
-  if (isPending) return null;
-  if (!me) return <Redirect to="/login" />;
-  return <InstagramPage />;
-}
-
 function AppRoutes() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -81,7 +75,6 @@ function AppRoutes() {
         <Route path="/dashboard" component={DashboardRoute} />
         <Route path="/request-settings" component={RequestSettingsRoute} />
         <Route path="/settings" component={SettingsRoute} />
-        <Route path="/instagram" component={InstagramRoute} />
         <Route component={NotFound} />
       </Switch>
       <Toaster />

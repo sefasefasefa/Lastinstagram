@@ -13,6 +13,7 @@ export const trackedUserCategoryValues = [
   "follower",
   "liked_post",
   "liked_story",
+  "liked_reel",
 ] as const;
 
 export const trackedUsersTable = pgTable("tracked_users", {

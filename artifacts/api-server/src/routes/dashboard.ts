@@ -24,6 +24,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     follower: 0,
     liked_post: 0,
     liked_story: 0,
+    liked_reel: 0,
   };
   for (const row of rows) {
     counts[row.category as keyof typeof counts] = row.count;
@@ -34,6 +35,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
       followerCount: counts.follower,
       likedPostCount: counts.liked_post,
       likedStoryCount: counts.liked_story,
+      likedReelCount: counts.liked_reel,
       monitoringEnabled: state.monitoringEnabled,
       // Static placeholder - nothing in this codebase tracks real request
       // rates against a third party, so there is nothing to derive this from.

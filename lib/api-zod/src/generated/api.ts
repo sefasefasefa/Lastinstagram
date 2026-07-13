@@ -193,6 +193,7 @@ export const GetDashboardSummaryResponse = zod.object({
   "followerCount": zod.number(),
   "likedPostCount": zod.number(),
   "likedStoryCount": zod.number(),
+  "likedReelCount": zod.number(),
   "monitoringEnabled": zod.boolean(),
   "rateLimitStatus": zod.enum(['safe', 'warning', 'critical']).describe('Static placeholder (\"safe\") - no real request-rate tracking exists in this codebase.')
 })
@@ -203,7 +204,7 @@ export const GetDashboardSummaryResponse = zod.object({
  * @summary List tracked users
  */
 export const ListTrackedUsersQueryParams = zod.object({
-  "category": zod.enum(['follower', 'liked_post', 'liked_story']).optional()
+  "category": zod.enum(['follower', 'liked_post', 'liked_story', 'liked_reel']).optional()
 })
 
 export const ListTrackedUsersResponseItem = zod.object({
@@ -211,7 +212,7 @@ export const ListTrackedUsersResponseItem = zod.object({
   "username": zod.string(),
   "fullName": zod.string(),
   "avatarUrl": zod.string(),
-  "category": zod.enum(['follower', 'liked_post', 'liked_story']),
+  "category": zod.enum(['follower', 'liked_post', 'liked_story', 'liked_reel']),
   "addedAt": zod.coerce.date(),
   "lastInteractionAt": zod.coerce.date().nullish().describe('Set manually via the API - nothing in this codebase writes to it automatically.'),
   "interactionCount": zod.number().describe('Set manually via the API - nothing in this codebase increments it automatically.'),
@@ -231,7 +232,7 @@ export const CreateTrackedUserBody = zod.object({
   "username": zod.string().min(1),
   "fullName": zod.string().min(1),
   "avatarUrl": zod.string(),
-  "category": zod.enum(['follower', 'liked_post', 'liked_story']),
+  "category": zod.enum(['follower', 'liked_post', 'liked_story', 'liked_reel']),
   "autoLikeEnabled": zod.boolean().default(createTrackedUserBodyAutoLikeEnabledDefault).describe('Stored preference flag only - no automated liking exists in this codebase.')
 })
 
@@ -240,7 +241,7 @@ export const CreateTrackedUserResponse = zod.object({
   "username": zod.string(),
   "fullName": zod.string(),
   "avatarUrl": zod.string(),
-  "category": zod.enum(['follower', 'liked_post', 'liked_story']),
+  "category": zod.enum(['follower', 'liked_post', 'liked_story', 'liked_reel']),
   "addedAt": zod.coerce.date(),
   "lastInteractionAt": zod.coerce.date().nullish().describe('Set manually via the API - nothing in this codebase writes to it automatically.'),
   "interactionCount": zod.number().describe('Set manually via the API - nothing in this codebase increments it automatically.'),
@@ -271,7 +272,7 @@ export const RecordTrackedUserVisitResponse = zod.object({
   "username": zod.string(),
   "fullName": zod.string(),
   "avatarUrl": zod.string(),
-  "category": zod.enum(['follower', 'liked_post', 'liked_story']),
+  "category": zod.enum(['follower', 'liked_post', 'liked_story', 'liked_reel']),
   "addedAt": zod.coerce.date(),
   "lastInteractionAt": zod.coerce.date().nullish().describe('Set manually via the API - nothing in this codebase writes to it automatically.'),
   "interactionCount": zod.number().describe('Set manually via the API - nothing in this codebase increments it automatically.'),

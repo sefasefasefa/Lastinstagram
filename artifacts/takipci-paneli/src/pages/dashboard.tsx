@@ -2,10 +2,11 @@ import { useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSumma
 import { Link } from "wouter"
 import { Button, Card } from "../components/ui/core"
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/radix"
-import { Activity, Users, Heart, Image as ImageIcon, Instagram, LogOut, Radio, Settings } from "lucide-react"
+import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio, Settings, Video } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { TrackedUserList } from "../components/tracked-user-list"
+import { useAdminMode } from "../hooks/use-admin-mode"
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
@@ -34,6 +35,8 @@ export default function DashboardPage() {
     })
   }
 
+  const isAdmin = useAdminMode()
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Top Navigation */}
@@ -53,18 +56,14 @@ export default function DashboardPage() {
                 {me?.username ?? "hesabım"}
               </span>
             </div>
-            <Link href="/instagram">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                <Instagram className="w-4 h-4 mr-2" />
-                Instagram
-              </Button>
-            </Link>
-            <Link href="/request-settings">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
-                <Settings className="w-4 h-4 mr-2" />
-                İstek Ayarları
-              </Button>
-            </Link>
+            {isAdmin && (
+              <Link href="/request-settings">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                  <Settings className="w-4 h-4 mr-2" />
+                  İstek Ayarları
+                </Button>
+              </Link>
+            )}
             {import.meta.env.VITE_ADMIN_ENABLED === 'true' ? (
               <Link href="/settings">
                 <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
@@ -110,7 +109,7 @@ export default function DashboardPage() {
         </section>
 
         {/* Stats Row */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <StatCard
             title="Takipçiler"
             value={summary?.followerCount}
@@ -129,6 +128,12 @@ export default function DashboardPage() {
             icon={<ImageIcon className="w-5 h-5 text-purple-400" />}
             trend="Yüksek etkileşim"
           />
+          <StatCard
+            title="Beğendiğim Reels"
+            value={summary?.likedReelCount}
+            icon={<Video className="w-5 h-5 text-rose-400" />}
+            trend="Video içerikler"
+          />
         </section>
 
         {/* Tabs & Lists */}
@@ -138,15 +143,18 @@ export default function DashboardPage() {
           </div>
 
           <Tabs defaultValue="follower" className="w-full">
-            <TabsList className="mb-6 w-full sm:w-auto grid grid-cols-3 sm:flex">
+            <TabsList className="mb-6 w-full sm:w-auto grid grid-cols-2 sm:grid-cols-4 sm:flex">
               <TabsTrigger value="follower" className="flex items-center gap-2">
                 <Users className="w-4 h-4 hidden sm:block" /> Takipçiler
               </TabsTrigger>
               <TabsTrigger value="liked_post" className="flex items-center gap-2">
-                <Heart className="w-4 h-4 hidden sm:block" /> Beğendiğim Gönderiler
+                <Heart className="w-4 h-4 hidden sm:block" /> Gönderiler
               </TabsTrigger>
               <TabsTrigger value="liked_story" className="flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 hidden sm:block" /> Beğendiğim Hikayeler
+                <ImageIcon className="w-4 h-4 hidden sm:block" /> Hikayeler
+              </TabsTrigger>
+              <TabsTrigger value="liked_reel" className="flex items-center gap-2">
+                <Video className="w-4 h-4 hidden sm:block" /> Reels
               </TabsTrigger>
             </TabsList>
 
@@ -158,6 +166,9 @@ export default function DashboardPage() {
             </TabsContent>
             <TabsContent value="liked_story" className="min-h-[300px]">
               <TrackedUserList category="liked_story" />
+            </TabsContent>
+            <TabsContent value="liked_reel" className="min-h-[300px]">
+              <TrackedUserList category="liked_reel" />
             </TabsContent>
           </Tabs>
         </section>
