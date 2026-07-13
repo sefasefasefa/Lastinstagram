@@ -5,6 +5,7 @@ import { db, usersTable } from "@workspace/db";
 import { LoginBody, LoginResponse, GetMeResponse } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { initClientWithCredentials } from "./instagram";
+import { InstagramTwoFactorRequiredError } from "@workspace/instagram-client";
 
 // express-session sets cookie.expires once a session is established.
 function sessionExpiryOf(req: import("express").Request): string {
@@ -75,13 +76,25 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     const igClient = initClientWithCredentials(username, password);
     await igClient.login();
   } catch (err) {
+    // TwoFactorRequired (HTTP 400): yanıt gövdesindeki two_factor_info,
+    // two_factor_identifier ve two_step_verification_context alanlarını oku
+    // ve çağırana ilet — ileride bir doğrulama kodu ekranı bunları kullanabilir.
+    if (err instanceof InstagramTwoFactorRequiredError) {
+      res.status(401).json({
+        error: "Instagram hesabında iki faktörlü doğrulama açık. Lütfen doğrulama kodunu girin.",
+        twoFactorRequired: true,
+        twoFactorInfo: err.twoFactorInfo,
+        twoFactorIdentifier: err.twoFactorIdentifier,
+        twoStepVerificationContext: err.twoStepVerificationContext,
+      });
+      return;
+    }
+
     const msg = err instanceof Error ? err.message : "Instagram login failed";
 
     // Give a friendlier message for the most common errors
     if (msg.includes("checkpoint")) {
       res.status(401).json({ error: "Instagram hesabında güvenlik doğrulaması gerekiyor. Instagram uygulamasından giriş yapıp doğrulamayı tamamlayın." });
-    } else if (msg.includes("two-factor") || msg.includes("2fa") || msg.includes("Two Factor")) {
-      res.status(401).json({ error: "Instagram hesabında iki faktörlü doğrulama açık. Lütfen Instagram uygulamasından oturum çerezi alarak giriş yapın." });
     } else if (msg.includes("password") || msg.includes("Invalid") || msg.includes("incorrect")) {
       res.status(401).json({ error: "Instagram kullanıcı adı veya şifresi hatalı." });
     } else {

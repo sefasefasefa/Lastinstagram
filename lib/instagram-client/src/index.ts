@@ -19,7 +19,34 @@ import {
   fetchMediaInfo,
   type SessionCookies,
   type RawFeedItem,
+  type TwoFactorInfo,
 } from "./direct-login";
+
+/**
+ * /api/v1/accounts/login/ HTTP 400 (TwoFactorRequired) döndürdüğünde
+ * fırlatılır. Yanıt gövdesindeki ham two_factor_info, two_factor_identifier
+ * ve two_step_verification_context alanlarını taşır — çağıran taraf (örn.
+ * API route) bunları okuyup bir doğrulama kodu isteme akışı tetikleyebilir.
+ */
+export class InstagramTwoFactorRequiredError extends Error {
+  readonly twoFactorInfo?: TwoFactorInfo;
+  readonly twoFactorIdentifier?: string;
+  readonly twoStepVerificationContext?: string;
+
+  constructor(details: {
+    twoFactorInfo?: TwoFactorInfo;
+    twoFactorIdentifier?: string;
+    twoStepVerificationContext?: string;
+  }) {
+    super("Instagram two-factor authentication is required.");
+    this.name = "InstagramTwoFactorRequiredError";
+    this.twoFactorInfo = details.twoFactorInfo;
+    this.twoFactorIdentifier = details.twoFactorIdentifier;
+    this.twoStepVerificationContext = details.twoStepVerificationContext;
+  }
+}
+
+export type { TwoFactorInfo };
 
 /** Ham feed/clips öğesini InstagramPost şekline dönüştürür. */
 function mapRawMediaToPost(item: RawFeedItem): InstagramPost {
@@ -172,9 +199,11 @@ export class InstagramClient {
 
       if (!result.success) {
         if (result.errorType === "2fa") {
-          throw new Error(
-            "Instagram two-factor authentication is required. Use a serialized cookie jar or session cookie.",
-          );
+          throw new InstagramTwoFactorRequiredError({
+            twoFactorInfo: result.twoFactorInfo,
+            twoFactorIdentifier: result.twoFactorIdentifier,
+            twoStepVerificationContext: result.twoStepVerificationContext,
+          });
         }
         if (result.errorType === "checkpoint") {
           throw new Error(

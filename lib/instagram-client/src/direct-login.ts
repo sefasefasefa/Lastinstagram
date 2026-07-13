@@ -1052,6 +1052,23 @@ function readDeviceState(ig: IgApiClient) {
 
 export type LoginErrorType = "checkpoint" | "2fa" | "bad_password" | "unknown";
 
+/**
+ * /api/v1/accounts/login/ isteği HTTP 400 (TwoFactorRequired) döndüğünde
+ * yanıt gövdesinde gelen ham "two_factor_info" nesnesi. Belgelenen kritik
+ * alanlar: two_factor_identifier, two_step_verification_context (ayrıca
+ * username, obfuscated_phone_number, totp_two_factor_on, sms_two_factor_on vb.
+ * sağlayıcıya göre değişen ek alanlar içerebilir).
+ */
+export interface TwoFactorInfo {
+  two_factor_identifier?: string;
+  two_step_verification_context?: string;
+  username?: string;
+  obfuscated_phone_number?: string;
+  totp_two_factor_on?: boolean;
+  sms_two_factor_on?: boolean;
+  [key: string]: unknown;
+}
+
 export interface DirectLoginResult {
   success: boolean;
   /** Ham Set-Cookie header değerleri */
@@ -1065,6 +1082,12 @@ export interface DirectLoginResult {
   method?: "mobile" | "web";
   error?: string;
   errorType?: LoginErrorType;
+  /** errorType === "2fa" olduğunda: yanıt gövdesindeki ham two_factor_info nesnesi. */
+  twoFactorInfo?: TwoFactorInfo;
+  /** İki adımlı doğrulama isteğinde kullanılacak kimlik — two_factor_info.two_factor_identifier. */
+  twoFactorIdentifier?: string;
+  /** two_factor_info.two_step_verification_context (örn. "default", "sms"). */
+  twoStepVerificationContext?: string;
 }
 
 // ── Mobil API girişi ──────────────────────────────────────────────────────────
@@ -1123,7 +1146,15 @@ async function loginViaMobile(
   try { data = (await res.json()) as Record<string, unknown>; } catch {}
 
   if (data.two_factor_required) {
-    return { success: false, error: "two-factor", errorType: "2fa" };
+    const info = data.two_factor_info as TwoFactorInfo | undefined;
+    return {
+      success: false,
+      error: "two-factor",
+      errorType: "2fa",
+      twoFactorInfo: info,
+      twoFactorIdentifier: info?.two_factor_identifier,
+      twoStepVerificationContext: info?.two_step_verification_context,
+    };
   }
   if (data.error_type === "checkpoint_required" || data.checkpoint_url) {
     return { success: false, error: "checkpoint", errorType: "checkpoint" };
@@ -1229,7 +1260,15 @@ async function loginViaWeb(
   try { data = (await res.json()) as Record<string, unknown>; } catch {}
 
   if (data.two_factor_required) {
-    return { success: false, error: "two-factor", errorType: "2fa" };
+    const info = data.two_factor_info as TwoFactorInfo | undefined;
+    return {
+      success: false,
+      error: "two-factor",
+      errorType: "2fa",
+      twoFactorInfo: info,
+      twoFactorIdentifier: info?.two_factor_identifier,
+      twoStepVerificationContext: info?.two_step_verification_context,
+    };
   }
   if (data.checkpoint_url) {
     return { success: false, error: "checkpoint", errorType: "checkpoint" };
