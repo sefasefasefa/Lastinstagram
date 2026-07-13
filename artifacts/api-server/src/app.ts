@@ -60,7 +60,11 @@ app.use(
     // not via createTableIfMissing: that option reads a table.sql asset
     // from connect-pg-simple's package directory, which isn't copied into
     // the esbuild bundle and throws ENOENT at runtime.
-    store: new PgSessionStore({ pool, createTableIfMissing: false }),
+    // `pool` is a `pg.Pool` when DATABASE_URL is set, or a PGlite instance
+    // for the local no-Docker fallback (see lib/db/src/index.ts) — both
+    // expose a compatible `.query(sql, params)`, which is all
+    // connect-pg-simple needs, hence the cast.
+    store: new PgSessionStore({ pool: pool as never, createTableIfMissing: false }),
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,

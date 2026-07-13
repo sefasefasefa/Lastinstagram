@@ -47,3 +47,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local file-based database fallback (no DATABASE_URL) — runtime data, not source
+lib/db/.pglite-data/

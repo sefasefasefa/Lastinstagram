@@ -2,7 +2,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict Tg5A3WSn3vCUkMcZ37smOQoNG4xTuctDLaLhzl0kuXUeyxKvUmeObElVMEjpdOP
 
 -- Dumped from database version 16.10
 -- Dumped by pg_dump version 16.10
@@ -227,58 +226,44 @@ ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_
 -- Data for Name: app_state; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.app_state (id, monitoring_enabled) FROM stdin;
-\.
 
 
 --
 -- Data for Name: automation_jobs; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.automation_jobs (id, target_username, action_type, frequency_minutes, randomize_delay, status, next_run_at, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: request_config; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.request_config (id, target_url, headers, cookies, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: request_run_log; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.request_run_log (id, success, status, status_text, error_message, ran_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: session; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.session (sid, sess, expire) FROM stdin;
-gtwsUqwWeSHeichMODvuy-CkfICSGt-T	{"cookie":{"originalMaxAge":604800000,"expires":"2026-07-19T14:32:04.129Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":1}	2026-07-19 14:32:05
-\.
+INSERT INTO public.session VALUES ('lfC98wJ8AKLDxae32-H0ioZya3Z6fV5X', '{"cookie":{"originalMaxAge":604800000,"expires":"2026-07-20T13:31:41.900Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":1}', '2026-07-20 13:31:42');
 
 
 --
 -- Data for Name: tracked_users; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.tracked_users (id, username, full_name, avatar_url, category, added_at, last_interaction_at, interaction_count, auto_like_enabled) FROM stdin;
-\.
 
 
 --
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.users (id, username, password_hash, created_at) FROM stdin;
-1	admin	$2b$10$ln4rzmg5KVC7lqSAwOi.Yu84jPheokQD/AdVJxGjidpBtZNu/mCTG	2026-07-12 14:31:41.614992+00
-\.
+INSERT INTO public.users VALUES (1, 'admin', '$2b$10$D9iBCSa3hRIqTcHcWlitqusZbT4QvfS0HVtjZ7S0FGZrzjKbOpDQe', '2026-07-13 13:31:35.723053+00');
 
 
 --
@@ -384,5 +369,4 @@ CREATE INDEX "IDX_session_expire" ON public.session USING btree (expire);
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Tg5A3WSn3vCUkMcZ37smOQoNG4xTuctDLaLhzl0kuXUeyxKvUmeObElVMEjpdOP
 

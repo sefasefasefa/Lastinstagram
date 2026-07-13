@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "instagram:auto-like": "tsx ./src/instagram-auto-like.ts",
+    "db:restore": "tsx ./src/db-restore.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@workspace/db": "workspace:*",
     "@workspace/instagram-client": "workspace:*",
     "dotenv": "^16.4.7",
     "node-cron": "^3.0.3"

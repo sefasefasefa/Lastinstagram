@@ -12,14 +12,14 @@ A Turkish-language tracker/subscriber panel web app (frontend: "Takipçi Paneli"
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string (pre-provisioned Replit DB), `SESSION_SECRET` — express-session cookie signing secret
+- Required env: `SESSION_SECRET` — express-session cookie signing secret. `DATABASE_URL` is optional: on Replit it's pre-provisioned; if unset (e.g. local git-clone runs), `@workspace/db` falls back to an embedded file-based Postgres (PGlite, data in `lib/db/.pglite-data`) so no external DB/Docker install is needed.
 - Auth: plain username/password login (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`), session cookie backed by a Postgres-stored session table. Default account: username `admin`, password `admin123` — change or rotate this before sharing/deploying the app. There is no register endpoint or seed script; this row was inserted directly into the `users` table (bcrypt hash of `admin123`) since none existed after the initial `db push`.
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
 - API: Express 5
-- DB: PostgreSQL + Drizzle ORM
+- DB: PostgreSQL + Drizzle ORM (falls back to embedded PGlite for local runs without `DATABASE_URL`)
 - Auth: username/password (bcryptjs password hashing + express-session, session store in Postgres via connect-pg-simple)
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
@@ -34,6 +34,7 @@ A Turkish-language tracker/subscriber panel web app (frontend: "Takipçi Paneli"
 - `automation_jobs` table + `/api/automation-jobs` endpoints store job *configuration* (target username, action type, frequency) only. **Nothing executes them** — there is no cron/worker anywhere in this codebase, jobs are always created with `status: "paused"`, and `nextRunAt` is purely informational. Building a real scheduler that performs automated actions (like/follow/view-story) against a third-party site was intentionally declined — it would violate that site's terms of service. Same boundary applies to `tracked_users.autoLikeEnabled`/`lastInteractionAt`/`interactionCount`: they're stored fields, nothing writes to them automatically.
 - `/settings/request-config/test` (the "Test Et" button) is the only place this app ever sends a request to the configured target URL, and it only runs when a user clicks it. `request_run_log` records every run (success/failure) so the Settings page can show history and a "last run N minutes ago, run again?" reminder banner — the reminder is just a UI nudge, it never fires the request itself. A scheduled/cron version of this (node-cron style auto-polling) was explicitly requested and declined for the same ToS reason as above.
 - On a fresh re-import, the platform provisions a brand-new (empty) `DATABASE_URL` — it does **not** restore `lib/db/backup/database.sql` automatically. After `pnpm --filter @workspace/db run push`, the `users` table is empty, so the documented `admin`/`admin123` login will 500 until a row is inserted (bcrypt hash of the password) or the backup SQL is restored manually.
+- `lib/db/src/index.ts` picks its driver at import time based on `DATABASE_URL`: `pg`/`drizzle-orm/node-postgres` when set, `@electric-sql/pglite`/`drizzle-orm/pglite` (file-backed, `lib/db/.pglite-data`) when not. Both expose a `.query()`-compatible interface, so `connect-pg-simple`'s session store and all Drizzle schema/query code work unchanged against either — no code needs to branch on which driver is active. `drizzle.config.ts` mirrors the same branch for `db push`. Docker/docker-compose was removed for local dev; `scripts/db-restore.{sh,ps1}` now just calls `pnpm --filter @workspace/scripts run db:restore`, which restores the SQL dump into whichever backend is active.
 
 ## Where things live
 
