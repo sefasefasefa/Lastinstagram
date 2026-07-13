@@ -3,6 +3,8 @@ import {
   IgCheckpointError,
   IgLoginTwoFactorRequiredError,
 } from "instagram-private-api";
+import { INSTAGRAM_USER_AGENTS } from "./user-agents";
+
 export interface InstagramClientConfig {
   instagramUsername: string;
   instagramPassword?: string;
@@ -49,6 +51,9 @@ export class InstagramClient {
   private loggedIn = false;
   private loginPromise: Promise<void> | null = null;
 
+  /** Shared counter so every new InstagramClient picks the next UA in line. */
+  private static uaIndex = 0;
+
   constructor(private readonly config: InstagramClientConfig) {
     if (!config.instagramUsername.trim()) {
       throw new Error("INSTAGRAM_USERNAME must be set");
@@ -59,10 +64,11 @@ export class InstagramClient {
       this.client.state.proxyUrl = config.proxyUrl;
     }
 
-    if (config.userAgent) {
-      this.client.state.deviceString = config.userAgent;
-    }
-
+    // Explicit UA from config takes priority; otherwise cycle through the list.
+    const ua =
+      config.userAgent ??
+      INSTAGRAM_USER_AGENTS[InstagramClient.uaIndex++ % INSTAGRAM_USER_AGENTS.length];
+    this.client.state.deviceString = ua;
   }
 
   async login(): Promise<void> {
