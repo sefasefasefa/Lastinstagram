@@ -5,7 +5,12 @@ import "dotenv/config";
 import app from "./app";
 import { logger } from "./lib/logger";
 
-const rawPort = process.env["PORT"];
+// On Replit, PORT is injected by the platform's workflow runner (see
+// .replit-artifact/artifact.toml) and must be present. Running locally on
+// your own computer (no REPL_ID), fall back to a sane default so `pnpm run
+// dev` just works without extra setup.
+const isReplit = process.env["REPL_ID"] !== undefined;
+const rawPort = process.env["PORT"] ?? (isReplit ? undefined : "3000");
 
 if (!rawPort) {
   throw new Error(

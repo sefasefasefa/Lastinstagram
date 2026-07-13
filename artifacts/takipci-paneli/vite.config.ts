@@ -5,7 +5,13 @@ import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
-const rawPort = process.env.PORT;
+// On Replit, PORT/BASE_PATH are injected by the platform's workflow runner
+// (see .replit-artifact/artifact.toml) and must be present. Running locally
+// on your own computer (no REPL_ID), fall back to sane defaults so `pnpm run
+// dev`/`build` just works without extra setup.
+const isReplit = process.env.REPL_ID !== undefined;
+
+const rawPort = process.env.PORT ?? (isReplit ? undefined : '5173');
 
 if (!rawPort) {
   throw new Error(
@@ -19,7 +25,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
+const basePath = process.env.BASE_PATH ?? (isReplit ? undefined : '/');
 
 if (!basePath) {
   throw new Error(
