@@ -29,5 +29,6 @@ dist-ssr
 # Database data files
 lib/db/.pglite-data
 
-# Python virtual environment for Stealth-Requests bridge
+# Python virtual environment / uv install for Stealth-Requests bridge
 .venv
+.pythonlibs

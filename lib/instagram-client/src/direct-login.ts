@@ -20,6 +20,7 @@
 
 import crypto from "node:crypto";
 import type { IgApiClient } from "instagram-private-api";
+import { stealthFetch } from "./stealth-bridge";
 
 // ── Sabitler ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,14 @@ const IG_SIG_KEY =
 const IG_SIG_KEY_VERSION = "4";
 
 const IG_APP_ID = "1217981644879628";
+
+/**
+ * Instagram login akışındaki doğrudan HTTP istekleri için Stealth-Requests
+ * (Python/curl_cffi) köprüsünü kullanır. Köprü çalışmazsa otomatik olarak
+ * native fetch'e geri döner. `USE_STEALTH_REQUESTS=false` ile tamamen devre
+ * dışı bırakılabilir.
+ */
+const loginFetch = process.env.USE_STEALTH_REQUESTS === "false" ? fetch : stealthFetch;
 
 /** OnePlus 6 / Android 10 mobil UA */
 const MOBILE_UA =
@@ -203,7 +212,7 @@ async function fetchKeyFromContactPointPrefill(
     const json = JSON.stringify({ id: s.uuid, _csrftoken: s.csrfToken });
     const { signed_body, ig_sig_key_version } = signBody(json);
 
-    const res = await fetch(CONTACT_POINT_URL, {
+    const res = await loginFetch(CONTACT_POINT_URL, {
       method: "POST",
       headers: {
         "User-Agent": MOBILE_UA,
@@ -245,7 +254,7 @@ async function fetchKeyFromContactPointPrefill(
  */
 async function fetchKeyFromWebSharedData(): Promise<EncryptionKey | null> {
   try {
-    const res = await fetch(SHARED_DATA_URL, {
+    const res = await loginFetch(SHARED_DATA_URL, {
       headers: {
         "User-Agent": DESKTOP_UA,
         "Accept": "application/json",
@@ -1031,7 +1040,7 @@ async function postBloksAction(
   userAgent: string = MOBILE_UA,
 ): Promise<BloksStepResult> {
   try {
-    const res = await fetch(`${BLOKS_APPS_URL}${appId}/`, {
+    const res = await loginFetch(`${BLOKS_APPS_URL}${appId}/`, {
       method: "POST",
       headers: {
         "User-Agent": userAgent,
@@ -1473,7 +1482,7 @@ async function loginViaMobile(
 
   let res: Response;
   try {
-    res = await fetch(MOBILE_LOGIN_URL, {
+    res = await loginFetch(MOBILE_LOGIN_URL, {
       method: "POST",
       headers: {
         "User-Agent": MOBILE_UA,
@@ -1560,7 +1569,7 @@ async function loginViaWeb(
   // Adım 1: Login sayfasından CSRF token ve rollout_hash al
   let initRes: Response;
   try {
-    initRes = await fetch("https://www.instagram.com/accounts/login/", {
+    initRes = await loginFetch("https://www.instagram.com/accounts/login/", {
       headers: {
         "User-Agent": DESKTOP_UA,
         "Accept-Language": "tr-TR,tr;q=0.9",
@@ -1603,7 +1612,7 @@ async function loginViaWeb(
 
   let res: Response;
   try {
-    res = await fetch(WEB_LOGIN_URL, {
+    res = await loginFetch(WEB_LOGIN_URL, {
       method: "POST",
       headers: {
         "User-Agent": DESKTOP_UA,
