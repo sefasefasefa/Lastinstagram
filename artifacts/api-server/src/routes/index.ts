@@ -8,6 +8,7 @@ import settingsRouter from "./settings";
 import requestSettingsRouter from "./request-settings";
 import automationJobsRouter from "./automationJobs";
 import instagramRouter from "./instagram";
+import likedMediaRouter from "./likedMedia";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(settingsRouter);
 router.use(requestSettingsRouter);
 router.use(automationJobsRouter);
 router.use(instagramRouter);
+router.use(likedMediaRouter);
 
 export default router;

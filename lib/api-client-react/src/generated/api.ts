@@ -34,6 +34,7 @@ import type {
   InstagramStatusResponse,
   InstagramStoriesResponse,
   InstagramStoryActionInput,
+  LikedMedia,
   ListTrackedUsersParams,
   LoginRequest,
   MonitoringStatus,
@@ -1411,6 +1412,83 @@ export const useRecordTrackedUserVisit = <TError = ErrorType<void>,
       > => {
       return useMutation(getRecordTrackedUserVisitMutationOptions(options));
     }
+
+export const getListTrackedUserMediaUrl = (id: number,) => {
+
+
+
+
+  return `/api/tracked-users/${id}/media`
+}
+
+/**
+ * @summary List liked media items for a tracked user
+ */
+export const listTrackedUserMedia = async (id: number, options?: RequestInit): Promise<LikedMedia[]> => {
+
+  return customFetch<LikedMedia[]>(getListTrackedUserMediaUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTrackedUserMediaQueryKey = (id: number,) => {
+    return [
+    `/api/tracked-users/${id}/media`
+    ] as const;
+    }
+
+
+export const getListTrackedUserMediaQueryOptions = <TData = Awaited<ReturnType<typeof listTrackedUserMedia>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTrackedUserMedia>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTrackedUserMediaQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTrackedUserMedia>>> = ({ signal }) => listTrackedUserMedia(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTrackedUserMedia>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTrackedUserMediaQueryResult = NonNullable<Awaited<ReturnType<typeof listTrackedUserMedia>>>
+export type ListTrackedUserMediaQueryError = ErrorType<void>
+
+
+/**
+ * @summary List liked media items for a tracked user
+ */
+
+export function useListTrackedUserMedia<TData = Awaited<ReturnType<typeof listTrackedUserMedia>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTrackedUserMedia>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTrackedUserMediaQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetInstagramStatusUrl = () => {
 

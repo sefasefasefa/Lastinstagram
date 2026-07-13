@@ -27,6 +27,8 @@ export * from './instagramStatusResponse';
 export * from './instagramStoriesResponse';
 export * from './instagramStory';
 export * from './instagramStoryActionInput';
+export * from './likedMedia';
+export * from './likedMediaMediaType';
 export * from './listTrackedUsersParams';
 export * from './loginRequest';
 export * from './monitoringStatus';

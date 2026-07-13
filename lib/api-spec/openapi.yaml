@@ -316,6 +316,28 @@ paths:
                 $ref: "#/components/schemas/TrackedUser"
         "404":
           description: Tracked user not found
+  /tracked-users/{id}/media:
+    get:
+      operationId: listTrackedUserMedia
+      tags: [trackedUsers]
+      summary: List liked media items for a tracked user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of liked media
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LikedMedia"
+        "404":
+          description: Tracked user not found
   /instagram/status:
     get:
       operationId: getInstagramStatus
@@ -833,6 +855,30 @@ components:
         ranAt:
           type: string
           format: date-time
+    LikedMedia:
+      type: object
+      required: [id, trackedUserId, mediaType, externalId, likedAt, hasLiked]
+      properties:
+        id:
+          type: integer
+        trackedUserId:
+          type: integer
+        mediaType:
+          type: string
+          enum: [post, reel]
+        externalId:
+          type: string
+        thumbnailUrl:
+          type: string
+          nullable: true
+        caption:
+          type: string
+          nullable: true
+        likedAt:
+          type: string
+          format: date-time
+        hasLiked:
+          type: boolean
     RequestConfigInput:
       type: object
       required: [targetUrl, headers, cookies]

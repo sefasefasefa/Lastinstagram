@@ -239,6 +239,25 @@ export interface RequestRunLogEntry {
   ranAt: string;
 }
 
+export type LikedMediaMediaType = typeof LikedMediaMediaType[keyof typeof LikedMediaMediaType];
+
+
+export const LikedMediaMediaType = {
+  post: 'post',
+  reel: 'reel',
+} as const;
+
+export interface LikedMedia {
+  id: number;
+  trackedUserId: number;
+  mediaType: LikedMediaMediaType;
+  externalId: string;
+  thumbnailUrl?: string | null;
+  caption?: string | null;
+  likedAt: string;
+  hasLiked: boolean;
+}
+
 export type RequestConfigInputHeaders = {[key: string]: string};
 
 export type RequestConfigInputCookies = {[key: string]: string};

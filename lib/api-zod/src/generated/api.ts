@@ -281,6 +281,26 @@ export const RecordTrackedUserVisitResponse = zod.object({
 
 
 /**
+ * @summary List liked media items for a tracked user
+ */
+export const ListTrackedUserMediaParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListTrackedUserMediaResponseItem = zod.object({
+  "id": zod.number(),
+  "trackedUserId": zod.number(),
+  "mediaType": zod.enum(['post', 'reel']),
+  "externalId": zod.string(),
+  "thumbnailUrl": zod.string().nullish(),
+  "caption": zod.string().nullish(),
+  "likedAt": zod.coerce.date(),
+  "hasLiked": zod.boolean()
+})
+export const ListTrackedUserMediaResponse = zod.array(ListTrackedUserMediaResponseItem)
+
+
+/**
  * @summary Get the current Instagram client session status
  */
 export const GetInstagramStatusResponse = zod.object({

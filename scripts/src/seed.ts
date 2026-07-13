@@ -2,6 +2,16 @@
 // Usage: pnpm --filter @workspace/scripts run db:seed
 import "dotenv/config";
 import { pool } from "@workspace/db";
+
+type MediaRow = {
+  username: string;
+  mediaType: "post" | "reel";
+  externalId: string;
+  thumbnailUrl: string;
+  caption: string;
+  likedAtDaysAgo: number;
+  hasLiked: boolean;
+};
 async function main() {
   const anyPool = pool as unknown as {
     exec?: (sql: string) => Promise<unknown>;
@@ -112,6 +122,71 @@ async function main() {
     `, [l.success, l.status, l.statusText, l.error, l.ranAt]);
   }
   console.log(`  ✓ ${logs.length} request run log entries`);
+
+  // ── 7. Liked media ─────────────────────────────────────────────────────────
+  // Map username → mediaType for the users that have media
+  const mediaByUser: Record<string, MediaRow[]> = {
+    "instagram.tr": [
+      { username: "instagram.tr", mediaType: "post", externalId: "ig_post_001", thumbnailUrl: "https://picsum.photos/seed/ig1/400/400", caption: "Instagram'ın yeni özelliklerini keşfedin! 🚀", likedAtDaysAgo: 12, hasLiked: true },
+      { username: "instagram.tr", mediaType: "post", externalId: "ig_post_002", thumbnailUrl: "https://picsum.photos/seed/ig2/400/400", caption: "Hikayelerinizi daha eğlenceli hale getirin ✨", likedAtDaysAgo: 11, hasLiked: true },
+      { username: "instagram.tr", mediaType: "post", externalId: "ig_post_003", thumbnailUrl: "https://picsum.photos/seed/ig3/400/400", caption: null, likedAtDaysAgo: 10, hasLiked: false },
+    ],
+    "fatma.sahin_photo": [
+      { username: "fatma.sahin_photo", mediaType: "post", externalId: "fs_post_001", thumbnailUrl: "https://picsum.photos/seed/fatma1/400/400", caption: "Bugün çektiğim kareler 📸 #fotoğrafçılık", likedAtDaysAgo: 9, hasLiked: true },
+      { username: "fatma.sahin_photo", mediaType: "post", externalId: "fs_post_002", thumbnailUrl: "https://picsum.photos/seed/fatma2/400/400", caption: "Doğanın renkleri 🌿", likedAtDaysAgo: 8, hasLiked: true },
+      { username: "fatma.sahin_photo", mediaType: "post", externalId: "fs_post_003", thumbnailUrl: "https://picsum.photos/seed/fatma3/400/400", caption: "Altın saat ışığı 🌅", likedAtDaysAgo: 7, hasLiked: true },
+    ],
+    "can.uysal": [
+      { username: "can.uysal", mediaType: "post", externalId: "cu_post_001", thumbnailUrl: "https://picsum.photos/seed/can1/400/400", caption: "Yeni proje çalışmalarım devam ediyor 💪", likedAtDaysAgo: 6, hasLiked: true },
+      { username: "can.uysal", mediaType: "post", externalId: "cu_post_002", thumbnailUrl: "https://picsum.photos/seed/can2/400/400", caption: null, likedAtDaysAgo: 5, hasLiked: false },
+    ],
+    "kerem.videos": [
+      { username: "kerem.videos", mediaType: "reel", externalId: "kv_reel_001", thumbnailUrl: "https://picsum.photos/seed/kerem1/400/400", caption: "Bu anı kaçırmayın 🎬 #reels #trending", likedAtDaysAgo: 14, hasLiked: true },
+      { username: "kerem.videos", mediaType: "reel", externalId: "kv_reel_002", thumbnailUrl: "https://picsum.photos/seed/kerem2/400/400", caption: "Şehrin gece hali 🌙", likedAtDaysAgo: 13, hasLiked: true },
+    ],
+    "dilan.reels_": [
+      { username: "dilan.reels_", mediaType: "reel", externalId: "dr_reel_001", thumbnailUrl: "https://picsum.photos/seed/dilan1/400/400", caption: "Günlük rutinlerim ☀️ #lifestyle", likedAtDaysAgo: 10, hasLiked: true },
+      { username: "dilan.reels_", mediaType: "reel", externalId: "dr_reel_002", thumbnailUrl: "https://picsum.photos/seed/dilan2/400/400", caption: "Kahve saati ☕", likedAtDaysAgo: 9, hasLiked: true },
+      { username: "dilan.reels_", mediaType: "reel", externalId: "dr_reel_003", thumbnailUrl: "https://picsum.photos/seed/dilan3/400/400", caption: null, likedAtDaysAgo: 8, hasLiked: false },
+    ],
+    "berk.content": [
+      { username: "berk.content", mediaType: "reel", externalId: "bc_reel_001", thumbnailUrl: "https://picsum.photos/seed/berk1/400/400", caption: "İçerik üretiminin sırları 🎯", likedAtDaysAgo: 7, hasLiked: true },
+    ],
+    "nazli.clips": [
+      { username: "nazli.clips", mediaType: "reel", externalId: "nc_reel_001", thumbnailUrl: "https://picsum.photos/seed/nazli1/400/400", caption: "Gün batımı videosu 🌇 #video", likedAtDaysAgo: 3, hasLiked: true },
+      { username: "nazli.clips", mediaType: "reel", externalId: "nc_reel_002", thumbnailUrl: "https://picsum.photos/seed/nazli2/400/400", caption: "Sabah yürüyüşü 🏃‍♀️", likedAtDaysAgo: 2, hasLiked: true },
+      { username: "nazli.clips", mediaType: "reel", externalId: "nc_reel_003", thumbnailUrl: "https://picsum.photos/seed/nazli3/400/400", caption: "Dans videosu 💃", likedAtDaysAgo: 1, hasLiked: true },
+    ],
+    "ugur.studio": [
+      { username: "ugur.studio", mediaType: "reel", externalId: "us_reel_001", thumbnailUrl: "https://picsum.photos/seed/ugur1/400/400", caption: "Stüdyo günlüğü 🎥", likedAtDaysAgo: 1, hasLiked: true },
+    ],
+  };
+
+  // Fetch tracked_user ids for users that have media
+  let mediaCount = 0;
+  for (const [username, mediaRows] of Object.entries(mediaByUser)) {
+    const res = await q(
+      `SELECT id FROM tracked_users WHERE username = $1`,
+      [username],
+    ) as { rows: { id: number }[] };
+    const trackedUserId = res.rows[0]?.id;
+    if (!trackedUserId) continue;
+
+    for (const m of mediaRows) {
+      await q(`
+        INSERT INTO liked_media
+          (tracked_user_id, media_type, external_id, thumbnail_url, caption, liked_at, has_liked)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT DO NOTHING
+      `, [
+        trackedUserId, m.mediaType, m.externalId,
+        m.thumbnailUrl, m.caption,
+        daysAgo(m.likedAtDaysAgo), m.hasLiked,
+      ]);
+      mediaCount++;
+    }
+  }
+  console.log(`  ✓ ${mediaCount} liked media items`);
 
   console.log("\n✅  Seed complete. Login: admin / admin123");
   process.exit(0);

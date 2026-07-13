@@ -18,6 +18,7 @@
 //   export type Post = typeof postsTable.$inferSelect;
 
 export * from "./trackedUsers";
+export * from "./likedMedia";
 export * from "./appState";
 export * from "./users";
 export * from "./session";
