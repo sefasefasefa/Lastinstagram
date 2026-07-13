@@ -523,6 +523,173 @@ export async function fetchUserInfo(
   }
 }
 
+// ── Gönderi ve Reels İçeriklerini Listeleme (doğrudan HTTP) ──────────────────
+
+/** Feed / clips yanıtlarındaki ham medya öğesi. */
+export interface RawFeedItem {
+  pk?: number | string;
+  id?: string;
+  code?: string;
+  media_type?: number;
+  caption?: { text?: string } | null;
+  like_count?: number;
+  comment_count?: number;
+  image_versions2?: { candidates?: { url?: string }[] };
+  video_versions?: { url?: string }[];
+  has_liked?: boolean;
+  taken_at?: number;
+  play_count?: number;
+  view_count?: number;
+}
+
+export interface UserFeedResult {
+  success: boolean;
+  items?: RawFeedItem[];
+  nextMaxId?: string;
+  moreAvailable?: boolean;
+  error?: string;
+}
+
+/**
+ * A. Standart Gönderiler (Feed) Listeleme — belgede tanımlanan doğrudan
+ * mobil API çağrısı:
+ *
+ *   GET https://i.instagram.com/api/v1/feed/user/{user_id}/
+ *
+ * Sayfalama: bir sonraki sayfa için yanıttaki `next_max_id` değeri,
+ * sonraki istekte `max_id` query string parametresi olarak gönderilir.
+ *
+ * @param userId       Sorgulanacak hesabın pk (user_id) değeri.
+ * @param cookieHeader Aktif oturumun Cookie header string'i.
+ * @param options.maxId Sayfalama için önceki yanıttan alınan next_max_id.
+ */
+export async function fetchUserFeed(
+  userId: string,
+  cookieHeader: string,
+  options: { maxId?: string; userAgent?: string } = {},
+): Promise<UserFeedResult> {
+  try {
+    const url = new URL(`https://i.instagram.com/api/v1/feed/user/${userId}/`);
+    if (options.maxId) url.searchParams.set("max_id", options.maxId);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent": options.userAgent ?? MOBILE_UA,
+        "X-IG-App-ID": IG_APP_ID,
+        "Cookie": cookieHeader,
+        "Accept-Language": "tr-TR",
+      },
+    });
+
+    let data: Record<string, unknown> = {};
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      return { success: false, error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    }
+
+    if (!res.ok || !Array.isArray(data.items)) {
+      const msg =
+        typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+      return { success: false, error: `User Feed API: ${msg}` };
+    }
+
+    return {
+      success: true,
+      items: data.items as RawFeedItem[],
+      nextMaxId: typeof data.next_max_id === "string" ? data.next_max_id : undefined,
+      moreAvailable: Boolean(data.more_available),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: `Ağ hatası (user feed): ${e instanceof Error ? e.message : e}`,
+    };
+  }
+}
+
+export interface UserClipsResult {
+  success: boolean;
+  items?: RawFeedItem[];
+  nextMaxId?: string;
+  moreAvailable?: boolean;
+  error?: string;
+}
+
+/**
+ * B. Reels (Clips) Listeleme — belgede tanımlanan doğrudan mobil API
+ * çağrısı:
+ *
+ *   POST https://i.instagram.com/api/v1/clips/user_clips/
+ *   Body: { "target_user_id": "123456789", "max_id": "", "page_size": 20 }
+ *
+ * @param userId       Sorgulanacak hesabın pk (user_id) değeri.
+ * @param cookieHeader Aktif oturumun Cookie header string'i.
+ * @param options.maxId Sayfalama için önceki yanıttan alınan next_max_id.
+ * @param options.pageSize Sayfa başına döndürülecek öğe sayısı (varsayılan 20).
+ */
+export async function fetchUserClips(
+  userId: string,
+  cookieHeader: string,
+  options: { maxId?: string; pageSize?: number; userAgent?: string } = {},
+): Promise<UserClipsResult> {
+  try {
+    const res = await fetch(
+      "https://i.instagram.com/api/v1/clips/user_clips/",
+      {
+        method: "POST",
+        headers: {
+          "User-Agent": options.userAgent ?? MOBILE_UA,
+          "X-IG-App-ID": IG_APP_ID,
+          "Cookie": cookieHeader,
+          "Content-Type": "application/json",
+          "Accept-Language": "tr-TR",
+        },
+        body: JSON.stringify({
+          target_user_id: userId,
+          max_id: options.maxId ?? "",
+          page_size: options.pageSize ?? 20,
+        }),
+      },
+    );
+
+    let data: Record<string, unknown> = {};
+    try {
+      data = (await res.json()) as Record<string, unknown>;
+    } catch {
+      return { success: false, error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    }
+
+    if (!res.ok || !Array.isArray(data.items)) {
+      const msg =
+        typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+      return { success: false, error: `User Clips API: ${msg}` };
+    }
+
+    // Clips yanıtındaki her öğe genelde { media: {...} } şeklinde sarmalanır.
+    const items = (data.items as Record<string, unknown>[]).map(
+      (it) => (it.media ?? it) as RawFeedItem,
+    );
+
+    const pagingInfo = data.paging_info as { max_id?: string; more_available?: boolean } | undefined;
+
+    return {
+      success: true,
+      items,
+      nextMaxId:
+        (typeof data.next_max_id === "string" ? data.next_max_id : undefined) ??
+        pagingInfo?.max_id,
+      moreAvailable: Boolean(data.more_available ?? pagingInfo?.more_available),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: `Ağ hatası (user clips): ${e instanceof Error ? e.message : e}`,
+    };
+  }
+}
+
 /**
  * Oturum canlı tutma — belgede tanımlanan keep-alive endpoint:
  *   GET /api/v1/accounts/current_user/

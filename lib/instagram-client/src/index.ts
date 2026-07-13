@@ -10,8 +10,26 @@ import {
   pingKeepAlive,
   updateCsrfInHeader,
   fetchUserInfo,
+  fetchUserFeed,
+  fetchUserClips,
   type SessionCookies,
+  type RawFeedItem,
 } from "./direct-login";
+
+/** Ham feed/clips öğesini InstagramPost şekline dönüştürür. */
+function mapRawMediaToPost(item: RawFeedItem): InstagramPost {
+  return {
+    id: String(item.pk ?? item.id ?? ""),
+    code: item.code,
+    mediaType: item.media_type ?? 1,
+    caption: item.caption?.text ?? undefined,
+    likeCount: item.like_count ?? 0,
+    commentCount: item.comment_count ?? 0,
+    displayUrl: item.image_versions2?.candidates?.[0]?.url,
+    videoUrl: item.video_versions?.[0]?.url,
+    hasLiked: item.has_liked ?? false,
+  };
+}
 
 export interface InstagramClientConfig {
   instagramUsername: string;
@@ -430,11 +448,38 @@ export class InstagramClient {
     });
   }
 
+  /**
+   * A. Standart Gönderiler (Feed) Listeleme.
+   *
+   *   GET https://i.instagram.com/api/v1/feed/user/{user_id}/
+   *   Sayfalama: yanıttaki next_max_id, sonraki istekte max_id olarak gönderilir.
+   *
+   * Tam Cookie header'ı mevcutsa ham istek kullanılır; aksi halde
+   * (örn. session-cookie girişi) instagram-private-api'ye geri dönülür.
+   */
   async getUserPosts(username: string, limit = 20): Promise<InstagramPost[]> {
     await this.ensureAuthenticated();
     const safeLimit = Math.min(Math.max(limit, 1), 50);
     return this.withErrorRecovery(async () => {
       const user = await this.client.user.searchExact(username);
+      const userId = String(user.pk);
+
+      if (this.session?.cookieHeader) {
+        const posts: InstagramPost[] = [];
+        let maxId: string | undefined;
+        do {
+          const result = await fetchUserFeed(userId, this.session.cookieHeader, {
+            maxId,
+            userAgent: this.client.state.deviceString,
+          });
+          if (!result.success || !result.items) break;
+          posts.push(...result.items.map(mapRawMediaToPost));
+          maxId = result.moreAvailable ? result.nextMaxId : undefined;
+        } while (maxId && posts.length < safeLimit);
+        if (posts.length > 0) return posts.slice(0, safeLimit);
+      }
+
+      // Ham istek başarısız veya cookie header yok — kütüphaneye geri dön.
       const items = await this.client.feed.user(user.pk).items();
       return items.slice(0, safeLimit).map((media) => ({
         id: String(media.pk),
@@ -470,13 +515,53 @@ export class InstagramClient {
     });
   }
 
+  /**
+   * B. Reels (Clips) Listeleme.
+   *
+   *   POST https://i.instagram.com/api/v1/clips/user_clips/
+   *   Body: { target_user_id, max_id, page_size }
+   *
+   * Tam Cookie header'ı mevcutsa ham istek kullanılır; aksi halde reels,
+   * normal gönderi akışından (media_type=2) türetilerek geri dönülür.
+   */
   async getUserReels(username: string, limit = 10): Promise<InstagramReel[]> {
+    await this.ensureAuthenticated();
     const safeLimit = Math.min(Math.max(limit, 1), 30);
-    const posts = await this.getUserPosts(username, Math.max(limit * 3, 20));
-    return posts
-      .filter((post) => post.mediaType === 2 && post.videoUrl)
-      .slice(0, safeLimit)
-      .map((post) => ({ ...post, playCount: 0, viewCount: 0, timestamp: Date.now() }));
+    return this.withErrorRecovery(async () => {
+      const user = await this.client.user.searchExact(username);
+      const userId = String(user.pk);
+
+      if (this.session?.cookieHeader) {
+        const reels: InstagramReel[] = [];
+        let maxId = "";
+        do {
+          const result = await fetchUserClips(userId, this.session.cookieHeader, {
+            maxId,
+            pageSize: Math.min(safeLimit, 20),
+            userAgent: this.client.state.deviceString,
+          });
+          if (!result.success || !result.items) break;
+          reels.push(
+            ...result.items.map((item) => ({
+              ...mapRawMediaToPost(item),
+              playCount: Number(item.play_count ?? 0),
+              viewCount: Number(item.view_count ?? 0) || undefined,
+              timestamp: (item.taken_at ?? 0) * 1000,
+            })),
+          );
+          maxId = result.moreAvailable ? result.nextMaxId ?? "" : "";
+        } while (maxId && reels.length < safeLimit);
+        if (reels.length > 0) return reels.slice(0, safeLimit);
+      }
+
+      // Ham istek başarısız veya cookie header yok — normal gönderi
+      // akışından (media_type=2, video) reels türet.
+      const posts = await this.getUserPosts(username, Math.max(limit * 3, 20));
+      return posts
+        .filter((post) => post.mediaType === 2 && post.videoUrl)
+        .slice(0, safeLimit)
+        .map((post) => ({ ...post, playCount: 0, viewCount: 0, timestamp: Date.now() }));
+    });
   }
 
   /**
