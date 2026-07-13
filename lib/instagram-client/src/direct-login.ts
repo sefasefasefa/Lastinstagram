@@ -335,6 +335,137 @@ function extractSessionId(cookies: string[]): string | undefined {
     ?.match(/^sessionid=([^;]+)/)?.[1];
 }
 
+/**
+ * Set-Cookie header listesinden belirli bir cookie değerini çıkarır.
+ * Örnek: extractCookieValue(["sessionid=abc; Path=/", "csrftoken=xyz"], "csrftoken") → "xyz"
+ */
+function extractCookieValue(cookies: string[], name: string): string | undefined {
+  const prefix = `${name}=`;
+  return cookies
+    .find((c) => c.startsWith(prefix) || c.includes(`; ${prefix}`) || c.includes(`, ${prefix}`))
+    ?.split(/[;,]/)[0]
+    ?.split("=")
+    .slice(1)
+    .join("=")
+    .trim() || undefined;
+}
+
+// ── Cookie yönetimi (dışa aktarılan API) ─────────────────────────────────────
+
+/**
+ * Oturumla ilişkili tüm kritik cookie'leri Set-Cookie header listesinden çıkarır.
+ *
+ * Belgede tanımlanan cookie'ler:
+ *   sessionid   — aktif oturum jetonu (90 gün–1 yıl)
+ *   csrftoken   — CSRF koruması (dinamik, her durum değişiminde güncellenir)
+ *   ds_user_id  — kullanıcının sayısal profil ID'si
+ *   mid         — makine kimliği (kalıcı)
+ *   ig_did      — cihaz kimliği (kalıcı)
+ *   rur         — bölgesel yönlendirme parametresi
+ */
+export interface SessionCookies {
+  sessionid?: string;
+  csrftoken?: string;
+  ds_user_id?: string;
+  mid?: string;
+  ig_did?: string;
+  rur?: string;
+  /** Birden fazla cookie'yi tek satırda birleştiren Cookie header değeri */
+  cookieHeader: string;
+  /** Ham Set-Cookie dizisi */
+  raw: string[];
+}
+
+export function extractSessionCookies(setCookies: string[]): SessionCookies {
+  const get = (name: string) => extractCookieValue(setCookies, name);
+
+  // Tüm Set-Cookie girişlerini "key=value" çiftlerine dönüştür
+  const pairs = setCookies
+    .map((c) => c.split(";")[0].trim())
+    .filter(Boolean);
+
+  return {
+    sessionid: get("sessionid"),
+    csrftoken: get("csrftoken"),
+    ds_user_id: get("ds_user_id"),
+    mid: get("mid"),
+    ig_did: get("ig_did"),
+    rur: get("rur"),
+    cookieHeader: pairs.join("; "),
+    raw: setCookies,
+  };
+}
+
+/**
+ * Cookie header'ı sıfırlamak zorunda kalmadan yalnızca csrftoken'ı günceller.
+ * Dönen değer güncellenmiş Cookie header string'idir.
+ */
+export function updateCsrfInHeader(
+  cookieHeader: string,
+  newCsrf: string,
+): string {
+  // Varsa mevcut csrftoken'ı değiştir, yoksa sona ekle
+  if (cookieHeader.includes("csrftoken=")) {
+    return cookieHeader.replace(/csrftoken=[^;,\s]+/, `csrftoken=${newCsrf}`);
+  }
+  return cookieHeader ? `${cookieHeader}; csrftoken=${newCsrf}` : `csrftoken=${newCsrf}`;
+}
+
+/**
+ * CSRF token yenileme — belgede tanımlanan prosedür:
+ *   1. Oturum cookie'leriyle /api/v1/web/initial_share_info/ GET isteği at
+ *   2. Dönen Set-Cookie'den yeni csrftoken'ı al
+ *   3. Güncellenmiş token değerini döndür (null → başarısız)
+ */
+export async function refreshCsrfToken(
+  cookieHeader: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      "https://i.instagram.com/api/v1/web/initial_share_info/",
+      {
+        headers: {
+          "User-Agent": DESKTOP_UA,
+          "Cookie": cookieHeader,
+          "Accept": "application/json",
+        },
+      },
+    );
+    const newCookies = getSetCookies(res);
+    return extractCookieValue(newCookies, "csrftoken") ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Oturum canlı tutma — belgede tanımlanan keep-alive endpoint:
+ *   GET /api/v1/accounts/current_user/
+ *   Başarılıysa HTTP 200 + kullanıcı verisi döner ve sunucu sayacını sıfırlar.
+ *   Dönen değer: true → oturum geçerli, false → oturum sona ermiş
+ */
+export async function pingKeepAlive(
+  cookieHeader: string,
+  userAgent = MOBILE_UA,
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      "https://i.instagram.com/api/v1/accounts/current_user/?edit=true",
+      {
+        headers: {
+          "User-Agent": userAgent,
+          "Cookie": cookieHeader,
+          "X-IG-App-ID": IG_APP_ID,
+          "Accept-Language": "tr-TR",
+        },
+      },
+    );
+    return res.status === 200;
+  } catch {
+    return false;
+  }
+}
+
 function readDeviceState(ig: IgApiClient) {
   const uuid = ig.state.uuid ?? crypto.randomUUID();
   const phoneId = ig.state.phoneId ?? crypto.randomUUID();
@@ -358,7 +489,11 @@ export type LoginErrorType = "checkpoint" | "2fa" | "bad_password" | "unknown";
 
 export interface DirectLoginResult {
   success: boolean;
+  /** Ham Set-Cookie header değerleri */
   cookies?: string[];
+  /** Ayrıştırılmış kritik cookie'ler + hazır Cookie header string'i */
+  sessionCookies?: SessionCookies;
+  /** Kısa yol: sessionid değeri */
   sessionId?: string;
   userId?: string;
   username?: string;
@@ -437,10 +572,12 @@ async function loginViaMobile(
   }
 
   const user = (data.logged_in_user ?? {}) as Record<string, string>;
+  const sessionCookies = extractSessionCookies(setCookies);
   return {
     success: true,
     cookies: setCookies,
-    sessionId: extractSessionId(setCookies),
+    sessionCookies,
+    sessionId: sessionCookies.sessionid,
     userId: user.pk ?? user.id,
     username: user.username ?? username,
     method: "mobile",
@@ -539,10 +676,12 @@ async function loginViaWeb(
   }
 
   const allCookies = [...initCookies, ...setCookies];
+  const sessionCookies = extractSessionCookies(allCookies);
   return {
     success: true,
     cookies: allCookies,
-    sessionId: extractSessionId(allCookies),
+    sessionCookies,
+    sessionId: sessionCookies.sessionid,
     userId: String(data.userId ?? ""),
     username,
     method: "web",
