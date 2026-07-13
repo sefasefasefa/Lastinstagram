@@ -24,6 +24,7 @@ A Turkish-language tracker/subscriber panel web app (frontend: "Takipçi Paneli"
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
+- OS support: developed on Replit (linux-x64) but also runs on Windows/macOS for local dev — `pnpm-workspace.yaml` overrides keep native binaries (esbuild, lightningcss, tailwindcss oxide, rollup) for win32/darwin, and scripts needing inline env vars use `cross-env` for Windows shell compatibility.
 
 ## Gotchas
 

@@ -5,3 +5,4 @@
 - [pnpm firewall blocks transitive package](pnpm-firewall-transitive-block.md) — a vulnerable version deep in an abandoned dependency (e.g. `request`) can 403; pin it via root `pnpm.overrides`.
 - [Fresh re-import empty database](fresh-reimport-empty-database.md) — re-import provisions a brand-new empty DB; backup SQL isn't auto-restored, so seed rows (default login) may be missing.
 - [PGlite local DB fallback](pglite-local-db-fallback.md) — no-install local Postgres via embedded PGlite; watch bundler-breaks-__dirname and pg_dump COPY/restrict pitfalls.
+- [Windows local dev compat](windows-local-dev-compat.md) — Replit pnpm workspaces often strip non-linux platform binaries and use bash-only script syntax; both break Windows.
