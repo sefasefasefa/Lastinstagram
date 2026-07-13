@@ -51,7 +51,12 @@ _Describe the high-level user-facing capabilities of this app once they exist._
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Declined: automating Instagram actions (auto-like, auto story-view/seen, follower/metrics polling) via Instagram's private mobile API and stored session cookies — violates Instagram's ToS and risks account suspension. See the `automation_jobs` gotcha above; this boundary has been raised twice.
+
+## Setup notes (imported project)
+
+- On a fresh import, `pnpm install` was run, `pnpm --filter @workspace/db run push` created the schema, then the pre-existing tables were dropped (`DROP SCHEMA public CASCADE`) and `./scripts/db-restore.sh` was re-run to load `lib/db/backup/database.sql` (schema + data) — `db push` and the raw SQL dump can't coexist since the dump has no `DROP TABLE`/`IF NOT EXISTS` guards.
+- Both workflows (`artifacts/api-server: API Server`, `artifacts/takipci-paneli: web`) are running. Login verified working: `admin` / `admin123`.
 
 ## Pointers
 

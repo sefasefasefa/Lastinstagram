@@ -1,0 +1,56 @@
+1. Kullanıcı Profili Görüntüleme (User Info API)Bir kullanicinin takipci sayisi, biyografisi, gonderi sayisi ve gizlilik durumu gibi profil detaylarini goruntulemek icin kullanici ID'si uzerinden mobil API sorgusu yapilir.  HTTP Metodu: GETGiris Uc Noktasi (URL): [https://i.instagram.com/api/v1/users/](https://i.instagram.com/api/v1/users/){user_id}/info/[cite: 3, 5, 6]Gerekli HTTP Basliklari:User-Agent: Mobil uygulama parmak izi.  X-IG-App-ID: 1217981644879628 (Android uygulama ID'si).  Cookie: Giris sonrasi elde edilen sessionid, mid, ig_did ve csrftoken bilesenleri.  Yanit (Response) Veri Yapisi:Sunucudan donen JSON nesnesi icerisinde kullaniciya ait tum detaylar yer alir:  JSON{
+  "user": {
+    "pk": 123456789,
+    "username": "hedef_kullanici",
+    "full_name": "Hedef Profil",
+    "is_private": false,
+    "media_count": 142,
+    "follower_count": 10500,
+    "following_count": 420,
+    "biography": "Profil aciklamasi buraya gelir.",
+    "external_url": "https://example.com"
+  },
+  "status": "ok"
+}
+2. Gönderi ve Reels İçeriklerini ListelemeKullanicinin paylastigi gonderileri (Fotoğraf, Video, Carousel) veya Reels videolarini listelemek icin iki ayri uc nokta kullanilir.  A. Standart Gönderiler (Feed) ListelemeHTTP Metodu: GETURL: [https://i.instagram.com/api/v1/feed/user/](https://i.instagram.com/api/v1/feed/user/){user_id}/[cite: 5]Parametreler: Pagination (sayfalama) icin sonraki isteklerde query string olarak max_id parametresi eklenir.  B. Reels (Clips) ListelemeHTTP Metodu: GET (veya kütüphaneye göre POST)  URL: [https://i.instagram.com/api/v1/clips/user_clips/](https://i.instagram.com/api/v1/clips/user_clips/) (bazı sürümlerde /api/v1/clips/user_clips/ endpoint'ine gonderilen payload ile alinir).  JSON Payload Yapisi:JSON{
+  "target_user_id": "123456789",
+  "max_id": "",
+  "page_size": 20
+}
+3. Hikaye Görüntüleme ve "Görüldü" (Seen) İşaretlemeHikaye (Story) sistemi iki adimda calisir. Once kullanicinin aktif hikayeleri listelenir, ardindan hikayeyi izlediginizi belirtmek ve karsinin "izleyenler" listesine girmek icin goruldu istegi gonderilir.  Adım 1: Aktif Hikaye Listesini ÇekmeHTTP Metodu: GETURL: [https://i.instagram.com/api/v1/feed/reels_media/?user_ids=](https://i.instagram.com/api/v1/feed/reels_media/?user_ids=){user_id}[cite: 11]Donen Veri: Yanit icerisinde o kullaniciya ait yayindaki tum hikayelerin media_id ve taken_at (paylasim zamani) degerleri yer alir.  Adım 2: Hikayeyi "Görüldü" Olarak İşaretleme (Seen API)HTTP Metodu: POSTURL: [https://i.instagram.com/api/v1/media/seen/](https://i.instagram.com/api/v1/media/seen/)[cite: 7]Gonderilen JSON Payload (signed_body icinde paketlenir):[cite: 7]JSON{
+  "container_module": "feed_contextual_post",
+  "reels": {
+    "123456789_987654321": [
+      "28765432101234_123456789_1700000000"
+    ]
+  },
+  "live_vods": [],
+  "_uuid": "your_client_uuid_v4",
+  "_uid": "your_own_user_id"
+}
+reels anahtar degeri: "{hikaye_sahibi_id}_{kendi_kullanici_id'niz}" seklinde olmalidir.Liste elemani formatı: "{hikaye_media_id}_{hikaye_sahibi_id}_{taken_at_timestamp}" degerlerinin birlesimidir.4. Gönderi ve Reels Beğenme (Like API)Instagram ozel API'sinde begenme islemi /api/v1/media/{media_id}/like/ uc noktasina imzalama algoritmasiyla gonderilen bir POST istegi ile yapilir. Reels ve normal feed postlarinin begenme endpoint'leri aynidir.  HTTP Metodu: POSTURL: [https://i.instagram.com/api/v1/media/](https://i.instagram.com/api/v1/media/){media_id}/like/[cite: 12]Payload Yapisi (signed_body):[cite: 14, 15]JSON{
+  "media_id": "3213123123123_123456",
+  "src": "timeline",
+  "d": 0,
+  "module_info": {
+    "module_name": "profile",
+    "user_id": 123456,
+    "username": "hedef_kullanici"
+  }
+}
+d: Cift tiklama simulasyonudur (Double tap ile begenildiyse 1, butona basildiysa 0 olarak gonderilir).  src: Icerigin hangi yuzeyde goruldugudur (timeline, profile veya clips).  Imzalama Standardı: payload nesnesi JSON dizesine cevrildikten sonra, oturumun imzalama anahtari ile HMAC-SHA256 algoritmasindan gecirilir. Olusturulan veri $signed\_body = HMAC-SHA256(signing\_key, JSON\_payload) \cdot JSON\_payload$ formatinda istek govdesine signed_body parametresi olarak eklenir.  (Begeniyi kaldirmak icin ayni parametrelerle [https://i.instagram.com/api/v1/media/](https://i.instagram.com/api/v1/media/){media_id}/unlike/ uc noktasina POST gonderilir).  5. Beğenilme ve Görüntülenme Verilerini Çekme (Metrics)Bir gonderinin veya Reels videosunun toplam begeni sayisini, izlenme oranlarini ve o an oturum acmis kullanicinin o icerigi begenip begenmedigini kontrol etmek icin tekil medya detayini donduren "Media Info" uc noktasi sorgulanir.  HTTP Metodu: GETURL: [https://i.instagram.com/api/v1/media/](https://i.instagram.com/api/v1/media/){media_id}/info/[cite: 7]Gerekli HTTP Basliklari: Oturum cerezleri (sessionid vb.) ve mobil uygulama basliklari eklenmelidir.  Donen JSON Yanitinda Analiz Edilecek Kritik Alanlar:Yanit icerisinde donen "items" listesindeki ilk eleman analiz edilir:  JSON{
+  "items": [
+    {
+      "id": "3213123123123_123456",
+      "media_type": 2, 
+      "product_type": "clips", 
+      "like_count": 4850,
+      "has_liked": true,
+      "play_count": 25400,
+      "view_count": 24800,
+      "comment_count": 182
+    }
+  ],
+  "status": "ok"
+}
+Metrikleri okurken su alanlara dikkat edilmelidir:like_count: Icerigin aldigi toplam begeni sayisidir.  has_liked: true veya false doner. Istegi atan hesabin o icerigi begenip begenmedigini belirtir.  play_count (Reels & Videolar icin): Videonun toplam oynatilma (gosterim) sayisidir.  view_count (Standart Videolar icin): Tekil goruntulenme (izlenme) istatistigidir.  comment_count: Toplam yorum sayisidir.  
