@@ -4,6 +4,7 @@ import {
   IgLoginTwoFactorRequiredError,
 } from "instagram-private-api";
 import { INSTAGRAM_USER_AGENTS } from "./user-agents";
+import { loginToInstagram } from "./direct-login";
 
 export interface InstagramClientConfig {
   instagramUsername: string;
@@ -98,10 +99,38 @@ export class InstagramClient {
         );
       }
 
-      await this.client.account.login(
+      // Use direct HTTP login: PWD_INSTAGRAM:4 encryption + signed_body HMAC.
+      // Tries Mobile API first, falls back to Web API automatically.
+      const result = await loginToInstagram(
         this.config.instagramUsername,
         this.config.instagramPassword,
+        this.client,
       );
+
+      if (!result.success) {
+        if (result.errorType === "2fa") {
+          throw new Error(
+            "Instagram two-factor authentication is required. Use a serialized cookie jar or session cookie.",
+          );
+        }
+        if (result.errorType === "checkpoint") {
+          throw new Error(
+            "Instagram requires a checkpoint verification. Verify the account before trying again.",
+          );
+        }
+        if (result.errorType === "bad_password") {
+          throw new Error(
+            "Instagram username or password is incorrect.",
+          );
+        }
+        throw new Error(result.error ?? "Instagram login failed");
+      }
+
+      // Restore the session cookie into the IgApiClient so subsequent
+      // API calls (profile fetch, posts, stories…) use the authenticated session.
+      if (result.sessionId) {
+        await this.restoreSession(result.sessionId);
+      }
     } catch (error) {
       if (error instanceof IgLoginTwoFactorRequiredError) {
         throw new Error(
