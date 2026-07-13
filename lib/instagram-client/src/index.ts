@@ -2,6 +2,10 @@ import {
   IgApiClient,
   IgCheckpointError,
   IgLoginTwoFactorRequiredError,
+  IgActionSpamError,
+  IgSentryBlockError,
+  IgRequestsLimitError,
+  IgInactiveUserError,
 } from "instagram-private-api";
 import { INSTAGRAM_USER_AGENTS } from "./user-agents";
 import {
@@ -323,16 +327,49 @@ export class InstagramClient {
       } else if (result.sessionId) {
         await this.restoreSession(result.sessionId);
       }
+
+      // Instagram bazen login isteğine "başarılı" (sessionid dahil) yanıt
+      // verir, ama oturum aslında bir checkpoint/doğrulama ile kısıtlanmıştır
+      // — bu ancak oturumu kullanan ilk gerçek istekte ortaya çıkar. Bu yüzden
+      // burada currentUser() ile hemen doğruluyoruz; IgCheckpointError (veya
+      // benzeri bir engelleme) fırlarsa aşağıdaki catch bloğu bunu
+      // InstagramCaptchaChallengeError'a çevirip login()'i başarısız sayar —
+      // böylece görünüşte "başarılı" bir giriş, aslında kullanılamaz bir
+      // oturumla kullanıcıya sızmaz.
+      await this.client.account.currentUser();
     } catch (error) {
       if (error instanceof IgLoginTwoFactorRequiredError) {
         throw new Error(
           "Instagram two-factor authentication is required. Use a serialized cookie jar or session cookie.",
         );
       }
+      // Bu hatalar login isteğinin KENDİSİNDEN değil, login "başarılı"
+      // göründükten hemen sonraki doğrulama çağrısından (currentUser())
+      // gelebilir — yani Instagram sessionid vermiş ama oturum aslında
+      // kısıtlıdır. Hepsi InstagramCaptchaChallengeError'a çevrilir ki
+      // login() bunu asla sessiz bir "başarı" olarak raporlamasın.
       if (error instanceof IgCheckpointError) {
         throw new InstagramCaptchaChallengeError(
           "checkpoint",
           "Instagram requires a checkpoint verification. Verify the account before trying again.",
+        );
+      }
+      if (error instanceof IgSentryBlockError || error instanceof IgActionSpamError) {
+        throw new InstagramCaptchaChallengeError(
+          "spam_or_abuse",
+          "Instagram flagged this login as suspicious/automated activity and blocked it.",
+        );
+      }
+      if (error instanceof IgRequestsLimitError) {
+        throw new InstagramCaptchaChallengeError(
+          "rate_limit",
+          "Instagram rate-limited this login attempt. Wait a few minutes and try again.",
+        );
+      }
+      if (error instanceof IgInactiveUserError) {
+        throw new InstagramCaptchaChallengeError(
+          "spam_or_abuse",
+          "Instagram account is inactive/disabled and requires manual review.",
         );
       }
       throw error;
