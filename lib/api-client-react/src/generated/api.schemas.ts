@@ -211,6 +211,10 @@ export interface LoginError {
   twoFactorIdentifier?: string;
   /** Opaque context required by the Bloks verification chain; passed through automatically server-side. */
   twoStepVerificationContext?: string;
+  /** True when the failure is a captcha/anti-bot/checkpoint challenge from Instagram rather than a wrong username or password. */
+  isCaptcha?: boolean;
+  /** Heuristic classification of the challenge (e.g. checkpoint, captcha, rate_limit, spam_or_abuse) when isCaptcha is true. */
+  captchaType?: string | null;
 }
 
 export type VerifyTwoFactorRequestMethod = typeof VerifyTwoFactorRequestMethod[keyof typeof VerifyTwoFactorRequestMethod];

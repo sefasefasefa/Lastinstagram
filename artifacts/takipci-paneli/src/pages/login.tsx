@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useLogin, useVerifyTwoFactor, type VerifyTwoFactorRequestMethod } from "@workspace/api-client-react"
 import { Button, Card, Input, Label } from "../components/ui/core"
+import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert"
+import { ShieldAlert } from "lucide-react"
 
 type TwoFactorMethod = VerifyTwoFactorRequestMethod
 
@@ -39,6 +41,8 @@ export default function LoginPage() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [isCaptcha, setIsCaptcha] = useState(false)
+  const [captchaType, setCaptchaType] = useState<string | null>(null)
 
   // İki adımlı doğrulama gerektiğinde /auth/login yerine bu adıma geçilir.
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
@@ -48,6 +52,8 @@ export default function LoginPage() {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setIsCaptcha(false)
+    setCaptchaType(null)
     login.mutate(
       { data: { username, password } },
       {
@@ -58,6 +64,8 @@ export default function LoginPage() {
           const data = (err as { response?: { data?: {
             error?: string
             twoFactorRequired?: boolean
+            isCaptcha?: boolean
+            captchaType?: string | null
           } } })?.response?.data
 
           if (data?.twoFactorRequired) {
@@ -66,6 +74,11 @@ export default function LoginPage() {
             return
           }
 
+          // Captcha/checkpoint/rate-limit/spam-block failures are not a wrong
+          // password — show the challenge-specific message instead of the
+          // generic "check your username or password" text.
+          setIsCaptcha(Boolean(data?.isCaptcha))
+          setCaptchaType(data?.captchaType ?? null)
           setError(data?.error ?? "Giriş başarısız. Kullanıcı adı veya şifrenizi kontrol edin.")
         },
       },
@@ -190,7 +203,19 @@ export default function LoginPage() {
               />
             </div>
 
-            {error && (
+            {error && isCaptcha && (
+              <Alert variant="destructive" className="border-amber-500/50 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-500">
+                <ShieldAlert className="h-4 w-4" />
+                <AlertTitle>Güvenlik Doğrulaması Gerekiyor</AlertTitle>
+                <AlertDescription>
+                  {error}
+                  {captchaType && (
+                    <span className="block mt-1 text-xs opacity-80">Tespit türü: {captchaType}</span>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+            {error && !isCaptcha && (
               <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5">
                 <p className="text-sm text-destructive leading-snug">{error}</p>
               </div>

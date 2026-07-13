@@ -1306,7 +1306,106 @@ function readDeviceState(ig: IgApiClient) {
 
 // ── Sonuç tipi ────────────────────────────────────────────────────────────────
 
-export type LoginErrorType = "checkpoint" | "2fa" | "bad_password" | "unknown";
+export type LoginErrorType =
+  | "checkpoint"
+  | "captcha"
+  | "rate_limit"
+  | "spam_or_abuse"
+  | "2fa"
+  | "bad_password"
+  | "unknown";
+
+/**
+ * Instagram'ın giriş yanıtında (mobil/web) döndürebileceği çeşitli
+ * captcha/anti-bot/hız-sınırı işaretlerini sınıflandırır. Instagram bunu
+ * tek bir tutarlı alanla bildirmez — bazen error_type, bazen sadece message
+ * metni, bazen challenge/checkpoint URL'i olarak gelir; bu yüzden hepsine
+ * bakılır.
+ */
+const CHECKPOINT_ERROR_TYPES = new Set([
+  "checkpoint_required",
+  "checkpoint_challenge_required",
+  "challenge_required",
+]);
+
+const RATE_LIMIT_ERROR_TYPES = new Set(["rate_limit_error", "too_many_requests"]);
+
+const SPAM_ERROR_TYPES = new Set([
+  "feedback_required",
+  "spam",
+  "sentry_block",
+  "suspicious_login_reported",
+]);
+
+const CAPTCHA_MESSAGE_KEYWORDS = [
+  "captcha",
+  "recaptcha",
+  "hcaptcha",
+  "prove you're not a robot",
+  "prove you are not a robot",
+  "are you human",
+  "we detected unusual activity",
+  "we suspect automated behavior",
+  "suspicious activity",
+  "unusual activity",
+];
+
+const RATE_LIMIT_MESSAGE_KEYWORDS = [
+  "please wait a few minutes",
+  "try again later",
+  "too many requests",
+  "wait a few minutes before",
+];
+
+const SPAM_MESSAGE_KEYWORDS = [
+  "action blocked",
+  "we restrict certain activity",
+  "temporarily blocked",
+  "your account has been disabled",
+];
+
+function messageIncludesAny(message: string, keywords: string[]): boolean {
+  const lower = message.toLowerCase();
+  return keywords.some((kw) => lower.includes(kw));
+}
+
+/**
+ * Ham Instagram login yanıt gövdesini (data) inceleyip bir LoginErrorType
+ * belirler. error_type alanı öncelikli; yoksa message metnindeki anahtar
+ * kelimelere bakılır. Hiçbir eşleşme yoksa null döner (çağıran taraf
+ * bad_password/unknown gibi diğer ayrımları kendi yapar).
+ */
+export function classifyInstagramLoginError(
+  data: Record<string, unknown>,
+  httpStatus: number,
+): LoginErrorType | null {
+  const errorType = typeof data.error_type === "string" ? data.error_type : "";
+  const message = typeof data.message === "string" ? data.message : "";
+
+  if (
+    CHECKPOINT_ERROR_TYPES.has(errorType) ||
+    data.checkpoint_url ||
+    data.challenge
+  ) {
+    return "checkpoint";
+  }
+  if (RATE_LIMIT_ERROR_TYPES.has(errorType) || httpStatus === 429) {
+    return "rate_limit";
+  }
+  if (SPAM_ERROR_TYPES.has(errorType)) {
+    return "spam_or_abuse";
+  }
+  if (messageIncludesAny(message, CAPTCHA_MESSAGE_KEYWORDS)) {
+    return "captcha";
+  }
+  if (messageIncludesAny(message, RATE_LIMIT_MESSAGE_KEYWORDS)) {
+    return "rate_limit";
+  }
+  if (messageIncludesAny(message, SPAM_MESSAGE_KEYWORDS)) {
+    return "spam_or_abuse";
+  }
+  return null;
+}
 
 /**
  * /api/v1/accounts/login/ isteği HTTP 400 (TwoFactorRequired) döndüğünde
@@ -1415,8 +1514,11 @@ async function loginViaMobile(
       cookies: setCookies,
     };
   }
-  if (data.error_type === "checkpoint_required" || data.checkpoint_url) {
-    return { success: false, error: "checkpoint", errorType: "checkpoint" };
+  const classified = classifyInstagramLoginError(data, res.status);
+  if (classified) {
+    const msg =
+      typeof data.message === "string" ? data.message : classified;
+    return { success: false, error: msg, errorType: classified };
   }
   if (!res.ok || data.status === "fail") {
     const errorType: LoginErrorType =
@@ -1530,8 +1632,11 @@ async function loginViaWeb(
       cookies: [...initCookies, ...setCookies],
     };
   }
-  if (data.checkpoint_url) {
-    return { success: false, error: "checkpoint", errorType: "checkpoint" };
+  const classifiedWeb = classifyInstagramLoginError(data, res.status);
+  if (classifiedWeb) {
+    const msg =
+      typeof data.message === "string" ? data.message : classifiedWeb;
+    return { success: false, error: msg, errorType: classifiedWeb };
   }
   if (!res.ok || !data.authenticated) {
     const msg =
@@ -1582,10 +1687,17 @@ export async function loginToInstagram(
   const mobileResult = await loginViaMobile(username, encPassword, ig);
   if (mobileResult.success) return mobileResult;
 
-  // 2FA / checkpoint → web API'yi denemeye gerek yok
+  // 2FA / checkpoint / captcha / hız sınırı / spam → web API'yi denemeye gerek yok
+  const SHORT_CIRCUIT_TYPES: LoginErrorType[] = [
+    "2fa",
+    "checkpoint",
+    "captcha",
+    "rate_limit",
+    "spam_or_abuse",
+  ];
   if (
-    mobileResult.errorType === "2fa" ||
-    mobileResult.errorType === "checkpoint"
+    mobileResult.errorType &&
+    SHORT_CIRCUIT_TYPES.includes(mobileResult.errorType)
   ) {
     return mobileResult;
   }
@@ -1598,7 +1710,7 @@ export async function loginToInstagram(
     success: false,
     error: `${mobileResult.error} / ${webResult.error}`,
     errorType:
-      webResult.errorType === "2fa" || webResult.errorType === "checkpoint"
+      webResult.errorType && SHORT_CIRCUIT_TYPES.includes(webResult.errorType)
         ? webResult.errorType
         : "unknown",
   };

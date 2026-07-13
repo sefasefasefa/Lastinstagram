@@ -5,7 +5,11 @@ import { db, usersTable } from "@workspace/db";
 import { LoginBody, LoginResponse, GetMeResponse } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { initClientWithCredentials, getActiveClient } from "./instagram";
-import { InstagramTwoFactorRequiredError, type TwoFactorMethod } from "@workspace/instagram-client";
+import {
+  InstagramTwoFactorRequiredError,
+  InstagramCaptchaChallengeError,
+  type TwoFactorMethod,
+} from "@workspace/instagram-client";
 
 // express-session sets cookie.expires once a session is established.
 function sessionExpiryOf(req: import("express").Request): string {
@@ -90,15 +94,38 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       return;
     }
 
+    // Captcha / checkpoint / rate-limit / spam-block: this is NOT a wrong
+    // username or password, so it must never surface the generic
+    // "kullanıcı adı veya şifrenizi kontrol edin" message — show a
+    // challenge-specific message instead and flag isCaptcha for the client.
+    if (err instanceof InstagramCaptchaChallengeError) {
+      const CAPTCHA_MESSAGES: Record<typeof err.captchaType, string> = {
+        checkpoint: "Instagram hesabında güvenlik doğrulaması (checkpoint) gerekiyor. Instagram uygulamasından giriş yapıp doğrulamayı tamamlayın, ardından tekrar deneyin.",
+        captcha: "Instagram bir captcha/bot doğrulaması istiyor. Bu genellikle kullanıcı adı/şifre hatası değildir — Instagram uygulamasından veya tarayıcıdan giriş yapıp doğrulamayı tamamlayın.",
+        rate_limit: "Instagram çok fazla giriş denemesi algıladı ve isteği geçici olarak sınırladı. Lütfen birkaç dakika bekleyip tekrar deneyin.",
+        spam_or_abuse: "Instagram bu girişi şüpheli/otomatik davranış olarak işaretledi ve geçici olarak engelledi. Instagram uygulamasından giriş yapıp hesabı doğrulayın.",
+      };
+      res.status(401).json({
+        error: CAPTCHA_MESSAGES[err.captchaType],
+        isCaptcha: true,
+        captchaType: err.captchaType,
+      });
+      return;
+    }
+
     const msg = err instanceof Error ? err.message : "Instagram login failed";
 
     // Give a friendlier message for the most common errors
     if (msg.includes("checkpoint")) {
-      res.status(401).json({ error: "Instagram hesabında güvenlik doğrulaması gerekiyor. Instagram uygulamasından giriş yapıp doğrulamayı tamamlayın." });
+      res.status(401).json({
+        error: "Instagram hesabında güvenlik doğrulaması gerekiyor. Instagram uygulamasından giriş yapıp doğrulamayı tamamlayın.",
+        isCaptcha: true,
+        captchaType: "checkpoint",
+      });
     } else if (msg.includes("password") || msg.includes("Invalid") || msg.includes("incorrect")) {
-      res.status(401).json({ error: "Instagram kullanıcı adı veya şifresi hatalı." });
+      res.status(401).json({ error: "Instagram kullanıcı adı veya şifresi hatalı.", isCaptcha: false });
     } else {
-      res.status(401).json({ error: "Giriş başarısız: " + msg });
+      res.status(401).json({ error: "Giriş başarısız: " + msg, isCaptcha: false });
     }
     return;
   }

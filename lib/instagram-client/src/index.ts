@@ -55,6 +55,29 @@ export class InstagramTwoFactorRequiredError extends Error {
 }
 
 export type { TwoFactorInfo, TwoFactorMethod };
+export type { LoginErrorType } from "./direct-login";
+
+/**
+ * Instagram bir captcha/anti-bot doğrulaması, hız sınırı veya spam/kötüye
+ * kullanım engeli döndürdüğünde fırlatılır (checkpoint dışındaki türler için
+ * — checkpoint hâlâ ayrı bir düz Error mesajı olarak fırlatılır, geriye
+ * dönük uyumluluk için). Çağıran taraf (örn. /auth/login) bunu yakalayıp
+ * isCaptcha: true + captchaType alanlarıyla yapılandırılmış bir yanıt
+ * döndürebilir; böylece kullanıcıya "şifreniz yanlış" değil "güvenlik
+ * doğrulaması gerekiyor" mesajı gösterilir.
+ */
+export class InstagramCaptchaChallengeError extends Error {
+  readonly captchaType: "checkpoint" | "captcha" | "rate_limit" | "spam_or_abuse";
+
+  constructor(captchaType: "checkpoint" | "captcha" | "rate_limit" | "spam_or_abuse", message?: string) {
+    super(
+      message ??
+        "Instagram requires additional verification (captcha/checkpoint/rate limit) before login can proceed.",
+    );
+    this.name = "InstagramCaptchaChallengeError";
+    this.captchaType = captchaType;
+  }
+}
 
 /** Ham feed/clips öğesini InstagramPost şekline dönüştürür. */
 function mapRawMediaToPost(item: RawFeedItem): InstagramPost {
@@ -273,9 +296,17 @@ export class InstagramClient {
           });
         }
         if (result.errorType === "checkpoint") {
-          throw new Error(
+          throw new InstagramCaptchaChallengeError(
+            "checkpoint",
             "Instagram requires a checkpoint verification. Verify the account before trying again.",
           );
+        }
+        if (
+          result.errorType === "captcha" ||
+          result.errorType === "rate_limit" ||
+          result.errorType === "spam_or_abuse"
+        ) {
+          throw new InstagramCaptchaChallengeError(result.errorType, result.error);
         }
         if (result.errorType === "bad_password") {
           throw new Error("Instagram username or password is incorrect.");
@@ -299,7 +330,8 @@ export class InstagramClient {
         );
       }
       if (error instanceof IgCheckpointError) {
-        throw new Error(
+        throw new InstagramCaptchaChallengeError(
+          "checkpoint",
           "Instagram requires a checkpoint verification. Verify the account before trying again.",
         );
       }

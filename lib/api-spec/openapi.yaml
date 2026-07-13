@@ -924,6 +924,13 @@ components:
         twoStepVerificationContext:
           type: string
           description: Opaque context required by the Bloks verification chain; passed through automatically server-side.
+        isCaptcha:
+          type: boolean
+          description: True when the failure is a captcha/anti-bot/checkpoint challenge from Instagram rather than a wrong username or password.
+        captchaType:
+          type: string
+          nullable: true
+          description: Heuristic classification of the challenge (e.g. checkpoint, captcha, rate_limit, spam_or_abuse) when isCaptcha is true.
     VerifyTwoFactorRequest:
       type: object
       required: [verificationCode]
