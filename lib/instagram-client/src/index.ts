@@ -3,11 +3,13 @@ import {
   IgCheckpointError,
   IgLoginTwoFactorRequiredError,
 } from "instagram-private-api";
-
 export interface InstagramClientConfig {
-  username: string;
-  password?: string;
-  sessionCookie?: string;
+  instagramUsername: string;
+  instagramPassword?: string;
+  instagramSessionCookie?: string;
+  userAgent?: string;
+  proxyUrl?: string;
+  useProxy?: boolean;
 }
 
 export interface InstagramProfile {
@@ -48,10 +50,19 @@ export class InstagramClient {
   private loginPromise: Promise<void> | null = null;
 
   constructor(private readonly config: InstagramClientConfig) {
-    if (!config.username.trim()) {
+    if (!config.instagramUsername.trim()) {
       throw new Error("INSTAGRAM_USERNAME must be set");
     }
-    this.client.state.generateDevice(config.username);
+    this.client.state.generateDevice(config.instagramUsername);
+
+    if (config.useProxy && config.proxyUrl) {
+      this.client.state.proxyUrl = config.proxyUrl;
+    }
+
+    if (config.userAgent) {
+      this.client.state.deviceString = config.userAgent;
+    }
+
   }
 
   async login(): Promise<void> {
@@ -69,21 +80,21 @@ export class InstagramClient {
 
   private async performLogin(): Promise<void> {
     try {
-      if (this.config.sessionCookie) {
-        await this.restoreSession(this.config.sessionCookie);
+      if (this.config.instagramSessionCookie) {
+        await this.restoreSession(this.config.instagramSessionCookie);
         await this.client.account.currentUser();
         return;
       }
 
-      if (!this.config.password) {
+      if (!this.config.instagramPassword) {
         throw new Error(
           "INSTAGRAM_PASSWORD or INSTAGRAM_SESSION_COOKIE must be set",
         );
       }
 
       await this.client.account.login(
-        this.config.username,
-        this.config.password,
+        this.config.instagramUsername,
+        this.config.instagramPassword,
       );
     } catch (error) {
       if (error instanceof IgLoginTwoFactorRequiredError) {

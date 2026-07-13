@@ -1,65 +1,57 @@
-import "dotenv/config";
-import cron from "node-cron";
 import { InstagramClient } from "@workspace/instagram-client";
+import { schedule } from "node-cron";
+import { loadConfig } from "./config";
 
-const configuredTargetUsername = process.env.TARGET_USERNAME?.trim();
-const cronSchedule = process.env.CRON_SCHEDULE?.trim() || "0 */6 * * *";
+async function autoLike() {
+  console.log("Starting auto-like job...");
+  const config = loadConfig();
 
-if (!configuredTargetUsername) {
-  throw new Error("TARGET_USERNAME must be set");
-}
-
-const targetUsername: string = configuredTargetUsername;
-
-if (!cron.validate(cronSchedule)) {
-  throw new Error(`Invalid CRON_SCHEDULE: ${cronSchedule}`);
-}
-
-const client = new InstagramClient({
-  username: process.env.INSTAGRAM_USERNAME ?? "",
-  password: process.env.INSTAGRAM_PASSWORD,
-  sessionCookie: process.env.INSTAGRAM_SESSION_COOKIE,
-});
-
-let running = false;
-
-async function autoLike(): Promise<void> {
-  if (running) {
-    console.warn("Previous Instagram auto-like run is still active; skipping.");
+  if (!config.instagramUsername || (!config.instagramPassword && !config.instagramSessionCookie)) {
+    console.log("Instagram credentials not set in config. Exiting.");
     return;
   }
 
-  running = true;
-  try {
-    const posts = await client.getUserPosts(targetUsername, 1);
-    if (posts[0] && !posts[0].hasLiked) {
-      const liked = await client.likePost(posts[0].id);
-      console.log(liked ? `Liked post ${posts[0].id}` : `Could not like post ${posts[0].id}`);
-    }
+  const TARGET_USERS = config.targetUsers.split(",").map((u: string) => u.trim()).filter(Boolean);
+  if (TARGET_USERS.length === 0) {
+    console.log("No target users specified in config. Exiting.");
+    return;
+  }
 
-    const stories = await client.getUserStories(targetUsername);
-    for (const story of stories) {
-      const liked = await client.likeStory(story.id);
-      console.log(liked ? `Liked story ${story.id}` : `Could not like story ${story.id}`);
+  const client = new InstagramClient({
+    instagramUsername: config.instagramUsername,
+    instagramPassword: config.instagramPassword,
+    instagramSessionCookie: config.instagramSessionCookie,
+    userAgent: config.userAgent,
+
+    proxyUrl: config.proxyUrl,
+    useProxy: config.useProxy,
+  });
+
+  try {
+    await client.login();
+
+    for (const username of TARGET_USERS) {
+      console.log(`Processing user: ${username}`);
+      const posts = await client.getUserPosts(username, config.maxLikesPerRun * 2);
+      let likedCount = 0;
+
+      for (const post of posts) {
+        if (!post.hasLiked && likedCount < config.maxLikesPerRun) {
+          console.log(`Liking post ${post.id} from ${username}`);
+          const success = await client.likePost(post.id);
+          if (success) {
+            likedCount++;
+          }
+        }
+      }
+      console.log(`Liked ${likedCount} posts for user ${username}`);
     }
   } catch (error) {
-    console.error("Instagram auto-like run failed:", error);
-  } finally {
-    running = false;
+    console.error("Auto-like job failed:", error);
   }
 }
 
-console.log(`Instagram auto-like scheduler started with: ${cronSchedule}`);
-cron.schedule(cronSchedule, autoLike);
-void autoLike();
+const scriptConfig = loadConfig();
+schedule(`*/${scriptConfig.likeIntervalMinutes} * * * *`, autoLike);
 
-async function shutdown(): Promise<void> {
-  try {
-    await client.logout();
-  } finally {
-    process.exit(0);
-  }
-}
-
-process.on("SIGINT", () => void shutdown());
-process.on("SIGTERM", () => void shutdown());
+console.log(`Auto-like job scheduled to run every ${scriptConfig.likeIntervalMinutes} minutes.`);

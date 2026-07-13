@@ -10,9 +10,13 @@ router.use("/instagram", requireAuth);
 function getClient(): InstagramClient {
   if (!client) {
     client = new InstagramClient({
-      username: process.env.INSTAGRAM_USERNAME ?? "",
-      password: process.env.INSTAGRAM_PASSWORD,
-      sessionCookie: process.env.INSTAGRAM_SESSION_COOKIE,
+      instagramUsername: process.env.INSTAGRAM_USERNAME ?? "",
+      instagramPassword: process.env.INSTAGRAM_PASSWORD,
+      instagramSessionCookie: process.env.INSTAGRAM_SESSION_COOKIE,
+      userAgent: process.env.USER_AGENT,
+
+      proxyUrl: process.env.PROXY_URL,
+      useProxy: process.env.USE_PROXY === "true",
     });
   }
   return client;

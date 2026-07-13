@@ -59,12 +59,20 @@ export default function DashboardPage() {
                 Instagram
               </Button>
             </Link>
-            <Link href="/settings">
+            <Link href="/request-settings">
               <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
                 <Settings className="w-4 h-4 mr-2" />
-                Ayarlar
+                İstek Ayarları
               </Button>
             </Link>
+            {import.meta.env.VITE_ADMIN_ENABLED === 'true' ? (
+              <Link href="/settings">
+                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Ayarlar
+                </Button>
+              </Link>
+            ) : null}
             <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-muted-foreground hover:text-foreground">
               <LogOut className="w-4 h-4 mr-2" />
               Çıkış Yap

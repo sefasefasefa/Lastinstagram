@@ -6,7 +6,9 @@ import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 export function TrackedUserList({ category }: { category: TrackedUserCategory }) {
-  const { data: users, isLoading } = useListTrackedUsers({ category })
+  const { data: usersData, isLoading } = useListTrackedUsers({ category })
+  const users = usersData && Array.isArray(usersData) ? usersData : [];
+
   const deleteUser = useDeleteTrackedUser()
   const recordVisit = useRecordTrackedUserVisit()
   const queryClient = useQueryClient()

@@ -9,6 +9,7 @@ import { Toaster } from 'sonner';
 import { useGetMe } from '@workspace/api-client-react';
 import LoginPage from './pages/login';
 import DashboardPage from './pages/dashboard';
+import RequestSettingsPage from './pages/request-settings';
 import SettingsPage from './pages/settings';
 import InstagramPage from './pages/instagram';
 import NotFound from './pages/not-found';
@@ -46,11 +47,20 @@ function DashboardRoute() {
   return <DashboardPage />;
 }
 
+function RequestSettingsRoute() {
+  const { data: me, isPending } = useGetMe();
+
+  if (isPending) return null;
+  if (!me) return <Redirect to="/login" />;
+  return <RequestSettingsPage />;
+}
+
 function SettingsRoute() {
   const { data: me, isPending } = useGetMe();
 
   if (isPending) return null;
   if (!me) return <Redirect to="/login" />;
+  if (import.meta.env.VITE_ADMIN_ENABLED !== 'true') return <Redirect to="/dashboard" />;
   return <SettingsPage />;
 }
 
@@ -69,6 +79,7 @@ function AppRoutes() {
         <Route path="/" component={HomeRedirect} />
         <Route path="/login" component={LoginRoute} />
         <Route path="/dashboard" component={DashboardRoute} />
+        <Route path="/request-settings" component={RequestSettingsRoute} />
         <Route path="/settings" component={SettingsRoute} />
         <Route path="/instagram" component={InstagramRoute} />
         <Route component={NotFound} />
