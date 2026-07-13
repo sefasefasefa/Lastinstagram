@@ -53,52 +53,55 @@ function formatRelative(iso: string) {
   return `${days} gün önce`
 }
 
-// ── Media card ────────────────────────────────────────────────────────────────
-function MediaCard({ item }: { item: LikedMedia }) {
+// ── Media row (vertical list) ─────────────────────────────────────────────────
+function MediaRow({ item }: { item: LikedMedia }) {
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden group/card">
+    <div className="flex items-start gap-3 p-3 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors">
       {/* Thumbnail */}
-      <div className="relative aspect-square bg-muted overflow-hidden">
+      <div className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-muted">
         {item.thumbnailUrl ? (
           <img
             src={item.thumbnailUrl}
             alt={item.caption ?? ""}
             loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-300 group-hover/card:scale-105"
+            className="w-full h-full object-cover"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            {item.mediaType === "reel" ? <Play className="w-8 h-8" /> : <ImageIcon className="w-8 h-8" />}
+            {item.mediaType === "reel" ? <Play className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
           </div>
         )}
-
-        {/* Reel badge */}
+        {/* Type badge */}
         {item.mediaType === "reel" && (
-          <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-white text-[10px] font-medium">
-            <Play className="w-2.5 h-2.5" /> Reel
+          <div className="absolute bottom-0 inset-x-0 bg-black/50 flex items-center justify-center py-0.5">
+            <Play className="w-2.5 h-2.5 text-white" />
           </div>
         )}
-
-        {/* Liked status badge */}
-        <div className={`absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium backdrop-blur-sm
-          ${item.hasLiked ? "bg-rose-500/80 text-white" : "bg-black/50 text-muted-foreground"}`}>
-          {item.hasLiked
-            ? <><CheckCircle2 className="w-2.5 h-2.5" /> Beğenildi</>
-            : <><XCircle className="w-2.5 h-2.5" /> Beğenilmedi</>}
-        </div>
       </div>
 
-      {/* Info */}
-      <div className="p-3 space-y-1.5">
-        {item.caption && (
-          <p className="text-xs text-foreground line-clamp-2 leading-relaxed">{item.caption}</p>
+      {/* Content */}
+      <div className="flex-1 min-w-0 space-y-1.5">
+        {item.caption ? (
+          <p className="text-sm text-foreground line-clamp-2 leading-relaxed">{item.caption}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">Altyazı yok</p>
         )}
-        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-          <Clock className="w-2.5 h-2.5 shrink-0" />
-          {formatDate(item.likedAt)}
-          <span className="text-muted-foreground/50 mx-1">·</span>
-          {formatRelative(item.likedAt)}
-        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Liked badge */}
+          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full
+            ${item.hasLiked ? "bg-rose-500/15 text-rose-400" : "bg-muted text-muted-foreground"}`}>
+            {item.hasLiked
+              ? <><CheckCircle2 className="w-2.5 h-2.5" /> Beğenildi</>
+              : <><XCircle className="w-2.5 h-2.5" /> Beğenilmedi</>}
+          </span>
+          {/* Time */}
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <Clock className="w-2.5 h-2.5" />
+            {formatDate(item.likedAt)}
+            <span className="text-muted-foreground/40">·</span>
+            {formatRelative(item.likedAt)}
+          </span>
+        </div>
       </div>
     </div>
   )
@@ -120,16 +123,26 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
     { query: { enabled: open && !!user } }
   )
 
+  const showMedia = !!user && (user.category === "liked_post" || user.category === "liked_reel")
+
   const { data: media, isLoading: mediaLoading } = useListTrackedUserMedia(
     user?.id ?? 0,
-    { query: { enabled: open && !!user && user.category !== "follower" && user.category !== "liked_story" } }
+    { query: { enabled: open && showMedia } }
   )
 
   if (!user) return null
 
-  const siblings: TrackedUser[] = Array.isArray(allUsers)
-    ? (allUsers as TrackedUser[]).filter(u => u.username === user.username && u.id !== user.id)
-    : []
+  // Deduplicate siblings by category (only keep one entry per category)
+  const siblings: TrackedUser[] = (() => {
+    if (!Array.isArray(allUsers)) return []
+    const seenCategories = new Set<Category>([user.category])
+    return (allUsers as TrackedUser[]).filter(u => {
+      if (u.username !== user.username || u.id === user.id) return false
+      if (seenCategories.has(u.category)) return false
+      seenCategories.add(u.category)
+      return true
+    })
+  })()
 
   const categoryOrder: Category[] = ["follower", "liked_post", "liked_story", "liked_reel"]
   const allEntries: TrackedUser[] = [user, ...siblings].sort(
@@ -140,8 +153,10 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
   const lastInteractions = allEntries.map(e => e.lastInteractionAt).filter(Boolean) as string[]
   const mostRecentInteraction = lastInteractions.length > 0 ? lastInteractions.sort().at(-1)! : null
 
-  const showMedia = user.category === "liked_post" || user.category === "liked_reel"
-  const mediaItems: LikedMedia[] = Array.isArray(media) ? media : []
+  // Newest first (en üstte en yeni, en altta en eski)
+  const mediaItems: LikedMedia[] = Array.isArray(media)
+    ? [...(media as LikedMedia[])].sort((a, b) => new Date(b.likedAt).getTime() - new Date(a.likedAt).getTime())
+    : []
 
   const handleOpenInstagram = () => {
     window.open(`https://www.instagram.com/${user.username}/`, "_blank", "noopener,noreferrer")
@@ -156,7 +171,7 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg p-0 overflow-hidden gap-0 translate-y-[-50%] max-h-[90vh] flex flex-col">
 
-        {/* Header */}
+        {/* Banner */}
         <div className="relative h-24 bg-gradient-to-br from-primary/20 via-primary/10 to-transparent shrink-0">
           <div className="absolute -bottom-10 left-6">
             <Avatar className="w-20 h-20 ring-4 ring-card shadow-xl">
@@ -217,27 +232,7 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
               )}
             </div>
 
-            {/* Per-category breakdown */}
-            {allEntries.length > 1 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Kategori Detayı</p>
-                <div className="rounded-lg border border-border divide-y divide-border overflow-hidden">
-                  {allEntries.map(e => {
-                    const meta = CATEGORY_META[e.category]
-                    return (
-                      <div key={e.id} className="flex items-center justify-between px-3 py-2.5 text-sm">
-                        <span className={`flex items-center gap-2 font-medium ${meta.color}`}>
-                          {meta.icon}{meta.label}
-                        </span>
-                        <span className="text-muted-foreground font-mono text-xs">{e.interactionCount} etkileşim</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* ── Media grid ── */}
+            {/* ── Media list (liked_post / liked_reel) ── */}
             {showMedia && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -249,29 +244,33 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
                   )}
                 </div>
 
+                {/* Loading skeletons */}
                 {mediaLoading && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {[1, 2, 3, 4].map(i => (
-                      <div key={i} className="rounded-xl border border-border bg-card overflow-hidden animate-pulse">
-                        <div className="aspect-square bg-muted" />
-                        <div className="p-3 space-y-2">
-                          <div className="h-3 bg-muted rounded w-3/4" />
-                          <div className="h-2.5 bg-muted rounded w-1/2" />
+                  <div className="space-y-2">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-border bg-card animate-pulse">
+                        <div className="w-16 h-16 shrink-0 rounded-lg bg-muted" />
+                        <div className="flex-1 space-y-2 pt-1">
+                          <div className="h-3 bg-muted rounded w-full" />
+                          <div className="h-3 bg-muted rounded w-4/5" />
+                          <div className="h-2.5 bg-muted rounded w-1/2 mt-2" />
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
 
+                {/* Empty state */}
                 {!mediaLoading && mediaItems.length === 0 && (
                   <div className="py-8 text-center border border-dashed border-border rounded-xl text-sm text-muted-foreground">
                     Henüz içerik kaydedilmemiş.
                   </div>
                 )}
 
+                {/* Media rows — newest first */}
                 {!mediaLoading && mediaItems.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {mediaItems.map(item => <MediaCard key={item.id} item={item} />)}
+                  <div className="space-y-2">
+                    {mediaItems.map(item => <MediaRow key={item.id} item={item} />)}
                   </div>
                 )}
               </div>
