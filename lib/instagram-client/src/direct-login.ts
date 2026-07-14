@@ -30,6 +30,7 @@ const WEB_LOGIN_URL =
   "https://www.instagram.com/api/v1/web/accounts/login/ajax/";
 const CONTACT_POINT_URL =
   "https://i.instagram.com/api/v1/accounts/contact_point_prefill/";
+const QE_SYNC_URL = "https://i.instagram.com/api/v1/qe/sync/";
 const SHARED_DATA_URL =
   "https://www.instagram.com/data/shared_data/";
 
@@ -81,6 +82,23 @@ function detectKeyType(pubKeyBase64: string): "ec" | "rsa" {
     return keyObj.asymmetricKeyType === "ec" ? "ec" : "rsa";
   } catch {
     return "rsa";
+  }
+}
+
+/**
+ * Instagram'in web shared_data uç noktası bazen hex (32 bayt) anahtar döndürüyor.
+ * Bu format RSA/EC SPKI DER değil, şifreleme koduyla uyumsuz. Sadece base64
+ * görünen ve PEM/DER olarak çözülebilen anahtarları kabul et.
+ */
+function isValidBase64PubKey(value: string): boolean {
+  if (!value || value.length < 64) return false;
+  // Hex string (sadece [0-9a-fA-F] ve uzunluğu çift) ise base64 PEM değildir.
+  if (/^[0-9a-fA-F]+$/.test(value) && value.length % 2 === 0) return false;
+  try {
+    const buf = Buffer.from(value, "base64");
+    return buf.length >= 64;
+  } catch {
+    return false;
   }
 }
 
@@ -218,7 +236,7 @@ async function fetchKeyFromContactPointPrefill(
         "User-Agent": MOBILE_UA,
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-IG-App-ID": IG_APP_ID,
-        "X-IG-Capabilities": "3brTvw==",
+        "X-IG-Capabilities": "3brTvw0=",
         "X-IG-Connection-Type": "WIFI",
       },
       body: new URLSearchParams({ ig_sig_key_version, signed_body }).toString(),
@@ -227,7 +245,7 @@ async function fetchKeyFromContactPointPrefill(
     // Cevap headerından anahtar
     const hdrKeyId = res.headers.get("ig-set-password-encryption-key-id");
     const hdrPubKey = res.headers.get("ig-set-password-encryption-pub-key");
-    if (hdrKeyId && hdrPubKey) {
+    if (hdrKeyId && hdrPubKey && isValidBase64PubKey(hdrPubKey)) {
       const keyId = Number(hdrKeyId);
       return { keyId, pubKeyBase64: hdrPubKey, keyType: detectKeyType(hdrPubKey) };
     }
@@ -236,7 +254,7 @@ async function fetchKeyFromContactPointPrefill(
     let body: Record<string, unknown> = {};
     try { body = (await res.json()) as Record<string, unknown>; } catch {}
     const enc = body.encryption as Record<string, string> | undefined;
-    if (enc?.key_id && enc?.public_key) {
+    if (enc?.key_id && enc?.public_key && isValidBase64PubKey(enc.public_key)) {
       const pubKeyBase64 = enc.public_key;
       return {
         keyId: Number(enc.key_id),
@@ -263,7 +281,7 @@ async function fetchKeyFromWebSharedData(): Promise<EncryptionKey | null> {
     if (!res.ok) return null;
     const data = (await res.json()) as Record<string, unknown>;
     const enc = data.encryption as Record<string, string> | undefined;
-    if (enc?.key_id && enc?.public_key) {
+    if (enc?.key_id && enc?.public_key && isValidBase64PubKey(enc.public_key)) {
       const pubKeyBase64 = enc.public_key;
       return {
         keyId: Number(enc.key_id),
@@ -276,7 +294,51 @@ async function fetchKeyFromWebSharedData(): Promise<EncryptionKey | null> {
 }
 
 /**
- * 3. Kaynak: qe/sync (instagram-private-api ile) — son fallback.
+ * 3. Kaynak: qe/sync, doğrudan HTTP üzerinden.
+ *    Instagram bu uç noktaya 200/400 dönse de her zaman geçerli bir
+ *    base64 PEM public key içeren ig-set-password-encryption-* headerları
+ *    döndürür. Bu en güvenilir kaynak olduğu için doğrudan çağrılır.
+ */
+async function fetchKeyFromQeSyncDirect(
+  ig: IgApiClient,
+): Promise<EncryptionKey | null> {
+  try {
+    const s = readDeviceState(ig);
+    const json = JSON.stringify({
+      id: s.uuid,
+      _csrftoken: s.csrfToken,
+      _uuid: s.uuid,
+      experiments: "",
+    });
+    const { signed_body, ig_sig_key_version } = signBody(json);
+
+    const res = await loginFetch(QE_SYNC_URL, {
+      method: "POST",
+      headers: {
+        "User-Agent": MOBILE_UA,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-IG-App-ID": IG_APP_ID,
+        "X-IG-Capabilities": "3brTvw0=",
+        "X-IG-Connection-Type": "WIFI",
+        "X-DEVICE-ID": s.uuid,
+      },
+      body: new URLSearchParams({ ig_sig_key_version, signed_body }).toString(),
+    });
+
+    const hdrKeyId = res.headers.get("ig-set-password-encryption-key-id");
+    const hdrPubKey = res.headers.get("ig-set-password-encryption-pub-key");
+    if (hdrKeyId && hdrPubKey && isValidBase64PubKey(hdrPubKey)) {
+      const keyId = Number(hdrKeyId);
+      return { keyId, pubKeyBase64: hdrPubKey, keyType: detectKeyType(hdrPubKey) };
+    }
+  } catch (err) {
+    console.warn("[direct-login] qe/sync direct key fetch failed:", err);
+  }
+  return null;
+}
+
+/**
+ * 4. Kaynak: qe/sync (instagram-private-api ile) — son fallback.
  *    ig.state.passwordEncryptionPubKey headerını doldurur.
  */
 async function fetchKeyFromQeSync(
@@ -288,30 +350,69 @@ async function fetchKeyFromQeSync(
     }
     const pubKeyBase64 = ig.state.passwordEncryptionPubKey;
     const keyId = Number(ig.state.passwordEncryptionKeyId) || 0;
-    if (pubKeyBase64 && keyId) {
+    if (pubKeyBase64 && keyId && isValidBase64PubKey(pubKeyBase64)) {
       return { keyId, pubKeyBase64, keyType: detectKeyType(pubKeyBase64) };
     }
-  } catch {}
+  } catch (err) {
+    console.warn("[direct-login] qe/sync library key fetch failed:", err);
+  }
   return null;
 }
 
 /**
  * Tüm anahtar kaynaklarını sırayla dener ve ilk başarılı sonucu döner.
- * Öncelik: contact_point_prefill → sharedData → qe/sync
+ * Öncelik: qe/sync (direct) → contact_point_prefill → qe/sync (library) → sharedData
+ * (sharedData bazen PEM/DER olmayan hex anahtar döndürüyor).
  */
 async function resolveEncryptionKey(
   ig: IgApiClient,
 ): Promise<EncryptionKey> {
-  const key =
-    (await fetchKeyFromContactPointPrefill(ig)) ??
-    (await fetchKeyFromWebSharedData()) ??
-    (await fetchKeyFromQeSync(ig));
+  let key: EncryptionKey | null = null;
+  let source = "";
+
+  try {
+    key = await fetchKeyFromQeSyncDirect(ig);
+    if (key) source = "qe/sync_direct";
+  } catch (err) {
+    console.warn("[direct-login] qe/sync direct key fetch failed:", err);
+  }
+
+  if (!key) {
+    try {
+      key = await fetchKeyFromContactPointPrefill(ig);
+      if (key) source = "contact_point_prefill";
+    } catch (err) {
+      console.warn("[direct-login] contact_point_prefill key fetch failed:", err);
+    }
+  }
+
+  if (!key) {
+    try {
+      key = await fetchKeyFromQeSync(ig);
+      if (key) source = "qe/sync_library";
+    } catch (err) {
+      console.warn("[direct-login] qe/sync library key fetch failed:", err);
+    }
+  }
+
+  if (!key) {
+    try {
+      key = await fetchKeyFromWebSharedData();
+      if (key) source = "shared_data";
+    } catch (err) {
+      console.warn("[direct-login] shared_data key fetch failed:", err);
+    }
+  }
 
   if (!key) {
     throw new Error(
       "Instagram şifreleme anahtarı hiçbir kaynaktan alınamadı.",
     );
   }
+
+  console.log(
+    `[direct-login] Encryption key resolved from ${source}, keyId=${key.keyId}, keyType=${key.keyType}`,
+  );
   return key;
 }
 
@@ -1489,7 +1590,7 @@ async function loginViaMobile(
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "Accept-Language": "tr-TR",
         "X-IG-App-ID": IG_APP_ID,
-        "X-IG-Capabilities": "3brTvw==",
+        "X-IG-Capabilities": "3brTvw0=",
         "X-IG-Connection-Type": "WIFI",
         "X-IG-Connection-Speed": "-1kbps",
         "X-CSRFToken": s.csrfToken,

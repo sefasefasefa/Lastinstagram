@@ -142,7 +142,8 @@ def run():
             response_body = resp.content
             out = {
                 "status": resp.status_code,
-                "ok": resp.status_code < 400,
+                # ok = bridge itself succeeded; HTTP status is in "status".
+                "ok": True,
                 "url": getattr(resp, "url", url),
                 "headers": response_headers,
                 "cookies": cookie_strings,
