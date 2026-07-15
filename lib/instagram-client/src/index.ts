@@ -222,7 +222,7 @@ export class InstagramClient {
    * olduğunda) burada saklanır: getCheckpointOptions/selectCheckpointMethod/
    * completeCheckpoint çağrıları için checkpoint_url ve ön oturum cookie'leri.
    */
-  private pendingCheckpoint: { checkpointUrl: string; cookieHeader: string } | null = null;
+  private pendingCheckpoint: { checkpointUrl: string; cookieHeader: string; challengeContext?: string } | null = null;
   /** Keep-alive zamanlayıcısı (clearInterval ile durdurulur) */
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   /** Keep-alive aralığı: belgede önerilen 15-30 dakika → 20 dakika */
@@ -329,6 +329,10 @@ export class InstagramClient {
     const { checkpointUrl, cookieHeader } = this.pendingCheckpoint;
     const ctx = await fetchChallengeContext(checkpointUrl, cookieHeader, this.client.state.deviceString);
     if (ctx.error) throw new Error(`Checkpoint adımı sorgulanamadı: ${ctx.error}`);
+    // challenge_context HTML'den parse edildiyse sakla — select/complete adımları kullanacak
+    if (ctx._challengeContext) {
+      this.pendingCheckpoint = { ...this.pendingCheckpoint, challengeContext: ctx._challengeContext };
+    }
     return { stepName: ctx.stepName, choices: ctx.choices, message: ctx.message };
   }
 
@@ -342,8 +346,8 @@ export class InstagramClient {
         "Tamamlanacak bekleyen bir checkpoint akışı yok. Önce login() çağrılmalı.",
       );
     }
-    const { checkpointUrl, cookieHeader } = this.pendingCheckpoint;
-    const result = await selectChallengeMethod(checkpointUrl, cookieHeader, choice, this.client.state.deviceString);
+    const { checkpointUrl, cookieHeader, challengeContext } = this.pendingCheckpoint;
+    const result = await selectChallengeMethod(checkpointUrl, cookieHeader, choice, this.client.state.deviceString, challengeContext);
     if (!result.success) {
       throw new Error(`Doğrulama yöntemi seçilemedi: ${result.error ?? "bilinmeyen hata"}`);
     }
@@ -360,8 +364,8 @@ export class InstagramClient {
         "Tamamlanacak bekleyen bir checkpoint akışı yok. Önce login() çağrılmalı.",
       );
     }
-    const { checkpointUrl, cookieHeader } = this.pendingCheckpoint;
-    const result = await submitChallengeCode(checkpointUrl, cookieHeader, code, this.client.state.deviceString);
+    const { checkpointUrl, cookieHeader, challengeContext } = this.pendingCheckpoint;
+    const result = await submitChallengeCode(checkpointUrl, cookieHeader, code, this.client.state.deviceString, challengeContext);
     if (!result.success || !result.sessionCookies) {
       throw new Error(`Checkpoint doğrulaması başarısız: ${result.error ?? "bilinmeyen hata"}`);
     }

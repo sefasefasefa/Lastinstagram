@@ -1918,6 +1918,12 @@ export interface ChallengeContext {
   /** Kullanıcıya gösterilecek insan-okunabilir mesaj (varsa). */
   message?: string;
   error?: string;
+  /**
+   * auth_platform HTML'den parse edilen challenge_context JSON string'i.
+   * Mobil /api/v1/challenge/ endpoint'ine gönderilmek üzere saklanır.
+   * Dışarıya (API/frontend) açılmaz — dahili kullanım içindir.
+   */
+  _challengeContext?: string;
 }
 
 /**
@@ -1962,12 +1968,46 @@ export async function fetchChallengeContext(
       return { stepName: "unknown", error: `Beklenmeyen yanıt (HTTP ${res.status})` };
     }
 
-    // auth_platform 201 boş body VEYA HTML yanıt → kod henüz tetiklenmedi;
-    // seçim adımını göster. auth_platform web sayfası döndürdüğünde JSON parse
-    // başarısız olur (data = {}), bu durumda da varsayılan seçenekleri sun.
-    const jsonParseFailed = rawText.trim() !== "" && Object.keys(data).length === 0;
-    if (isAuthPlatform && (rawText.trim() === "" || jsonParseFailed)) {
-      console.log("[fetchChallengeContext] auth_platform HTML/boş yanıt → select_verify_method döndürülüyor");
+    // ── auth_platform HTML sayfasından challenge_context parse et ──────────────
+    // auth_platform bir JavaScript web uygulaması olduğu için yalnızca HTML
+    // döndürür. HTML içinde gömülü "challenge_context" JSON'u, Instagram'ın
+    // mobil /api/v1/challenge/ endpoint'ine POST yapmak için gereklidir.
+    let parsedChallengeContext: string | undefined;
+    if (isAuthPlatform && rawText.length > 100) {
+      // Pattern 1: "challenge_context":"<escaped-json>"
+      const ctxMatch = rawText.match(/"challenge_context"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      if (ctxMatch) {
+        // Unescape: \" → " ve \\ → \
+        const unescaped = ctxMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        parsedChallengeContext = unescaped;
+        console.log("[fetchChallengeContext] challenge_context parse edildi, uzunluk:", unescaped.length);
+      } else {
+        console.log("[fetchChallengeContext] challenge_context HTML'de bulunamadı");
+      }
+
+      // HTML'den phone_number ve email ipuçlarını da bul
+      const phoneHint = rawText.match(/"phone_number"\s*:\s*"([^"]+)"/)?.[1];
+      const emailHint = rawText.match(/"email"\s*:\s*"([^"]+)"/)?.[1];
+      if (phoneHint) console.log("[fetchChallengeContext] telefon ipucu:", phoneHint);
+      if (emailHint) console.log("[fetchChallengeContext] e-posta ipucu:", emailHint);
+
+      // auth_platform HTML → varsayılan seçeneklerle "select_verify_method" döndür
+      const choices: ChallengeChoice[] = [];
+      if (phoneHint) choices.push({ value: "0", label: `SMS ile gönder — ${phoneHint}` });
+      else choices.push({ value: "0", label: "SMS ile gönder (telefon)" });
+      if (emailHint) choices.push({ value: "1", label: `E-posta ile gönder — ${emailHint}` });
+      else choices.push({ value: "1", label: "E-posta ile gönder" });
+
+      return {
+        stepName: "select_verify_method",
+        choices,
+        message: "Instagram hesabınızı doğrulamak için bir yöntem seçin.",
+        _challengeContext: parsedChallengeContext,
+      };
+    }
+
+    // auth_platform boş body (HTTP 201) → yöntem seçim ekranı
+    if (isAuthPlatform && rawText.trim() === "") {
       return {
         stepName: "select_verify_method",
         choices: [
@@ -1978,26 +2018,20 @@ export async function fetchChallengeContext(
       };
     }
 
-    // Eski /challenge/ formatı: data.step_name
-    // auth_platform formatı: data.step_name veya data.type veya data.nonce_code vb.
+    // ── Eski /challenge/ JSON formatı ─────────────────────────────────────────
+    // data.step_name veya data.type ile adım belirlenir.
     let stepName = typeof data.step_name === "string" ? data.step_name : "";
-
-    // auth_platform bazen "type" alanıyla adımı bildirir
-    if (!stepName && typeof data.type === "string") {
-      stepName = data.type;
-    }
-    if (!stepName) stepName = "select_verify_method";  // güvenli varsayılan
+    if (!stepName && typeof data.type === "string") stepName = data.type;
+    if (!stepName) stepName = "select_verify_method";
 
     const stepData = (data.step_data ?? data.data ?? {}) as Record<string, unknown>;
 
     const choices: ChallengeChoice[] = [];
-    if (typeof stepData.phone_number === "string" && stepData.phone_number) {
+    if (typeof stepData.phone_number === "string" && stepData.phone_number)
       choices.push({ value: "0", label: `SMS ile gönder — ${stepData.phone_number}` });
-    }
-    if (typeof stepData.email === "string" && stepData.email) {
+    if (typeof stepData.email === "string" && stepData.email)
       choices.push({ value: "1", label: `E-posta ile gönder — ${stepData.email}` });
-    }
-    // Bazı yanıtlar step_data.choice içinde hazır seçenek listesi döndürür.
+
     if (Array.isArray(stepData.choice)) {
       for (const c of stepData.choice as unknown[]) {
         if (c && typeof c === "object" && "value" in c) {
@@ -2007,20 +2041,11 @@ export async function fetchChallengeContext(
       }
     }
 
-    // auth_platform: telefon/email bilgisi üst seviyede de gelebilir
     if (choices.length === 0) {
       if (typeof data.phone_number === "string" && data.phone_number)
         choices.push({ value: "0", label: `SMS ile gönder — ${data.phone_number}` });
       if (typeof data.email === "string" && data.email)
         choices.push({ value: "1", label: `E-posta ile gönder — ${data.email}` });
-    }
-
-    // auth_platform: JSON parse başarılı ama hâlâ hiç seçenek yoksa varsayılanları ekle
-    if (isAuthPlatform && choices.length === 0) {
-      choices.push(
-        { value: "0", label: "SMS ile gönder (telefon)" },
-        { value: "1", label: "E-posta ile gönder" },
-      );
     }
 
     return {
@@ -2033,16 +2058,81 @@ export async function fetchChallengeContext(
   }
 }
 
+/** Cookie header'dan csrftoken değerini çıkarır. */
+function extractCsrfFromCookie(cookieHeader: string): string {
+  return cookieHeader.match(/csrftoken=([^;,\s]+)/)?.[1] ?? "";
+}
+
 /**
  * step_name === "select_verify_method" adımında, kullanıcının seçtiği
  * yönteme (choice) Instagram'ın kod göndermesini tetikler.
+ *
+ * auth_platform checkpoint'ler için önce Instagram'ın mobil challenge API'sini
+ * (/api/v1/challenge/) dener; başarısız olursa auth_platform URL'sine doğrudan
+ * POST atar (eski yedek yol).
  */
 export async function selectChallengeMethod(
   checkpointUrl: string,
   cookieHeader: string,
   choice: string,
   userAgent = MOBILE_UA,
+  challengeContext?: string,
 ): Promise<{ success: boolean; stepName?: string; error?: string }> {
+  const isAuthPlatform = checkpointUrl.includes("auth_platform");
+  const csrfToken = extractCsrfFromCookie(cookieHeader);
+
+  // ── Önce mobil challenge API'sini dene (/api/v1/challenge/) ──────────────
+  // auth_platform web sayfası basit form POST'u işlemiyor; mobil API gerekli.
+  // challenge_context HTML'den parse edilmişse kullan; yoksa apc'yi fallback yap.
+  if (isAuthPlatform) {
+    const apcMatch = checkpointUrl.match(/[?&]apc=([^&]+)/);
+    const apc = apcMatch ? decodeURIComponent(apcMatch[1]) : "";
+
+    // challenge_context ya parse edilmiş JSON ya da {"apc":"..."} şeklinde bir wrapper
+    const ctxToSend = challengeContext ?? (apc ? JSON.stringify({ apc }) : "");
+
+    const mobileBody: Record<string, string> = {
+      choice,
+      _csrftoken: csrfToken,
+    };
+    if (ctxToSend) mobileBody.challenge_context = ctxToSend;
+
+    console.log("[selectChallengeMethod] mobil API deneniyor: choice=" + choice + " challengeContext:", ctxToSend ? ctxToSend.slice(0, 80) + "..." : "(yok)");
+
+    try {
+      const mobileRes = await loginFetch("https://i.instagram.com/api/v1/challenge/", {
+        method: "POST",
+        headers: {
+          "User-Agent": userAgent,
+          "Cookie": cookieHeader,
+          "X-IG-App-ID": IG_APP_ID,
+          "X-CSRFToken": csrfToken,
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "Accept": "application/json",
+          "Accept-Language": "tr-TR",
+        },
+        body: new URLSearchParams(mobileBody).toString(),
+      });
+
+      const mobileText = await mobileRes.text().catch(() => "");
+      console.log("[selectChallengeMethod] mobil API status:", mobileRes.status, "bodyPreview:", JSON.stringify(mobileText.slice(0, 200)));
+
+      let mobileData: Record<string, unknown> = {};
+      try { mobileData = mobileText ? (JSON.parse(mobileText) as Record<string, unknown>) : {}; } catch {}
+
+      if (mobileRes.ok && mobileData.status !== "fail") {
+        console.log("[selectChallengeMethod] mobil API başarılı — kod gönderildi");
+        return { success: true, stepName: typeof mobileData.step_name === "string" ? mobileData.step_name : undefined };
+      }
+
+      const mobileErr = typeof mobileData.message === "string" ? mobileData.message : `HTTP ${mobileRes.status}`;
+      console.log("[selectChallengeMethod] mobil API başarısız:", mobileErr, "— auth_platform URL yedek yoluna geçiliyor");
+    } catch (e) {
+      console.log("[selectChallengeMethod] mobil API ağ hatası:", e instanceof Error ? e.message : e, "— yedek yola geçiliyor");
+    }
+  }
+
+  // ── Yedek: auth_platform URL'sine doğrudan POST ──────────────────────────
   try {
     const res = await loginFetch(buildChallengeUrl(checkpointUrl), {
       method: "POST",
@@ -2050,26 +2140,24 @@ export async function selectChallengeMethod(
         "User-Agent": userAgent,
         "Cookie": cookieHeader,
         "X-IG-App-ID": IG_APP_ID,
+        "X-CSRFToken": csrfToken,
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "Accept-Language": "tr-TR",
         "X-Requested-With": "XMLHttpRequest",
+        "Referer": buildChallengeUrl(checkpointUrl),
       },
-      body: new URLSearchParams({ choice }).toString(),
+      body: new URLSearchParams({ choice, _csrftoken: csrfToken }).toString(),
     });
 
     const rawText = await res.text().catch(() => "");
-    console.log("[selectChallengeMethod] status:", res.status, "bodyLen:", rawText.length, "bodyPreview:", JSON.stringify(rawText.slice(0, 200)));
+    console.log("[selectChallengeMethod] yedek POST status:", res.status, "bodyLen:", rawText.length);
 
     let data: Record<string, unknown> = {};
-    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {
-      // HTML veya boş yanıt — JSON parse başarısız
-    }
+    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {}
 
-    const isAuthPlatform = checkpointUrl.includes("auth_platform");
-
-    // auth_platform 200/201 HTML yanıt → kod gönderildi say
+    // auth_platform HTML yanıtı → kod muhtemelen gönderildi
     if (isAuthPlatform && (res.status === 200 || res.status === 201) && Object.keys(data).length === 0) {
-      console.log("[selectChallengeMethod] auth_platform HTML yanıt → başarılı sayılıyor (kod gönderildi)");
+      console.log("[selectChallengeMethod] yedek: auth_platform HTML → başarılı sayılıyor");
       return { success: true };
     }
 
@@ -2088,13 +2176,80 @@ export async function selectChallengeMethod(
  * step_name === "verify_code" adımında, kullanıcının girdiği güvenlik
  * kodunu doğrular. Başarılı olursa Set-Cookie'den sessionid dahil tam
  * oturum cookie'lerini çıkarır.
+ *
+ * auth_platform checkpoint'ler için önce Instagram'ın mobil challenge API'sini
+ * (/api/v1/challenge/) dener; başarısız olursa auth_platform URL'sine doğrudan
+ * POST atar (eski yedek yol).
  */
 export async function submitChallengeCode(
   checkpointUrl: string,
   cookieHeader: string,
   code: string,
   userAgent = MOBILE_UA,
+  challengeContext?: string,
 ): Promise<{ success: boolean; sessionCookies?: SessionCookies; error?: string }> {
+  const isAuthPlatform = checkpointUrl.includes("auth_platform");
+  const csrfToken = extractCsrfFromCookie(cookieHeader);
+
+  /** Tek bir yanıttan session durumunu çıkarır ve döndürür. */
+  function parseSessionFromResponse(
+    setCookies: string[],
+    rawText: string,
+    status: number,
+    label: string,
+  ): { success: boolean; sessionCookies?: SessionCookies; error?: string } | null {
+    let data: Record<string, unknown> = {};
+    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {}
+    const sc = extractSessionCookies(setCookies);
+    const hasSession = Boolean(sc.sessionid);
+    console.log(`[submitChallengeCode][${label}] status:${status} hasSession:${hasSession} bodyLen:${rawText.length} bodyPreview:`, JSON.stringify(rawText.slice(0, 200)));
+    if (hasSession) return { success: true, sessionCookies: sc };
+    if (!rawText || (Object.keys(data).length === 0 && status === 200)) return null; // belirsiz — bir sonraki yolu dene
+    if (!((status >= 200 && status < 300)) || data.status === "fail") {
+      return { success: false, error: typeof data.message === "string" ? data.message : `HTTP ${status}` };
+    }
+    return null; // başarı ama session yok — devam et
+  }
+
+  // ── 1. Mobil challenge API (/api/v1/challenge/) ───────────────────────────
+  if (isAuthPlatform) {
+    const apcMatch = checkpointUrl.match(/[?&]apc=([^&]+)/);
+    const apc = apcMatch ? decodeURIComponent(apcMatch[1]) : "";
+    const ctxToSend = challengeContext ?? (apc ? JSON.stringify({ apc }) : "");
+
+    const mobileBody: Record<string, string> = {
+      security_code: code,
+      _csrftoken: csrfToken,
+    };
+    if (ctxToSend) mobileBody.challenge_context = ctxToSend;
+
+    console.log("[submitChallengeCode] mobil API deneniyor, challenge_context:", ctxToSend ? ctxToSend.slice(0, 60) + "..." : "(yok)");
+
+    try {
+      const mobileRes = await loginFetch("https://i.instagram.com/api/v1/challenge/", {
+        method: "POST",
+        headers: {
+          "User-Agent": userAgent,
+          "Cookie": cookieHeader,
+          "X-IG-App-ID": IG_APP_ID,
+          "X-CSRFToken": csrfToken,
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "Accept": "application/json",
+          "Accept-Language": "tr-TR",
+        },
+        body: new URLSearchParams(mobileBody).toString(),
+      });
+      const mobileCookies = getSetCookies(mobileRes);
+      const mobileText = await mobileRes.text().catch(() => "");
+      const mobileResult = parseSessionFromResponse(mobileCookies, mobileText, mobileRes.status, "mobil");
+      if (mobileResult) return mobileResult;
+      // null → belirsiz; yedek yola geç
+    } catch (e) {
+      console.log("[submitChallengeCode] mobil API ağ hatası:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  // ── 2. Yedek: auth_platform / legacy challenge URL'sine doğrudan POST ─────
   try {
     const res = await loginFetch(buildChallengeUrl(checkpointUrl), {
       method: "POST",
@@ -2102,57 +2257,37 @@ export async function submitChallengeCode(
         "User-Agent": userAgent,
         "Cookie": cookieHeader,
         "X-IG-App-ID": IG_APP_ID,
+        "X-CSRFToken": csrfToken,
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "Accept-Language": "tr-TR",
         "X-Requested-With": "XMLHttpRequest",
+        "Referer": buildChallengeUrl(checkpointUrl),
       },
-      body: new URLSearchParams({ security_code: code }).toString(),
+      body: new URLSearchParams({ security_code: code, _csrftoken: csrfToken }).toString(),
     });
-
-    // Set-Cookie başlıklarını ÖNCE oku (response body tüketilmeden)
     const setCookies = getSetCookies(res);
-
-    // Body'yi text olarak oku, sonra JSON parse dene
     const rawText = await res.text().catch(() => "");
-    console.log("[submitChallengeCode] status:", res.status, "setCookies:", setCookies.length, "bodyLen:", rawText.length, "bodyPreview:", JSON.stringify(rawText.slice(0, 300)));
-
     let data: Record<string, unknown> = {};
-    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {
-      // HTML veya boş yanıt — JSON parse başarısız
-    }
+    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {}
 
-    const sessionCookies = extractSessionCookies(setCookies);
-    const hasSession = Boolean(sessionCookies.sessionid);
+    console.log("[submitChallengeCode][yedek] status:", res.status, "setCookies:", setCookies.length, "bodyLen:", rawText.length);
 
-    // Oturum cookie'si varsa her zaman başarı
-    if (hasSession) {
-      return { success: true, sessionCookies };
-    }
+    const sc = extractSessionCookies(setCookies);
+    if (sc.sessionid) return { success: true, sessionCookies: sc };
 
-    // auth_platform: JSON parse başarısız ama HTTP 200 → kod kabul edilmiş
-    // ama sessionid farklı bir mekanizmayla (redirect vb.) gelecek olabilir.
-    // Bu durumu hata olarak değil, "oturum kurulamadı" olarak bil.
-    const isAuthPlatform = checkpointUrl.includes("auth_platform");
     if (isAuthPlatform && Object.keys(data).length === 0 && res.status === 200) {
       return {
         success: false,
-        error: "Kod gönderildi ancak oturum cookie'si alınamadı. Kodu tekrar deneyin veya Instagram uygulamasından checkpoint'i çözün.",
+        error: "Doğrulama kodu gönderildi ancak oturum kurulamadı. Kodu tekrar deneyin veya Instagram uygulamasından checkpoint'i tamamlayın.",
       };
     }
-
     if (!res.ok) {
-      const msg = typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
-      return { success: false, error: msg };
+      return { success: false, error: typeof data.message === "string" ? data.message : `HTTP ${res.status}` };
     }
     if (data.status === "fail") {
-      const msg = typeof data.message === "string" ? data.message : "Doğrulama kodu reddedildi";
-      return { success: false, error: msg };
+      return { success: false, error: typeof data.message === "string" ? data.message : "Doğrulama kodu reddedildi" };
     }
-
-    return {
-      success: false,
-      error: typeof data.message === "string" ? data.message : "Kod kabul edildi ama oturum kurulamadı",
-    };
+    return { success: false, error: "Kod kabul edildi ama oturum kurulamadı" };
   } catch (e) {
     return { success: false, error: `Ağ hatası (challenge verify): ${e instanceof Error ? e.message : e}` };
   }
