@@ -1547,9 +1547,14 @@ export async function verifySession(
 // forkları) gözlemlenen davranışa dayanır. Instagram tarafında değişebilir;
 // gerçek bir hesapla doğrulanmalıdır.
 
-function buildChallengeUrl(checkpointUrl: string): string {
+function buildChallengeUrl(checkpointUrl: string, forceWeb = false): string {
   if (checkpointUrl.startsWith("http")) return checkpointUrl;
-  return `https://i.instagram.com${checkpointUrl.startsWith("/") ? "" : "/"}${checkpointUrl}`;
+  // auth_platform is Instagram's web-based challenge system — must use www, not i.instagram.com
+  const isAuthPlatform = checkpointUrl.includes("auth_platform");
+  const base = (isAuthPlatform || forceWeb)
+    ? "https://www.instagram.com"
+    : "https://i.instagram.com";
+  return `${base}${checkpointUrl.startsWith("/") ? "" : "/"}${checkpointUrl}`;
 }
 
 export interface ChallengeChoice {
@@ -1604,10 +1609,23 @@ export async function fetchChallengeContext(
     // auth_platform formatını eski challenge formatına normalize et
     // auth_platform: { step_name, step_data } veya { type, data } veya farklı yapı döner
     // HTTP 201 = challenge başarıyla başlatıldı (auth_platform akışında geçerli)
+    const isAuthPlatform = checkpointUrl.includes("auth_platform");
     const isOk = res.status === 200 || res.status === 201;
 
     if (!isOk && Object.keys(data).length === 0) {
       return { stepName: "unknown", error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    }
+
+    // auth_platform 201 boş body → kod henüz tetiklenmedi; seçim adımını göster
+    if (isAuthPlatform && rawText.trim() === "") {
+      return {
+        stepName: "select_verify_method",
+        choices: [
+          { value: "0", label: "SMS ile gönder (telefon)" },
+          { value: "1", label: "E-posta ile gönder" },
+        ],
+        message: "Instagram hesabınızı doğrulamak için bir yöntem seçin.",
+      };
     }
 
     // Eski /challenge/ formatı: data.step_name
