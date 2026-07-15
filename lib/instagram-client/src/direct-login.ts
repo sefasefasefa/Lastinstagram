@@ -1500,12 +1500,15 @@ export async function verifySession(
     const errorType = (body["error_type"] as string | undefined) ?? "";
     const message   = (body["message"]    as string | undefined) ?? `HTTP ${res.status}`;
 
-    if (body["checkpoint_url"] || errorType === "checkpoint_challenge_required") {
+    if (body["checkpoint_url"] || body["challenge"] || errorType === "checkpoint_challenge_required") {
+      const cpUrl = extractCheckpointUrl(body);
+      console.log("[verifySession] Checkpoint tespit edildi — checkpointUrl:", cpUrl ?? "(yok)",
+        "challenge:", JSON.stringify(body["challenge"] ?? null));
       return {
         valid: false,
         errorType: "checkpoint",
         error: "Instagram requires checkpoint verification",
-        checkpointUrl: typeof body["checkpoint_url"] === "string" ? body["checkpoint_url"] : undefined,
+        checkpointUrl: cpUrl,
       };
     }
     if (errorType === "login_required" || res.status === 403) {
@@ -1804,6 +1807,26 @@ function messageIncludesAny(message: string, keywords: string[]): boolean {
  * kelimelere bakılır. Hiçbir eşleşme yoksa null döner (çağıran taraf
  * bad_password/unknown gibi diğer ayrımları kendi yapar).
  */
+/**
+ * Instagram login/verify yanıtından checkpoint URL'ini çıkarır.
+ * Instagram mobil API farklı alanlarda dönebilir:
+ *   - data.checkpoint_url  (string, örn. "/challenge/12345/abc/")
+ *   - data.challenge.url   (object içinde string)
+ *   - data.challenge.api_path (object içinde string)
+ */
+export function extractCheckpointUrl(data: Record<string, unknown>): string | undefined {
+  if (typeof data.checkpoint_url === "string" && data.checkpoint_url) {
+    return data.checkpoint_url;
+  }
+  const challenge = data.challenge;
+  if (challenge && typeof challenge === "object") {
+    const c = challenge as Record<string, unknown>;
+    if (typeof c.url === "string" && c.url) return c.url;
+    if (typeof c.api_path === "string" && c.api_path) return c.api_path;
+  }
+  return undefined;
+}
+
 export function classifyInstagramLoginError(
   data: Record<string, unknown>,
   httpStatus: number,
@@ -1816,6 +1839,17 @@ export function classifyInstagramLoginError(
     data.checkpoint_url ||
     data.challenge
   ) {
+    // Diagnostic: checkpoint durumunda Instagram'ın döndürdüğü ham alanları logla
+    console.log(
+      "[instagram-client] Checkpoint tespit edildi — ham yanıt alanları:",
+      JSON.stringify({
+        error_type: data.error_type,
+        message: data.message,
+        checkpoint_url: data.checkpoint_url,
+        challenge: data.challenge,
+        keys: Object.keys(data),
+      }),
+    );
     return "checkpoint";
   }
   if (RATE_LIMIT_ERROR_TYPES.has(errorType) || httpStatus === 429) {
@@ -1965,9 +1999,7 @@ async function loginViaMobile(
       error: msg,
       errorType: classified,
       checkpointUrl:
-        classified === "checkpoint" && typeof data.checkpoint_url === "string"
-          ? data.checkpoint_url
-          : undefined,
+        classified === "checkpoint" ? extractCheckpointUrl(data) : undefined,
       // Checkpoint çözümleme akışı, checkpoint tetiklenmeden önceki ön oturum
       // cookie'lerini (csrftoken/mid) gerektirir — 2FA akışıyla aynı mantık.
       cookies: classified === "checkpoint" ? setCookies : undefined,
@@ -2104,9 +2136,7 @@ async function loginViaWeb(
       error: msg,
       errorType: classifiedWeb,
       checkpointUrl:
-        classifiedWeb === "checkpoint" && typeof data.checkpoint_url === "string"
-          ? data.checkpoint_url
-          : undefined,
+        classifiedWeb === "checkpoint" ? extractCheckpointUrl(data) : undefined,
       cookies: classifiedWeb === "checkpoint" ? [...initCookies, ...setCookies] : undefined,
     };
   }
