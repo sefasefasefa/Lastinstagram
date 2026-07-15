@@ -1432,6 +1432,13 @@ export async function verifySession(
           "X-IG-Capabilities": "3brTvw0=",
           "X-IG-Connection-Type": "WIFI",
           "Accept-Language": "tr-TR",
+          // Instagram'ın bot/otomasyon tespiti Sec-Fetch-* başlıklarının
+          // gerçek bir tarayıcı/uygulama istekiyle uyumlu olmasını bekler.
+          // Bu başlıklar olmadan (veya yanlış değerlerde) "SecFetch Policy violation."
+          // hatası döner ve oturum reddedilir.
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty",
         },
         signal: AbortSignal.timeout(10_000),
       },
