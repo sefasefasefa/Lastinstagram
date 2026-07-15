@@ -146,11 +146,7 @@ export default function LoginPage() {
           // generic "check your username or password" text.
           setIsCaptcha(Boolean(data?.isCaptcha))
           setCaptchaType(data?.captchaType ?? null)
-          // data undefined = network timeout / aborted (funcaptcha çok uzun sürdü)
-          setError(
-            data?.error ??
-              "Instagram bir bot doğrulaması (funcaptcha) istedi ancak ücretsiz proxy'lerin hiçbiri Arkose sunucularına bağlanamadı. Ayarlar sayfasından residential bir proxy URL'si girin ve tekrar deneyin.",
-          )
+          setError(data?.error ?? "Giriş başarısız. Kullanıcı adı veya şifrenizi kontrol edin.")
         },
       },
     )

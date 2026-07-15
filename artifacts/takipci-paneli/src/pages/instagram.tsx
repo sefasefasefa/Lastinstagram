@@ -150,6 +150,18 @@ export default function InstagramPage() {
                 Ara
               </Button>
             </form>
+            {status.data?.authenticated && status.data.username && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery(status.data!.username!)
+                  setUsername(status.data!.username!)
+                }}
+                className="mt-3 text-xs text-primary underline-offset-2 hover:underline"
+              >
+                Kendi profilimi görüntüle (@{status.data.username})
+              </button>
+            )}
           </Card>
           <Card className="flex items-center justify-between p-6">
             <div>

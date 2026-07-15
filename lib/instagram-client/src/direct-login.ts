@@ -1418,9 +1418,21 @@ export async function pingKeepAlive(
  *          { valid: false, errorType, error } on failure
  *          { valid: true } on network/timeout errors (fail-open: don't block login)
  */
+/** Instagram web uygulaması kimliği (HAR'dan alınan gerçek web app ID). */
+const WEB_APP_ID = "936619743392459";
+
+/**
+ * HAR analizinden alınan gerçek tarayıcı User-Agent.
+ * i.instagram.com mobil endpoint'i Replit datacenter IP'sinden bloklanıyor;
+ * www.instagram.com web endpoint'i ise tarayıcı UA + web app ID ile çalışıyor.
+ */
+const WEB_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0";
+
 export async function verifySession(
   cookieHeader: string,
-  userAgent = MOBILE_UA,
+  _userAgent = MOBILE_UA,
 ): Promise<{
   valid: boolean;
   errorType?: "checkpoint" | "login_required" | "rate_limit" | "spam_or_abuse";
@@ -1428,30 +1440,49 @@ export async function verifySession(
   /** errorType === "checkpoint" olduğunda: challenge/resolve akışı için checkpoint_url. */
   checkpointUrl?: string;
 }> {
+  // Cookie header'dan csrftoken'ı çıkar (web endpoint için zorunlu).
+  const csrftoken = cookieHeader.match(/csrftoken=([^;]+)/)?.[1] ?? "";
+
   try {
+    // www.instagram.com web endpoint'ini kullan — i.instagram.com mobil endpoint'i
+    // Replit datacenter IP'sinden login_required döndürüyor (HAR analizi: Replit IP
+    // mobile API'de bloklu, web API'de değil). Web endpoint için tarayıcı UA ve
+    // web app ID (936619743392459) şart; aksi hâlde 401 alınıyor.
     const res = await fetch(
-      "https://i.instagram.com/api/v1/accounts/current_user/?edit=true",
+      "https://www.instagram.com/api/v1/accounts/current_user/?edit=true",
       {
         headers: {
-          "User-Agent": userAgent,
+          "User-Agent": WEB_UA,
           "Cookie": cookieHeader,
-          "X-IG-App-ID": IG_APP_ID,
-          "X-IG-Capabilities": "3brTvw0=",
-          "X-IG-Connection-Type": "WIFI",
-          "Accept-Language": "tr-TR",
-          // Instagram'ın bot/otomasyon tespiti Sec-Fetch-* başlıklarının
-          // gerçek bir tarayıcı/uygulama istekiyle uyumlu olmasını bekler.
-          // Bu başlıklar olmadan (veya yanlış değerlerde) "SecFetch Policy violation."
-          // hatası döner ve oturum reddedilir.
+          "X-IG-App-ID": WEB_APP_ID,
+          "X-CSRFToken": csrftoken,
+          "X-ASBD-ID": "359341",
+          "X-IG-WWW-Claim": "0",
+          "Accept": "*/*",
+          "Accept-Language": "tr,en;q=0.9",
+          "Origin": "https://www.instagram.com",
+          "Referer": "https://www.instagram.com/",
           "Sec-Fetch-Site": "same-origin",
           "Sec-Fetch-Mode": "cors",
           "Sec-Fetch-Dest": "empty",
+          "Sec-CH-UA": '"Not;A=Brand";v="8", "Chromium";v="150", "Microsoft Edge";v="150"',
+          "Sec-CH-UA-Mobile": "?0",
+          "Sec-CH-UA-Platform": '"Windows"',
         },
         signal: AbortSignal.timeout(10_000),
       },
     );
 
     if (res.status === 200) return { valid: true };
+
+    // 429 = Instagram doğrulama endpoint'ini geçici olarak throttle etti.
+    // Bu, session'ın geçersiz olduğu anlamına gelmez — login başarılıysa cookie
+    // zaten doğrudur. Fail-open uygula ki başarılı loginler throttle yüzünden
+    // engellenmesin.
+    if (res.status === 429) {
+      console.log("[verifySession] 429 rate-limit — session geçerli kabul ediliyor (throttle ≠ geçersiz session)");
+      return { valid: true };
+    }
 
     // Önce ham metni oku (JSON parse başarısız olursa teşhis için loglamak amacıyla),
     // sonra JSON'a çevirmeyi dene. Boş/HTML gövdeler burada yakalanır.

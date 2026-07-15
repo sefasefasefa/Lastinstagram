@@ -44,7 +44,7 @@ export async function solveFuncaptcha(
     blob?: string;
     proxy?: string;
     chromeVersion?: string;
-    /** Poll timeout in ms. Default 60 000. Lower for fast proxy rotation. */
+    /** Poll timeout in ms. Default 60 000. */
     timeoutMs?: number;
   } = {},
 ): Promise<string | null> {
@@ -138,7 +138,7 @@ export async function solveFuncaptchaWithProxies(
     // Chunk içindeki proxy'leri aynı anda dene — ilk başarılıyı al
     const result = await Promise.any(
       chunk.map((proxy) =>
-        solveFuncaptcha(preset, { proxy, timeoutMs: 18_000 }).then((token) => {
+        solveFuncaptcha(preset, { proxy, timeoutMs: 30_000 }).then((token) => {
           if (!token) throw new Error("no token");
           return token;
         }),

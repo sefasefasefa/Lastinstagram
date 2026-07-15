@@ -63,7 +63,10 @@ function errorMessage(error: unknown): string {
 }
 
 router.get("/instagram/status", (_req, res) => {
-  res.json({ authenticated: client?.isAuthenticated() ?? false });
+  res.json({
+    authenticated: client?.isAuthenticated() ?? false,
+    username: client?.isAuthenticated() ? client.getUsername() : null,
+  });
 });
 
 router.post("/instagram/login", async (_req, res): Promise<void> => {

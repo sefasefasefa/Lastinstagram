@@ -34,8 +34,7 @@ import {
   type ChallengeChoice,
   type DirectLoginResult,
 } from "./direct-login";
-import { solveFuncaptcha, solveFuncaptchaWithProxies } from "./funcaptcha-client";
-import { fetchProxyList, pickProxies, markProxyFailed } from "./proxy-rotator";
+import { solveFuncaptcha } from "./funcaptcha-client";
 
 /**
  * /api/v1/accounts/login/ HTTP 400 (TwoFactorRequired) döndürdüğünde
@@ -389,34 +388,9 @@ export class InstagramClient {
       const trySolveAndRetry = async (): Promise<boolean> => {
         console.log("[instagram-client] Funcaptcha ile checkpoint/captcha bypass deneniyor...");
 
-        // Proxy stratejisi:
-        //  1. Kullanıcı manuel proxy tanımladıysa → onu kullan
-        //  2. Yoksa → ProxyScrape listesinden proxy'leri çek ve paralel dene
-        let arkoseToken: string | null = null;
-        const configuredProxy =
-          this.config.useProxy && this.config.proxyUrl
-            ? this.config.proxyUrl
-            : undefined;
-
-        if (configuredProxy) {
-          arkoseToken = await solveFuncaptcha("instagram_login", {
-            proxy: configuredProxy,
-          }).catch(() => null);
-        } else {
-          console.log("[instagram-client] Manuel proxy yok — ProxyScrape listesinden proxy çekiliyor...");
-          const proxyList = await fetchProxyList().catch(() => [] as string[]);
-          if (proxyList.length > 0) {
-            const candidates = pickProxies(proxyList, 6); // 2 grup × 3 paralel = max ~36 sn
-            arkoseToken = await solveFuncaptchaWithProxies("instagram_login", candidates, 3);
-            // Başarısız olanlara işaret et (proxies objesinde değil, direkt list'ten)
-            if (!arkoseToken) {
-              candidates.forEach((p) => markProxyFailed(p));
-            }
-          } else {
-            // Liste boşsa proxy'siz dene (yine de büyük ihtimalle başarısız olur)
-            arkoseToken = await solveFuncaptcha("instagram_login").catch(() => null);
-          }
-        }
+        const arkoseToken = await solveFuncaptcha("instagram_login", {
+          proxy: this.config.useProxy && this.config.proxyUrl ? this.config.proxyUrl : undefined,
+        }).catch(() => null);
         if (!arkoseToken) {
           console.log("[instagram-client] Funcaptcha çözümü başarısız veya kullanılamıyor");
           return false;
