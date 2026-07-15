@@ -406,7 +406,7 @@ export class InstagramClient {
           console.log("[instagram-client] Manuel proxy yok — ProxyScrape listesinden proxy çekiliyor...");
           const proxyList = await fetchProxyList().catch(() => [] as string[]);
           if (proxyList.length > 0) {
-            const candidates = pickProxies(proxyList, 15); // ilk 15 adayı dene
+            const candidates = pickProxies(proxyList, 6); // 2 grup × 3 paralel = max ~36 sn
             arkoseToken = await solveFuncaptchaWithProxies("instagram_login", candidates, 3);
             // Başarısız olanlara işaret et (proxies objesinde değil, direkt list'ten)
             if (!arkoseToken) {
