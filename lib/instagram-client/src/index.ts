@@ -12,6 +12,7 @@ import {
   loginToInstagram,
   refreshCsrfToken,
   pingKeepAlive,
+  verifySession,
   updateCsrfInHeader,
   fetchUserInfo,
   fetchUserFeed,
@@ -359,24 +360,55 @@ export class InstagramClient {
 
       // Instagram bazen login isteğine "başarılı" (sessionid dahil) yanıt
       // verir, ama oturum aslında bir checkpoint/doğrulama ile kısıtlanmıştır
-      // — bu ancak oturumu kullanan ilk gerçek istekte ortaya çıkar. Bu yüzden
-      // burada currentUser() ile hemen doğruluyoruz; IgCheckpointError (veya
-      // benzeri bir engelleme) fırlarsa aşağıdaki catch bloğu bunu
-      // InstagramCaptchaChallengeError'a çevirip login()'i başarısız sayar —
-      // böylece görünüşte "başarılı" bir giriş, aslında kullanılamaz bir
-      // oturumla kullanıcıya sızmaz.
-      await this.client.account.currentUser();
+      // — bu ancak oturumu kullanan ilk gerçek istekte ortaya çıkar.
+      //
+      // IgApiClient.account.currentUser() yerine verifySession() kullanıyoruz:
+      // IgApiClient kendi request pipeline'ında çok sayıda ek header ekler ve
+      // farklı bir TLS/HTTP yapılandırması kullanır; bu, stealth-bridge üzerinden
+      // yapılan login'den sonra Instagram'ın bot tespitini tetikler ve
+      // login_required (403) döndürür. verifySession() doğrudan fetch ile aynı
+      // endpoint'e basit headerlar göndererek bu sorunu aşar.
+      if (this.session) {
+        const verify = await verifySession(
+          this.session.cookieHeader,
+          this.client.state.deviceString,
+        );
+        if (!verify.valid) {
+          const et = verify.errorType ?? "login_required";
+          if (et === "checkpoint") {
+            throw new InstagramCaptchaChallengeError(
+              "checkpoint",
+              "Instagram requires a checkpoint verification. Verify the account before trying again.",
+            );
+          }
+          if (et === "spam_or_abuse") {
+            throw new InstagramCaptchaChallengeError(
+              "spam_or_abuse",
+              "Instagram flagged this login as suspicious/automated activity.",
+            );
+          }
+          if (et === "rate_limit") {
+            throw new InstagramCaptchaChallengeError(
+              "rate_limit",
+              "Instagram rate-limited this login attempt. Wait a few minutes.",
+            );
+          }
+          // login_required veya bilinmeyen: oturum geçersiz
+          throw new InstagramCaptchaChallengeError(
+            "checkpoint",
+            verify.error ?? "Instagram session was not accepted after login.",
+          );
+        }
+      }
     } catch (error) {
+      if (error instanceof InstagramCaptchaChallengeError) throw error;
       if (error instanceof IgLoginTwoFactorRequiredError) {
         throw new Error(
           "Instagram two-factor authentication is required. Use a serialized cookie jar or session cookie.",
         );
       }
-      // Bu hatalar login isteğinin KENDİSİNDEN değil, login "başarılı"
-      // göründükten hemen sonraki doğrulama çağrısından (currentUser())
-      // gelebilir — yani Instagram sessionid vermiş ama oturum aslında
-      // kısıtlıdır. Hepsi InstagramCaptchaChallengeError'a çevrilir ki
-      // login() bunu asla sessiz bir "başarı" olarak raporlamasın.
+      // IgApiClient tabanlı hataları yakala (session cookie restore sonrası
+      // yapılan diğer çağrılardan gelebilir)
       if (error instanceof IgCheckpointError) {
         throw new InstagramCaptchaChallengeError(
           "checkpoint",

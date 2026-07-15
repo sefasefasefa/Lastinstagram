@@ -1397,6 +1397,69 @@ export async function pingKeepAlive(
   }
 }
 
+/**
+ * Verifies that a session (identified by its cookieHeader) is still valid by
+ * calling the current_user endpoint directly — without going through IgApiClient.
+ *
+ * Using IgApiClient.account.currentUser() after a stealth-bridge login causes
+ * 403 login_required because IgApiClient's request pipeline adds headers /
+ * uses a TLS stack that Instagram's bot-detection rejects. This function uses
+ * the same lightweight fetch approach as pingKeepAlive but returns a typed
+ * result so callers can distinguish error scenarios.
+ *
+ * @returns { valid: true } on HTTP 200
+ *          { valid: false, errorType, error } on failure
+ *          { valid: true } on network/timeout errors (fail-open: don't block login)
+ */
+export async function verifySession(
+  cookieHeader: string,
+  userAgent = MOBILE_UA,
+): Promise<{ valid: boolean; errorType?: "checkpoint" | "login_required" | "rate_limit" | "spam_or_abuse"; error?: string }> {
+  try {
+    const res = await fetch(
+      "https://i.instagram.com/api/v1/accounts/current_user/?edit=true",
+      {
+        headers: {
+          "User-Agent": userAgent,
+          "Cookie": cookieHeader,
+          "X-IG-App-ID": IG_APP_ID,
+          "X-IG-Capabilities": "3brTvw0=",
+          "X-IG-Connection-Type": "WIFI",
+          "Accept-Language": "tr-TR",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+
+    if (res.status === 200) return { valid: true };
+
+    let body: Record<string, unknown> = {};
+    try { body = (await res.json()) as Record<string, unknown>; } catch { /* ignore */ }
+
+    const errorType = (body["error_type"] as string | undefined) ?? "";
+    const message   = (body["message"]    as string | undefined) ?? `HTTP ${res.status}`;
+
+    if (body["checkpoint_url"] || errorType === "checkpoint_challenge_required") {
+      return { valid: false, errorType: "checkpoint", error: "Instagram requires checkpoint verification" };
+    }
+    if (errorType === "login_required" || res.status === 403) {
+      return { valid: false, errorType: "login_required", error: message };
+    }
+    if (res.status === 429) {
+      return { valid: false, errorType: "rate_limit", error: "Rate limited by Instagram" };
+    }
+    if (errorType === "sentry_block" || errorType === "spam") {
+      return { valid: false, errorType: "spam_or_abuse", error: message };
+    }
+
+    return { valid: false, errorType: "login_required", error: message };
+  } catch {
+    // Network / timeout — fail-open so transient errors don't block logins
+    return { valid: true };
+  }
+}
+
 function readDeviceState(ig: IgApiClient) {
   const uuid = ig.state.uuid ?? crypto.randomUUID();
   const phoneId = ig.state.phoneId ?? crypto.randomUUID();
