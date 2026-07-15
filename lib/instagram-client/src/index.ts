@@ -450,6 +450,11 @@ export class InstagramClient {
           // Funcaptcha bypass başarısız ama checkpoint_url mevcutsa,
           // interaktif challenge/resolve akışını (kod girişi) başlatılabilir
           // hale getir — auth.ts bunu InstagramCheckpointRequiredError ile yakalar.
+          console.log("[instagram-client] Checkpoint sonrası durum:", JSON.stringify({
+            errorType: result.errorType,
+            checkpointUrl: result.checkpointUrl ?? "(YOK)",
+            hasCookies: !!(result.cookies?.length),
+          }));
           if (result.errorType === "checkpoint" && result.checkpointUrl) {
             this.pendingCheckpoint = {
               checkpointUrl: result.checkpointUrl,
