@@ -138,6 +138,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
         captcha: "Instagram bir captcha/bot doğrulaması istiyor. Bu genellikle kullanıcı adı/şifre hatası değildir — Instagram uygulamasından veya tarayıcıdan giriş yapıp doğrulamayı tamamlayın.",
         rate_limit: "Instagram çok fazla giriş denemesi algıladı ve isteği geçici olarak sınırladı. Lütfen birkaç dakika bekleyip tekrar deneyin.",
         spam_or_abuse: "Instagram bu girişi şüpheli/otomatik davranış olarak işaretledi ve geçici olarak engelledi. Instagram uygulamasından giriş yapıp hesabı doğrulayın.",
+        blocked: "Instagram bu girişi genel olarak reddetti ve çözülebilir bir doğrulama adımı (checkpoint kodu) sunmadı — bu genellikle otomasyon/bot tespiti kaynaklıdır, hesabınızda mutlaka bekleyen bir checkpoint olduğu anlamına gelmez. Instagram uygulamasından bu hesapla normal giriş yapıp birkaç dakika kullandıktan sonra tekrar deneyin.",
       };
       res.status(401).json({
         error: CAPTCHA_MESSAGES[err.captchaType],

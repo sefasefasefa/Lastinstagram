@@ -27,3 +27,15 @@ choice-extraction logic accordingly. The resolution flow is wired end-to-end:
 `InstagramClient.pendingCheckpoint` → `/auth/checkpoint/options` →
 `/auth/checkpoint/select-method` → `/auth/checkpoint/verify` →
 `artifacts/takipci-paneli/src/pages/login.tsx` (method-select step, then code-entry step).
+
+**Confirmed real-world case (2026-07-15):** login itself can succeed (cookies
+applied) but the immediate post-login `verifySession()` current_user check
+gets a 400 with a genuinely empty body (no JSON keys at all, no
+`checkpoint_url`) — this is Instagram flatly rejecting the session (bot/automation
+detection on this device fingerprint/IP), not a resolvable "enter a code"
+checkpoint. There is no challenge to solve via the API in that state, so the
+interactive flow correctly can't trigger. This case is now classified as a
+distinct `captchaType: "blocked"` (separate from `"checkpoint"`) with an
+honest message, instead of falsely implying a checkpoint code exists.
+`verifySession()` also now logs the raw response text (not just parsed JSON
+keys) when the body doesn't parse, to aid diagnosing future unclassified 400s.

@@ -94,9 +94,9 @@ export class InstagramCheckpointRequiredError extends Error {
  * doğrulaması gerekiyor" mesajı gösterilir.
  */
 export class InstagramCaptchaChallengeError extends Error {
-  readonly captchaType: "checkpoint" | "captcha" | "rate_limit" | "spam_or_abuse";
+  readonly captchaType: "checkpoint" | "captcha" | "rate_limit" | "spam_or_abuse" | "blocked";
 
-  constructor(captchaType: "checkpoint" | "captcha" | "rate_limit" | "spam_or_abuse", message?: string) {
+  constructor(captchaType: "checkpoint" | "captcha" | "rate_limit" | "spam_or_abuse" | "blocked", message?: string) {
     super(
       message ??
         "Instagram requires additional verification (captcha/checkpoint/rate limit) before login can proceed.",
@@ -515,8 +515,12 @@ export class InstagramClient {
             };
             throw new InstagramCheckpointRequiredError();
           }
+          // checkpoint_url YOK: Instagram bize çözülebilir bir challenge vermedi,
+          // sadece login sonrası oturumu genel biçimde reddetti (çoğunlukla otomasyon/
+          // bot tespiti — gerçek bir "kod gir" checkpoint'i olmayabilir). Bu durumu
+          // "checkpoint" olarak etiketlemek yanıltıcı olur; ayrı bir tür kullan.
           throw new InstagramCaptchaChallengeError(
-            "checkpoint",
+            "blocked",
             verify.error ?? "Instagram oturumu login sonrasında kabul etmedi.",
           );
         }

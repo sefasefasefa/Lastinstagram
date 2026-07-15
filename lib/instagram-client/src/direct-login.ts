@@ -1439,12 +1439,17 @@ export async function verifySession(
 
     if (res.status === 200) return { valid: true };
 
+    // Önce ham metni oku (JSON parse başarısız olursa teşhis için loglamak amacıyla),
+    // sonra JSON'a çevirmeyi dene. Boş/HTML gövdeler burada yakalanır.
+    const rawText = await res.text().catch(() => "");
     let body: Record<string, unknown> = {};
-    try { body = (await res.json()) as Record<string, unknown>; } catch { /* ignore */ }
+    try { body = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch { /* ignore */ }
 
     console.log(
       "[verifySession] status:", res.status,
       "body:", JSON.stringify({ error_type: body["error_type"], message: body["message"], has_checkpoint_url: !!body["checkpoint_url"], keys: Object.keys(body) }),
+      "rawBodyLen:", rawText.length,
+      Object.keys(body).length === 0 ? `rawBodyPreview: ${JSON.stringify(rawText.slice(0, 300))}` : "",
     );
 
     const errorType = (body["error_type"] as string | undefined) ?? "";
