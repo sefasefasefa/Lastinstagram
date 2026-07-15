@@ -1436,6 +1436,11 @@ export async function verifySession(
     let body: Record<string, unknown> = {};
     try { body = (await res.json()) as Record<string, unknown>; } catch { /* ignore */ }
 
+    console.log(
+      "[verifySession] status:", res.status,
+      "body:", JSON.stringify({ error_type: body["error_type"], message: body["message"], has_checkpoint_url: !!body["checkpoint_url"], keys: Object.keys(body) }),
+    );
+
     const errorType = (body["error_type"] as string | undefined) ?? "";
     const message   = (body["message"]    as string | undefined) ?? `HTTP ${res.status}`;
 

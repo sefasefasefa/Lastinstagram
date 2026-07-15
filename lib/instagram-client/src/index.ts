@@ -277,8 +277,53 @@ export class InstagramClient {
         );
       }
 
-      // Doğrudan HTTP girişi: PWD_INSTAGRAM:4 şifreleme + signed_body HMAC.
-      // Önce Mobil API, başarısız olursa Web API fallback.
+      // ── Yardımcı: başarılı login sonucundan oturumu kur ─────────────────
+      const applySession = async (r: DirectLoginResult): Promise<void> => {
+        if (r.sessionCookies) {
+          this.session = r.sessionCookies;
+          await this.restoreFullSession(r.sessionCookies);
+        } else if (r.sessionId) {
+          await this.restoreSession(r.sessionId);
+        }
+      };
+
+      // ── Yardımcı: funcaptcha çöz → login'i token ile tekrar dene ────────
+      // Arkose FunCaptcha token'ını alır ve login'i token ile tekrarlar.
+      // Oturumu kurar + verifySession ile doğrular.
+      // true  = tüm adımlar başarılı (caller return edebilir)
+      // false = çözüm veya retry başarısız
+      const trySolveAndRetry = async (): Promise<boolean> => {
+        console.log("[instagram-client] Funcaptcha ile checkpoint/captcha bypass deneniyor...");
+        const arkoseToken = await solveFuncaptcha("instagram_login").catch(() => null);
+        if (!arkoseToken) {
+          console.log("[instagram-client] Funcaptcha çözümü başarısız veya kullanılamıyor");
+          return false;
+        }
+        console.log("[instagram-client] Funcaptcha çözüldü — token ile login yeniden deneniyor");
+        const retryResult = await loginToInstagram(
+          this.config.instagramUsername,
+          this.config.instagramPassword!,
+          this.client,
+          { arkoseToken },
+        );
+        if (!retryResult.success) {
+          console.log("[instagram-client] Funcaptcha sonrası retry başarısız:", retryResult.error);
+          return false;
+        }
+        await applySession(retryResult);
+        if (this.session) {
+          const v = await verifySession(this.session.cookieHeader);
+          if (!v.valid) {
+            console.log("[instagram-client] Funcaptcha retry session doğrulama başarısız:", v.error);
+            return false;
+          }
+        }
+        return true;
+      };
+
+      // ── İlk login denemesi ─────────────────────────────────────────────
+      // PWD_INSTAGRAM:4 şifreleme + signed_body HMAC; önce Mobil API,
+      // başarısız olursa Web API fallback.
       const result = await loginToInstagram(
         this.config.instagramUsername,
         this.config.instagramPassword,
@@ -301,41 +346,18 @@ export class InstagramClient {
             twoStepVerificationContext: result.twoStepVerificationContext,
           });
         }
-        if (result.errorType === "checkpoint") {
+
+        // Checkpoint veya captcha → Arkose FunCaptcha ile bypass dene
+        if (result.errorType === "checkpoint" || result.errorType === "captcha") {
+          if (await trySolveAndRetry()) return;
           throw new InstagramCaptchaChallengeError(
-            "checkpoint",
-            "Instagram requires a checkpoint verification. Verify the account before trying again.",
+            result.errorType,
+            result.errorType === "checkpoint"
+              ? "Instagram güvenlik doğrulaması (checkpoint) gerektiriyor. Funcaptcha bypass başarısız."
+              : (result.error ?? "Instagram captcha doğrulaması gerektiriyor."),
           );
         }
-        if (result.errorType === "captcha") {
-          // Try to auto-solve the Arkose FunCaptcha challenge before giving up
-          console.log("[instagram-client] Captcha detected — attempting funcaptcha auto-solve...");
-          const arkoseToken = await solveFuncaptcha("instagram_login").catch(() => null);
-          if (arkoseToken) {
-            console.log("[instagram-client] Funcaptcha solved — retrying login with token");
-            const retryResult = await loginToInstagram(
-              this.config.instagramUsername,
-              this.config.instagramPassword!,
-              this.client,
-              { arkoseToken },
-            );
-            if (retryResult.success) {
-              // Store session and continue (fall through to success handling below)
-              if (retryResult.sessionCookies) {
-                this.session = retryResult.sessionCookies;
-                await this.restoreFullSession(retryResult.sessionCookies);
-              } else if (retryResult.sessionId) {
-                await this.restoreSession(retryResult.sessionId);
-              }
-              await this.client.account.currentUser();
-              return; // login succeeded after captcha solve
-            }
-            console.log("[instagram-client] Retry after funcaptcha still failed:", retryResult.error);
-          } else {
-            console.log("[instagram-client] Funcaptcha solve unavailable or failed");
-          }
-          throw new InstagramCaptchaChallengeError("captcha", result.error);
-        }
+
         if (
           result.errorType === "rate_limit" ||
           result.errorType === "spam_or_abuse"
@@ -343,59 +365,44 @@ export class InstagramClient {
           throw new InstagramCaptchaChallengeError(result.errorType, result.error);
         }
         if (result.errorType === "bad_password") {
-          throw new Error("Instagram username or password is incorrect.");
+          throw new Error("Instagram kullanıcı adı veya şifresi hatalı.");
         }
-        throw new Error(result.error ?? "Instagram login failed");
+        throw new Error(result.error ?? "Instagram girişi başarısız");
       }
 
-      // Tüm oturum cookie'lerini kaydet ve IgApiClient'e yükle.
-      // Belgede tanımlanan kritik cookie'ler: sessionid, csrftoken,
-      // ds_user_id, mid, ig_did, rur
-      if (result.sessionCookies) {
-        this.session = result.sessionCookies;
-        await this.restoreFullSession(result.sessionCookies);
-      } else if (result.sessionId) {
-        await this.restoreSession(result.sessionId);
-      }
+      // ── Oturumu kur ────────────────────────────────────────────────────
+      // Kritik cookie'ler: sessionid, csrftoken, ds_user_id, mid, ig_did, rur
+      await applySession(result);
 
-      // Instagram bazen login isteğine "başarılı" (sessionid dahil) yanıt
-      // verir, ama oturum aslında bir checkpoint/doğrulama ile kısıtlanmıştır
-      // — bu ancak oturumu kullanan ilk gerçek istekte ortaya çıkar.
-      //
+      // ── Oturumu doğrula ────────────────────────────────────────────────
       // IgApiClient.account.currentUser() yerine verifySession() kullanıyoruz:
-      // IgApiClient kendi request pipeline'ında çok sayıda ek header ekler ve
-      // farklı bir TLS/HTTP yapılandırması kullanır; bu, stealth-bridge üzerinden
-      // yapılan login'den sonra Instagram'ın bot tespitini tetikler ve
-      // login_required (403) döndürür. verifySession() doğrudan fetch ile aynı
-      // endpoint'e basit headerlar göndererek bu sorunu aşar.
+      // IgApiClient farklı TLS stack + ek headerlar gönderdiğinden Instagram
+      // bot tespiti tetiklenip login_required (403/400) dönebilir.
+      // verifySession() basit fetch ile doğrudan endpoint'i çağırır.
       if (this.session) {
-        // Don't pass deviceString as userAgent — it's an internal IgApiClient
-        // device descriptor, not a proper HTTP User-Agent.  Default MOBILE_UA is used.
         const verify = await verifySession(this.session.cookieHeader);
         if (!verify.valid) {
           const et = verify.errorType ?? "login_required";
-          if (et === "checkpoint") {
-            throw new InstagramCaptchaChallengeError(
-              "checkpoint",
-              "Instagram requires a checkpoint verification. Verify the account before trying again.",
-            );
-          }
+          console.log(`[instagram-client] Session doğrulama başarısız (${et}: ${verify.error}) — funcaptcha bypass deneniyor`);
+          if (await trySolveAndRetry()) return;
+
+          // Funcaptcha da başarısız — uygun hata fırlat
           if (et === "spam_or_abuse") {
             throw new InstagramCaptchaChallengeError(
               "spam_or_abuse",
-              "Instagram flagged this login as suspicious/automated activity.",
+              "Instagram bu giriş girişimini şüpheli/otomatik aktivite olarak işaretledi.",
             );
           }
           if (et === "rate_limit") {
             throw new InstagramCaptchaChallengeError(
               "rate_limit",
-              "Instagram rate-limited this login attempt. Wait a few minutes.",
+              "Instagram hız sınırı uyguladı. Birkaç dakika bekleyip tekrar deneyin.",
             );
           }
-          // login_required veya bilinmeyen: oturum geçersiz
+          // checkpoint veya login_required veya bilinmeyen
           throw new InstagramCaptchaChallengeError(
             "checkpoint",
-            verify.error ?? "Instagram session was not accepted after login.",
+            verify.error ?? "Instagram oturumu login sonrasında kabul etmedi.",
           );
         }
       }
@@ -403,33 +410,31 @@ export class InstagramClient {
       if (error instanceof InstagramCaptchaChallengeError) throw error;
       if (error instanceof IgLoginTwoFactorRequiredError) {
         throw new Error(
-          "Instagram two-factor authentication is required. Use a serialized cookie jar or session cookie.",
+          "Instagram iki adımlı doğrulama gerektiriyor. Session cookie kullanın.",
         );
       }
-      // IgApiClient tabanlı hataları yakala (session cookie restore sonrası
-      // yapılan diğer çağrılardan gelebilir)
       if (error instanceof IgCheckpointError) {
         throw new InstagramCaptchaChallengeError(
           "checkpoint",
-          "Instagram requires a checkpoint verification. Verify the account before trying again.",
+          "Instagram güvenlik doğrulaması (checkpoint) gerektiriyor.",
         );
       }
       if (error instanceof IgSentryBlockError || error instanceof IgActionSpamError) {
         throw new InstagramCaptchaChallengeError(
           "spam_or_abuse",
-          "Instagram flagged this login as suspicious/automated activity and blocked it.",
+          "Instagram bu girişi şüpheli/otomatik aktivite olarak işaretleyip engelledi.",
         );
       }
       if (error instanceof IgRequestsLimitError) {
         throw new InstagramCaptchaChallengeError(
           "rate_limit",
-          "Instagram rate-limited this login attempt. Wait a few minutes and try again.",
+          "Instagram hız sınırı uyguladı. Birkaç dakika bekleyip tekrar deneyin.",
         );
       }
       if (error instanceof IgInactiveUserError) {
         throw new InstagramCaptchaChallengeError(
           "spam_or_abuse",
-          "Instagram account is inactive/disabled and requires manual review.",
+          "Instagram hesabı devre dışı/pasif — manuel inceleme gerekiyor.",
         );
       }
       throw error;
