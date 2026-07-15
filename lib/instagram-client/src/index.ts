@@ -387,7 +387,9 @@ export class InstagramClient {
       // false = çözüm veya retry başarısız
       const trySolveAndRetry = async (): Promise<boolean> => {
         console.log("[instagram-client] Funcaptcha ile checkpoint/captcha bypass deneniyor...");
-        const arkoseToken = await solveFuncaptcha("instagram_login").catch(() => null);
+        const arkoseToken = await solveFuncaptcha("instagram_login", {
+          proxy: this.config.useProxy && this.config.proxyUrl ? this.config.proxyUrl : undefined,
+        }).catch(() => null);
         if (!arkoseToken) {
           console.log("[instagram-client] Funcaptcha çözümü başarısız veya kullanılamıyor");
           return false;

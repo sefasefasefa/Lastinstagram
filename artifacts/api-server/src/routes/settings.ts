@@ -29,11 +29,29 @@ router.get('/settings', async (req, res) => {
 // Config'ı kaydet
 router.post('/settings', async (req, res) => {
   try {
-    const newConfig = req.body;
+    const newConfig = req.body as Record<string, unknown>;
 
-    // Config'ı backend'e kaydet (opsiyonel - database)
-    // Burada sadece response dönüyoruz
-    // Gerçek uygulamada database'e kaydedin
+    // Proxy ayarlarını process.env'e yaz (mevcut process için geçerli — kalıcı
+    // yapmak için PROXY_URL ve USE_PROXY'yi Replit Secrets'tan ayarlayın).
+    if (typeof newConfig.proxyUrl === 'string') {
+      process.env.PROXY_URL = newConfig.proxyUrl;
+    }
+    if (typeof newConfig.useProxy === 'boolean') {
+      process.env.USE_PROXY = newConfig.useProxy ? 'true' : 'false';
+    }
+    if (typeof newConfig.instagramUsername === 'string') {
+      process.env.INSTAGRAM_USERNAME = newConfig.instagramUsername;
+    }
+    if (typeof newConfig.instagramPassword === 'string' && newConfig.instagramPassword) {
+      process.env.INSTAGRAM_PASSWORD = newConfig.instagramPassword;
+    }
+    if (typeof newConfig.userAgent === 'string' && newConfig.userAgent) {
+      process.env.USER_AGENT = newConfig.userAgent;
+    }
+
+    // Env değişti — aktif client'ı sıfırla ki bir sonraki istekte yeni değerleri alsın
+    const { resetClient } = await import('./instagram');
+    resetClient();
 
     res.json({ success: true, message: 'Config kaydedildi' });
   } catch (error) {

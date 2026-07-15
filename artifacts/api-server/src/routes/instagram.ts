@@ -44,6 +44,14 @@ export function getActiveClient(): InstagramClient | null {
   return client;
 }
 
+/**
+ * Aktif client örneğini sıfırlar. Env değişkenleri (PROXY_URL vb.) güncellendikten
+ * sonra çağrılır — bir sonraki istekte yeni değerlere sahip bir client oluşturulur.
+ */
+export function resetClient(): void {
+  client = null;
+}
+
 function parseLimit(value: unknown, fallback: number, maximum: number): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) return fallback;
