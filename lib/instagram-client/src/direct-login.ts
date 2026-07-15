@@ -1962,8 +1962,12 @@ export async function fetchChallengeContext(
       return { stepName: "unknown", error: `Beklenmeyen yanıt (HTTP ${res.status})` };
     }
 
-    // auth_platform 201 boş body → kod henüz tetiklenmedi; seçim adımını göster
-    if (isAuthPlatform && rawText.trim() === "") {
+    // auth_platform 201 boş body VEYA HTML yanıt → kod henüz tetiklenmedi;
+    // seçim adımını göster. auth_platform web sayfası döndürdüğünde JSON parse
+    // başarısız olur (data = {}), bu durumda da varsayılan seçenekleri sun.
+    const jsonParseFailed = rawText.trim() !== "" && Object.keys(data).length === 0;
+    if (isAuthPlatform && (rawText.trim() === "" || jsonParseFailed)) {
+      console.log("[fetchChallengeContext] auth_platform HTML/boş yanıt → select_verify_method döndürülüyor");
       return {
         stepName: "select_verify_method",
         choices: [
@@ -2011,6 +2015,14 @@ export async function fetchChallengeContext(
         choices.push({ value: "1", label: `E-posta ile gönder — ${data.email}` });
     }
 
+    // auth_platform: JSON parse başarılı ama hâlâ hiç seçenek yoksa varsayılanları ekle
+    if (isAuthPlatform && choices.length === 0) {
+      choices.push(
+        { value: "0", label: "SMS ile gönder (telefon)" },
+        { value: "1", label: "E-posta ile gönder" },
+      );
+    }
+
     return {
       stepName,
       choices: choices.length > 0 ? choices : undefined,
@@ -2040,13 +2052,25 @@ export async function selectChallengeMethod(
         "X-IG-App-ID": IG_APP_ID,
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "Accept-Language": "tr-TR",
+        "X-Requested-With": "XMLHttpRequest",
       },
       body: new URLSearchParams({ choice }).toString(),
     });
 
+    const rawText = await res.text().catch(() => "");
+    console.log("[selectChallengeMethod] status:", res.status, "bodyLen:", rawText.length, "bodyPreview:", JSON.stringify(rawText.slice(0, 200)));
+
     let data: Record<string, unknown> = {};
-    try { data = (await res.json()) as Record<string, unknown>; } catch {
-      return { success: false, error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {
+      // HTML veya boş yanıt — JSON parse başarısız
+    }
+
+    const isAuthPlatform = checkpointUrl.includes("auth_platform");
+
+    // auth_platform 200/201 HTML yanıt → kod gönderildi say
+    if (isAuthPlatform && (res.status === 200 || res.status === 201) && Object.keys(data).length === 0) {
+      console.log("[selectChallengeMethod] auth_platform HTML yanıt → başarılı sayılıyor (kod gönderildi)");
+      return { success: true };
     }
 
     if (!res.ok || data.status === "fail") {
@@ -2080,35 +2104,55 @@ export async function submitChallengeCode(
         "X-IG-App-ID": IG_APP_ID,
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "Accept-Language": "tr-TR",
+        "X-Requested-With": "XMLHttpRequest",
       },
       body: new URLSearchParams({ security_code: code }).toString(),
     });
 
+    // Set-Cookie başlıklarını ÖNCE oku (response body tüketilmeden)
     const setCookies = getSetCookies(res);
+
+    // Body'yi text olarak oku, sonra JSON parse dene
+    const rawText = await res.text().catch(() => "");
+    console.log("[submitChallengeCode] status:", res.status, "setCookies:", setCookies.length, "bodyLen:", rawText.length, "bodyPreview:", JSON.stringify(rawText.slice(0, 300)));
+
     let data: Record<string, unknown> = {};
-    try { data = (await res.json()) as Record<string, unknown>; } catch {
-      return { success: false, error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {
+      // HTML veya boş yanıt — JSON parse başarısız
     }
 
     const sessionCookies = extractSessionCookies(setCookies);
     const hasSession = Boolean(sessionCookies.sessionid);
 
-    if (!res.ok && !hasSession) {
-      const msg = typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
-      return { success: false, error: msg };
+    // Oturum cookie'si varsa her zaman başarı
+    if (hasSession) {
+      return { success: true, sessionCookies };
     }
-    if (data.status === "fail" && !hasSession) {
-      const msg = typeof data.message === "string" ? data.message : "Doğrulama kodu reddedildi";
-      return { success: false, error: msg };
-    }
-    if (!hasSession) {
+
+    // auth_platform: JSON parse başarısız ama HTTP 200 → kod kabul edilmiş
+    // ama sessionid farklı bir mekanizmayla (redirect vb.) gelecek olabilir.
+    // Bu durumu hata olarak değil, "oturum kurulamadı" olarak bil.
+    const isAuthPlatform = checkpointUrl.includes("auth_platform");
+    if (isAuthPlatform && Object.keys(data).length === 0 && res.status === 200) {
       return {
         success: false,
-        error: typeof data.message === "string" ? data.message : "Kod kabul edildi ama oturum kurulamadı",
+        error: "Kod gönderildi ancak oturum cookie'si alınamadı. Kodu tekrar deneyin veya Instagram uygulamasından checkpoint'i çözün.",
       };
     }
 
-    return { success: true, sessionCookies };
+    if (!res.ok) {
+      const msg = typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+      return { success: false, error: msg };
+    }
+    if (data.status === "fail") {
+      const msg = typeof data.message === "string" ? data.message : "Doğrulama kodu reddedildi";
+      return { success: false, error: msg };
+    }
+
+    return {
+      success: false,
+      error: typeof data.message === "string" ? data.message : "Kod kabul edildi ama oturum kurulamadı",
+    };
   } catch (e) {
     return { success: false, error: `Ağ hatası (challenge verify): ${e instanceof Error ? e.message : e}` };
   }
