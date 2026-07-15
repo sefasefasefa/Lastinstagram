@@ -1815,8 +1815,10 @@ function messageIncludesAny(message: string, keywords: string[]): boolean {
  *   - data.challenge.api_path (object içinde string)
  */
 export function extractCheckpointUrl(data: Record<string, unknown>): string | undefined {
-  if (typeof data.checkpoint_url === "string" && data.checkpoint_url) {
-    return data.checkpoint_url;
+  const cpRaw = data.checkpoint_url;
+  console.log("[extractCheckpointUrl] checkpoint_url:", JSON.stringify(cpRaw), "type:", typeof cpRaw, "truthy:", !!cpRaw);
+  if (typeof cpRaw === "string" && cpRaw) {
+    return cpRaw;
   }
   const challenge = data.challenge;
   if (challenge && typeof challenge === "object") {
