@@ -4,6 +4,7 @@ import "dotenv/config";
 
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startFuncaptchaServer } from "./lib/funcaptcha-server";
 
 // On Replit, PORT is injected by the platform's workflow runner (see
 // .replit-artifact/artifact.toml) and must be present. Running locally on
@@ -31,4 +32,7 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Start funcaptcha solver sidecar (non-blocking — login works without it)
+  startFuncaptchaServer();
 });

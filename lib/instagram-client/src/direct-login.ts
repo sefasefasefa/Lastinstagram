@@ -1561,10 +1561,11 @@ async function loginViaMobile(
   username: string,
   encPassword: string,
   ig: IgApiClient,
+  options?: { arkoseToken?: string },
 ): Promise<DirectLoginResult> {
   const s = readDeviceState(ig);
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     username,
     enc_password: encPassword,
     guid: s.uuid,
@@ -1577,6 +1578,11 @@ async function loginViaMobile(
     country_codes: JSON.stringify([{ country_code: "90", source: "default" }]),
     jazoest: s.jazoest,
   };
+
+  // If a funcaptcha token was solved, include it in the login body
+  if (options?.arkoseToken) {
+    payload["arkose_challenge_token"] = options.arkoseToken;
+  }
 
   const json = JSON.stringify(payload);
   const { signed_body, ig_sig_key_version } = signBody(json);
@@ -1800,6 +1806,7 @@ export async function loginToInstagram(
   username: string,
   password: string,
   ig: IgApiClient,
+  options?: { arkoseToken?: string },
 ): Promise<DirectLoginResult> {
   // Şifreleme anahtarını al (EC veya RSA, kaynaktan bağımsız otomatik algılama)
   const key = await resolveEncryptionKey(ig);
@@ -1808,7 +1815,7 @@ export async function loginToInstagram(
   const encPassword = encryptPassword(password, key, timestamp);
 
   // ── Mobil API ─────────────────────────────────────────────────────────────
-  const mobileResult = await loginViaMobile(username, encPassword, ig);
+  const mobileResult = await loginViaMobile(username, encPassword, ig, options);
   if (mobileResult.success) return mobileResult;
 
   // 2FA / checkpoint / captcha / hız sınırı / spam → web API'yi denemeye gerek yok

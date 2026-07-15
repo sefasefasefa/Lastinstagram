@@ -28,6 +28,7 @@ import {
   type TwoFactorInfo,
   type TwoFactorMethod,
 } from "./direct-login";
+import { solveFuncaptcha } from "./funcaptcha-client";
 
 /**
  * /api/v1/accounts/login/ HTTP 400 (TwoFactorRequired) döndürdüğünde
@@ -305,8 +306,36 @@ export class InstagramClient {
             "Instagram requires a checkpoint verification. Verify the account before trying again.",
           );
         }
+        if (result.errorType === "captcha") {
+          // Try to auto-solve the Arkose FunCaptcha challenge before giving up
+          console.log("[instagram-client] Captcha detected — attempting funcaptcha auto-solve...");
+          const arkoseToken = await solveFuncaptcha("instagram_login").catch(() => null);
+          if (arkoseToken) {
+            console.log("[instagram-client] Funcaptcha solved — retrying login with token");
+            const retryResult = await loginToInstagram(
+              this.config.instagramUsername,
+              this.config.instagramPassword!,
+              this.client,
+              { arkoseToken },
+            );
+            if (retryResult.success) {
+              // Store session and continue (fall through to success handling below)
+              if (retryResult.sessionCookies) {
+                this.session = retryResult.sessionCookies;
+                await this.restoreFullSession(retryResult.sessionCookies);
+              } else if (retryResult.sessionId) {
+                await this.restoreSession(retryResult.sessionId);
+              }
+              await this.client.account.currentUser();
+              return; // login succeeded after captcha solve
+            }
+            console.log("[instagram-client] Retry after funcaptcha still failed:", retryResult.error);
+          } else {
+            console.log("[instagram-client] Funcaptcha solve unavailable or failed");
+          }
+          throw new InstagramCaptchaChallengeError("captcha", result.error);
+        }
         if (
-          result.errorType === "captcha" ||
           result.errorType === "rate_limit" ||
           result.errorType === "spam_or_abuse"
         ) {

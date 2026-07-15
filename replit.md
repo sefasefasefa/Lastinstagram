@@ -25,6 +25,7 @@ A Turkish-language tracker/subscriber panel web app (frontend: "Takipçi Paneli"
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
 - Stealth HTTP: Stealth-Requests (Python `curl_cffi`) bridge for Instagram direct-login requests — files live in `lib/stealth-requests/`, bridge at `lib/stealth-requests/bridge.py`, Node.js wrapper at `lib/instagram-client/src/stealth-bridge.ts`.
+- Funcaptcha solver: When Instagram returns an Arkose FunCaptcha challenge on login, the API server automatically starts a local Python Flask solver at `http://127.0.0.1:8003`. Source lives in `lib/funcaptcha-solver/server.py` (patched from `kiookp/funcaptcha--solver`). The TypeScript client is at `lib/instagram-client/src/funcaptcha-client.ts`. The login flow in `lib/instagram-client/src/index.ts` auto-retries with the solved token. Preset: `instagram_login` (sitekey `B7D8911C-5CC8-A9A3-35B0-554ACEE604DA`). Image classification is a stub — the solver uses `sup=1` (challenge-suppressed) bypass tokens. To swap in a real image classifier, fill in the `index=...` lines in the solver. Node.js `jsdom` (for dapib code execution) lives in `.config/npm/node_global/node_modules/jsdom`.
 - OS support: developed on Replit (linux-x64) but also runs on Windows/macOS for local dev — `pnpm-workspace.yaml` overrides keep native binaries (esbuild, lightningcss, tailwindcss oxide, rollup) for win32/darwin, and scripts needing inline env vars use `cross-env` for Windows shell compatibility.
 
 ## Gotchas
