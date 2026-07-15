@@ -1,11 +1,47 @@
 import { useState } from "react"
-import { useListTrackedUsers, useDeleteTrackedUser, useRecordTrackedUserVisit, getListTrackedUsersQueryKey, getGetDashboardSummaryQueryKey, TrackedUserCategory, type TrackedUser } from "@workspace/api-client-react"
+import { useListTrackedUsers, useDeleteTrackedUser, useRecordTrackedUserVisit, useRefreshTrackedUserFollowers, getListTrackedUsersQueryKey, getGetDashboardSummaryQueryKey, TrackedUserCategory, type TrackedUser } from "@workspace/api-client-react"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/radix"
 import { Button } from "./ui/core"
-import { Trash2, User as UserIcon, ExternalLink } from "lucide-react"
+import { Trash2, User as UserIcon, ExternalLink, RefreshCw, TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { UserDetailDialog } from "./user-detail-dialog"
+
+function FollowerBadge({ current, previous }: { current: number | null | undefined; previous: number | null | undefined }) {
+  if (current == null) return null
+
+  const fmt = (n: number) => n >= 1_000_000
+    ? `${(n / 1_000_000).toFixed(1)}M`
+    : n >= 1_000
+    ? `${(n / 1_000).toFixed(1)}K`
+    : String(n)
+
+  if (previous == null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+        <Minus className="w-3 h-3" />{fmt(current)}
+      </span>
+    )
+  }
+
+  const diff = current - previous
+  const pct = previous > 0 ? ((diff / previous) * 100) : 0
+  const isUp = diff > 0
+  const isDown = diff < 0
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-mono font-medium
+      ${isUp ? "text-emerald-400" : isDown ? "text-rose-400" : "text-muted-foreground"}`}>
+      {isUp ? <TrendingUp className="w-3 h-3" /> : isDown ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+      {fmt(current)}
+      {diff !== 0 && (
+        <span className="opacity-70">
+          ({diff > 0 ? "+" : ""}{pct.toFixed(1)}%)
+        </span>
+      )}
+    </span>
+  )
+}
 
 export function TrackedUserList({ category }: { category: TrackedUserCategory }) {
   const { data: usersData, isLoading } = useListTrackedUsers({ category })
@@ -13,6 +49,7 @@ export function TrackedUserList({ category }: { category: TrackedUserCategory })
 
   const deleteUser = useDeleteTrackedUser()
   const recordVisit = useRecordTrackedUserVisit()
+  const refreshFollowers = useRefreshTrackedUserFollowers()
   const queryClient = useQueryClient()
 
   const [selectedUser, setSelectedUser] = useState<TrackedUser | null>(null)
@@ -48,6 +85,22 @@ export function TrackedUserList({ category }: { category: TrackedUserCategory })
     })
   }
 
+  const handleRefreshFollowers = (e: React.MouseEvent, id: number) => {
+    e.stopPropagation()
+    refreshFollowers.mutate({ id }, {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getListTrackedUsersQueryKey({ category }) })
+        toast.success(`Takipçi sayısı güncellendi: ${data.followerCount?.toLocaleString("tr-TR")}`)
+      },
+      onError: (err: unknown) => {
+        const msg = err && typeof err === "object" && "data" in err
+          ? (err as { data?: { error?: string } }).data?.error
+          : undefined
+        toast.error(msg ?? "Takipçi sayısı alınamadı")
+      },
+    })
+  }
+
   const handleOpenInstagram = (e: React.MouseEvent, id: number, username: string) => {
     e.stopPropagation()
     window.open(`https://www.instagram.com/${username}/`, "_blank", "noopener,noreferrer")
@@ -78,14 +131,22 @@ export function TrackedUserList({ category }: { category: TrackedUserCategory })
             <div className="flex-1 min-w-0">
               <h4 className="text-sm font-medium text-foreground truncate">{user.fullName}</h4>
               <p className="text-xs text-muted-foreground truncate font-mono mt-0.5">@{user.username}</p>
-              {user.lastInteractionAt && (
-                <p className="text-[11px] text-muted-foreground/70 mt-0.5">
-                  Son ziyaret: {new Date(user.lastInteractionAt).toLocaleString("tr-TR")}
-                </p>
-              )}
+              <div className="mt-1">
+                <FollowerBadge current={user.followerCount} previous={user.previousFollowerCount} />
+              </div>
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-primary hover:bg-primary/10"
+                onClick={(e) => handleRefreshFollowers(e, user.id)}
+                disabled={refreshFollowers.isPending}
+                title="Takipçi sayısını güncelle"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshFollowers.isPending ? "animate-spin" : ""}`} />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"

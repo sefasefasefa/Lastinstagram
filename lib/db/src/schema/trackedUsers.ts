@@ -5,6 +5,7 @@ import {
   timestamp,
   integer,
   boolean,
+  bigint,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -32,6 +33,10 @@ export const trackedUsersTable = pgTable("tracked_users", {
   lastInteractionAt: timestamp("last_interaction_at", { withTimezone: true }),
   interactionCount: integer("interaction_count").notNull().default(0),
   autoLikeEnabled: boolean("auto_like_enabled").notNull().default(false),
+  // Follower count tracking — updated on demand via POST /tracked-users/:id/refresh-followers
+  followerCount: bigint("follower_count", { mode: "number" }),
+  previousFollowerCount: bigint("previous_follower_count", { mode: "number" }),
+  followerCountUpdatedAt: timestamp("follower_count_updated_at", { withTimezone: true }),
 });
 
 export const insertTrackedUserSchema = createInsertSchema(

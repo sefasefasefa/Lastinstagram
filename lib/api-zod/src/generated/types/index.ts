@@ -41,6 +41,7 @@ export * from './loginErrorTwoFactorInfo';
 export * from './loginRequest';
 export * from './monitoringStatus';
 export * from './monitoringUpdate';
+export * from './refreshFollowersResponse';
 export * from './requestConfig';
 export * from './requestConfigCookies';
 export * from './requestConfigHeaders';

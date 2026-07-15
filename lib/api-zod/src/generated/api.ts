@@ -287,7 +287,10 @@ export const ListTrackedUsersResponseItem = zod.object({
   "addedAt": zod.coerce.date(),
   "lastInteractionAt": zod.coerce.date().nullish().describe('Set manually via the API - nothing in this codebase writes to it automatically.'),
   "interactionCount": zod.number().describe('Set manually via the API - nothing in this codebase increments it automatically.'),
-  "autoLikeEnabled": zod.boolean().describe('Stored preference flag only - no automated liking exists in this codebase.')
+  "autoLikeEnabled": zod.boolean().describe('Stored preference flag only - no automated liking exists in this codebase.'),
+  "followerCount": zod.number().nullish().describe('Most recently fetched Instagram follower count. Null until first refresh.'),
+  "previousFollowerCount": zod.number().nullish().describe('Follower count from the previous refresh, used to compute change percentage.'),
+  "followerCountUpdatedAt": zod.coerce.date().nullish().describe('When followerCount was last fetched from Instagram.')
 })
 export const ListTrackedUsersResponse = zod.array(ListTrackedUsersResponseItem)
 
@@ -316,7 +319,10 @@ export const CreateTrackedUserResponse = zod.object({
   "addedAt": zod.coerce.date(),
   "lastInteractionAt": zod.coerce.date().nullish().describe('Set manually via the API - nothing in this codebase writes to it automatically.'),
   "interactionCount": zod.number().describe('Set manually via the API - nothing in this codebase increments it automatically.'),
-  "autoLikeEnabled": zod.boolean().describe('Stored preference flag only - no automated liking exists in this codebase.')
+  "autoLikeEnabled": zod.boolean().describe('Stored preference flag only - no automated liking exists in this codebase.'),
+  "followerCount": zod.number().nullish().describe('Most recently fetched Instagram follower count. Null until first refresh.'),
+  "previousFollowerCount": zod.number().nullish().describe('Follower count from the previous refresh, used to compute change percentage.'),
+  "followerCountUpdatedAt": zod.coerce.date().nullish().describe('When followerCount was last fetched from Instagram.')
 })
 
 
@@ -328,6 +334,20 @@ export const DeleteTrackedUserParams = zod.object({
 })
 
 export const DeleteTrackedUserResponse = zod.void()
+
+
+/**
+ * Calls Instagram's profile API for the tracked user's username, stores the new followerCount (moving the old one to previousFollowerCount), and returns both values so the UI can show a change percentage. Requires an active Instagram session.
+ * @summary Fetch the current follower count from Instagram and persist it
+ */
+export const RefreshTrackedUserFollowersParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RefreshTrackedUserFollowersResponse = zod.object({
+  "followerCount": zod.number(),
+  "previousFollowerCount": zod.number().nullable()
+})
 
 
 /**
@@ -347,7 +367,10 @@ export const RecordTrackedUserVisitResponse = zod.object({
   "addedAt": zod.coerce.date(),
   "lastInteractionAt": zod.coerce.date().nullish().describe('Set manually via the API - nothing in this codebase writes to it automatically.'),
   "interactionCount": zod.number().describe('Set manually via the API - nothing in this codebase increments it automatically.'),
-  "autoLikeEnabled": zod.boolean().describe('Stored preference flag only - no automated liking exists in this codebase.')
+  "autoLikeEnabled": zod.boolean().describe('Stored preference flag only - no automated liking exists in this codebase.'),
+  "followerCount": zod.number().nullish().describe('Most recently fetched Instagram follower count. Null until first refresh.'),
+  "previousFollowerCount": zod.number().nullish().describe('Follower count from the previous refresh, used to compute change percentage.'),
+  "followerCountUpdatedAt": zod.coerce.date().nullish().describe('When followerCount was last fetched from Instagram.')
 })
 
 

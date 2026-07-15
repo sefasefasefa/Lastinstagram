@@ -9,8 +9,11 @@ import {
   DeleteTrackedUserParams,
   RecordTrackedUserVisitParams,
   RecordTrackedUserVisitResponse,
+  RefreshTrackedUserFollowersParams,
+  RefreshTrackedUserFollowersResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
+import { getActiveClient } from "./instagram";
 
 const router: IRouter = Router();
 
@@ -73,6 +76,56 @@ router.delete("/tracked-users/:id", async (req, res): Promise<void> => {
   }
 
   res.sendStatus(204);
+});
+
+router.post("/tracked-users/:id/refresh-followers", async (req, res): Promise<void> => {
+  const params = RefreshTrackedUserFollowersParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(trackedUsersTable)
+    .where(eq(trackedUsersTable.id, params.data.id));
+
+  if (!existing) {
+    res.status(404).json({ error: "Tracked user not found" });
+    return;
+  }
+
+  const client = getActiveClient();
+  if (!client || !client.isAuthenticated()) {
+    res.status(502).json({ error: "Instagram session is not active. Please log in to Instagram first." });
+    return;
+  }
+
+  let followerCount: number;
+  try {
+    const profile = await client.getProfile(existing.username);
+    followerCount = profile.followerCount ?? 0;
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : "Instagram request failed" });
+    return;
+  }
+
+  const previousFollowerCount = existing.followerCount ?? null;
+
+  const [updated] = await db
+    .update(trackedUsersTable)
+    .set({
+      previousFollowerCount,
+      followerCount,
+      followerCountUpdatedAt: new Date(),
+    })
+    .where(eq(trackedUsersTable.id, params.data.id))
+    .returning();
+
+  res.json(RefreshTrackedUserFollowersResponse.parse({
+    followerCount: updated.followerCount,
+    previousFollowerCount: updated.previousFollowerCount,
+  }));
 });
 
 // Logs that the user opened the real Instagram profile themselves (see

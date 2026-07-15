@@ -44,6 +44,7 @@ import type {
   LoginRequest,
   MonitoringStatus,
   MonitoringUpdate,
+  RefreshFollowersResponse,
   RequestConfig,
   RequestConfigInput,
   RequestConfigTestResult,
@@ -1645,6 +1646,78 @@ export const useDeleteTrackedUser = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteTrackedUserMutationOptions(options));
+    }
+
+export const getRefreshTrackedUserFollowersUrl = (id: number,) => {
+
+
+
+
+  return `/api/tracked-users/${id}/refresh-followers`
+}
+
+/**
+ * Calls Instagram's profile API for the tracked user's username, stores the new followerCount (moving the old one to previousFollowerCount), and returns both values so the UI can show a change percentage. Requires an active Instagram session.
+ * @summary Fetch the current follower count from Instagram and persist it
+ */
+export const refreshTrackedUserFollowers = async (id: number, options?: RequestInit): Promise<RefreshFollowersResponse> => {
+
+  return customFetch<RefreshFollowersResponse>(getRefreshTrackedUserFollowersUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRefreshTrackedUserFollowersMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshTrackedUserFollowers>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshTrackedUserFollowers>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['refreshTrackedUserFollowers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshTrackedUserFollowers>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  refreshTrackedUserFollowers(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshTrackedUserFollowersMutationResult = NonNullable<Awaited<ReturnType<typeof refreshTrackedUserFollowers>>>
+
+    export type RefreshTrackedUserFollowersMutationError = ErrorType<void>
+
+    /**
+ * @summary Fetch the current follower count from Instagram and persist it
+ */
+export const useRefreshTrackedUserFollowers = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshTrackedUserFollowers>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshTrackedUserFollowers>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRefreshTrackedUserFollowersMutationOptions(options));
     }
 
 export const getRecordTrackedUserVisitUrl = (id: number,) => {

@@ -387,6 +387,33 @@ paths:
       responses:
         "204":
           description: Deleted
+  /tracked-users/{id}/refresh-followers:
+    post:
+      operationId: refreshTrackedUserFollowers
+      tags: [trackedUsers]
+      summary: Fetch the current follower count from Instagram and persist it
+      description: >-
+        Calls Instagram's profile API for the tracked user's username, stores
+        the new followerCount (moving the old one to previousFollowerCount),
+        and returns both values so the UI can show a change percentage.
+        Requires an active Instagram session.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Follower count refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshFollowersResponse"
+        "404":
+          description: Tracked user not found
+        "502":
+          description: Instagram request failed
   /tracked-users/{id}/visit:
     post:
       operationId: recordTrackedUserVisit
@@ -1125,6 +1152,28 @@ components:
         autoLikeEnabled:
           type: boolean
           description: Stored preference flag only - no automated liking exists in this codebase.
+        followerCount:
+          type: integer
+          nullable: true
+          description: Most recently fetched Instagram follower count. Null until first refresh.
+        previousFollowerCount:
+          type: integer
+          nullable: true
+          description: Follower count from the previous refresh, used to compute change percentage.
+        followerCountUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When followerCount was last fetched from Instagram.
+    RefreshFollowersResponse:
+      type: object
+      required: [followerCount, previousFollowerCount]
+      properties:
+        followerCount:
+          type: integer
+        previousFollowerCount:
+          type: integer
+          nullable: true
     TrackedUserInput:
       type: object
       required: [username, fullName, avatarUrl, category]

@@ -20,4 +20,10 @@ export interface TrackedUser {
   interactionCount: number;
   /** Stored preference flag only - no automated liking exists in this codebase. */
   autoLikeEnabled: boolean;
+  /** Most recently fetched Instagram follower count. Null until first refresh. */
+  followerCount?: number | null;
+  /** Follower count from the previous refresh, used to compute change percentage. */
+  previousFollowerCount?: number | null;
+  /** When followerCount was last fetched from Instagram. */
+  followerCountUpdatedAt?: Date | null;
 }
