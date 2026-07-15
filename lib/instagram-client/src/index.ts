@@ -15,6 +15,7 @@ import {
   verifySession,
   updateCsrfInHeader,
   fetchUserInfo,
+  fetchSelfProfile,
   fetchUserFeed,
   fetchUserClips,
   fetchUserStories,
@@ -1097,6 +1098,35 @@ export class InstagramClient {
 
   async unlikeReel(reelId: string): Promise<boolean> {
     return this.unlikePost(reelId);
+  }
+
+  /**
+   * Giriş yapmış kullanıcının kendi profilini çeker.
+   * i.instagram.com mobil endpoint'i Replit'ten bloklu olduğundan
+   * www.instagram.com web endpoint'ini kullanır.
+   */
+  async getMyProfile(): Promise<InstagramProfile> {
+    await this.ensureAuthenticated();
+    if (!this.session?.cookieHeader) {
+      throw new Error("Aktif Instagram oturumu bulunamadı");
+    }
+    const result = await fetchSelfProfile(this.session.cookieHeader);
+    if (!result.success || !result.user) {
+      throw new Error(result.error ?? "Profil bilgisi alınamadı");
+    }
+    const u = result.user;
+    return {
+      username: u.username,
+      pk: String(u.pk),
+      fullName: u.full_name ?? "",
+      profilePicUrl: u.profile_pic_url,
+      followerCount: u.follower_count,
+      followingCount: u.following_count,
+      mediaCount: u.media_count,
+      biography: u.biography ?? undefined,
+      externalUrl: u.external_url ?? undefined,
+      isPrivate: u.is_private,
+    };
   }
 
   async logout(): Promise<void> {

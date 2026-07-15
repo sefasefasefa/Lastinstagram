@@ -640,6 +640,61 @@ export async function fetchUserInfo(
   }
 }
 
+/**
+ * Giriş yapmış kullanıcının kendi profilini web endpoint'i üzerinden çeker.
+ *
+ *   GET https://www.instagram.com/api/v1/accounts/current_user/?edit=true
+ *
+ * i.instagram.com mobil endpoint'i Replit datacenter IP'sinden bloklu olduğundan
+ * verifySession ile aynı web endpoint'ini kullanıyoruz.
+ */
+export async function fetchSelfProfile(
+  cookieHeader: string,
+): Promise<UserInfoResult> {
+  const csrftoken = cookieHeader.match(/csrftoken=([^;]+)/)?.[1] ?? "";
+  try {
+    const res = await fetch(
+      "https://www.instagram.com/api/v1/accounts/current_user/?edit=true",
+      {
+        headers: {
+          "User-Agent": WEB_UA,
+          "Cookie": cookieHeader,
+          "X-IG-App-ID": WEB_APP_ID,
+          "X-CSRFToken": csrftoken,
+          "X-ASBD-ID": "359341",
+          "X-IG-WWW-Claim": "0",
+          "Accept": "*/*",
+          "Accept-Language": "tr,en;q=0.9",
+          "Origin": "https://www.instagram.com",
+          "Referer": "https://www.instagram.com/",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty",
+          "Sec-CH-UA": '"Not;A=Brand";v="8", "Chromium";v="150", "Microsoft Edge";v="150"',
+          "Sec-CH-UA-Mobile": "?0",
+          "Sec-CH-UA-Platform": '"Windows"',
+        },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+
+    if (!res.ok) {
+      return { success: false, error: `HTTP ${res.status}` };
+    }
+
+    let data: Record<string, unknown> = {};
+    try { data = (await res.json()) as Record<string, unknown>; } catch {
+      return { success: false, error: "Yanıt JSON parse edilemedi" };
+    }
+
+    const user = data.user as RawInstagramUser | undefined;
+    if (!user) return { success: false, error: "Kullanıcı verisi bulunamadı" };
+    return { success: true, user };
+  } catch (e) {
+    return { success: false, error: `Ağ hatası: ${e instanceof Error ? e.message : e}` };
+  }
+}
+
 // ── Gönderi ve Reels İçeriklerini Listeleme (doğrudan HTTP) ──────────────────
 
 /** Feed / clips yanıtlarındaki ham medya öğesi. */

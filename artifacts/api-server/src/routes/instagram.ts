@@ -88,6 +88,20 @@ router.post("/instagram/logout", async (_req, res): Promise<void> => {
   }
 });
 
+router.get("/instagram/me", async (_req, res): Promise<void> => {
+  const c = getActiveClient();
+  if (!c || !c.isAuthenticated()) {
+    res.status(401).json({ success: false, error: "Instagram oturumu açık değil" });
+    return;
+  }
+  try {
+    const profile = await c.getMyProfile();
+    res.json({ success: true, profile });
+  } catch (error) {
+    res.status(502).json({ success: false, error: errorMessage(error) });
+  }
+});
+
 router.get("/instagram/profile/:username", async (req, res): Promise<void> => {
   try {
     const profile = await getClient().getProfile(req.params.username);

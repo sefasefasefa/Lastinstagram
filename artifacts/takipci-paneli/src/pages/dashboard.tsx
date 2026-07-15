@@ -1,4 +1,5 @@
 import { useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSummary, getGetMonitoringStatusQueryKey, useGetMe, useLogout } from "@workspace/api-client-react"
+import { useQuery } from "@tanstack/react-query"
 import { Link } from "wouter"
 import { Button, Card } from "../components/ui/core"
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/radix"
@@ -17,6 +18,12 @@ export default function DashboardPage() {
   const updateMonitoring = useUpdateMonitoringStatus()
 
   const { data: summary } = useGetDashboardSummary()
+  const { data: myProfile } = useQuery<{ success: boolean; profile?: { followerCount?: number; followingCount?: number } }>({
+    queryKey: ["instagram-me"],
+    queryFn: () => fetch("/api/instagram/me").then(r => r.json()),
+    enabled: !!me?.username,
+    retry: false,
+  })
 
   const handleSignOut = () => {
     logout.mutate(undefined, {
@@ -111,10 +118,10 @@ export default function DashboardPage() {
         {/* Stats Row */}
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <StatCard
-            title="Takipçiler"
-            value={summary?.followerCount}
+            title="Takipçilerim"
+            value={myProfile?.profile?.followerCount}
             icon={<Users className="w-5 h-5 text-blue-400" />}
-            trend="+12 bu hafta"
+            trend={myProfile?.profile?.followingCount !== undefined ? `${myProfile.profile.followingCount} takip edilen` : "Yükleniyor..."}
           />
           <StatCard
             title="Beğendiğim Gönderiler"
