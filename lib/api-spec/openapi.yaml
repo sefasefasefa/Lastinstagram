@@ -139,6 +139,73 @@ paths:
           description: Missing verification code, or no pending two-factor flow to complete
         "401":
           description: Verification code rejected by Instagram
+  /auth/checkpoint/options:
+    get:
+      operationId: getCheckpointOptions
+      tags: [auth]
+      summary: >
+        Get the current step of a pending Instagram checkpoint challenge
+        (after /auth/login responded with checkpointRequired: true) —
+        available verification methods (SMS/email) or a direct code prompt.
+      responses:
+        "200":
+          description: Current checkpoint step
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckpointOptions"
+        "400":
+          description: No pending checkpoint flow to query
+        "502":
+          description: Instagram rejected the checkpoint context request
+  /auth/checkpoint/select-method:
+    post:
+      operationId: selectCheckpointMethod
+      tags: [auth]
+      summary: >
+        Choose a verification method (e.g. SMS or email) for a pending
+        checkpoint challenge, triggering Instagram to send the code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SelectCheckpointMethodRequest"
+      responses:
+        "200":
+          description: Method selected, code sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckpointStepResult"
+        "400":
+          description: Missing choice, or no pending checkpoint flow
+        "502":
+          description: Instagram rejected the method selection
+  /auth/checkpoint/verify:
+    post:
+      operationId: verifyCheckpoint
+      tags: [auth]
+      summary: >
+        Complete a pending Instagram checkpoint challenge by submitting the
+        verification code the user received via SMS/email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyCheckpointRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Missing verification code, or no pending checkpoint flow
+        "401":
+          description: Verification code rejected by Instagram
   /auth/logout:
     post:
       operationId: logout
@@ -931,6 +998,62 @@ components:
           type: string
           nullable: true
           description: Heuristic classification of the challenge (e.g. checkpoint, captcha, rate_limit, spam_or_abuse) when isCaptcha is true.
+        checkpointRequired:
+          type: boolean
+          description: >-
+            True when captchaType is "checkpoint" AND an interactive
+            resolution flow is available — call /auth/checkpoint/options next.
+            When isCaptcha/captchaType=="checkpoint" but this is false/absent,
+            no automated resolution is possible (e.g. FunCaptcha bypass and
+            checkpoint_url extraction both failed).
+    CheckpointChoice:
+      type: object
+      required: [value, label]
+      properties:
+        value:
+          type: string
+          description: Raw value to send back as "choice" in /auth/checkpoint/select-method.
+        label:
+          type: string
+          description: Human-readable label (e.g. "SMS ile gönder — •••1234").
+    CheckpointOptions:
+      type: object
+      required: [stepName]
+      properties:
+        stepName:
+          type: string
+          description: >-
+            Instagram's current challenge step (e.g. "select_verify_method",
+            "verify_code"). When "verify_code", skip select-method and call
+            /auth/checkpoint/verify directly.
+        choices:
+          type: array
+          items:
+            $ref: "#/components/schemas/CheckpointChoice"
+        message:
+          type: string
+          nullable: true
+    CheckpointStepResult:
+      type: object
+      properties:
+        stepName:
+          type: string
+          nullable: true
+    SelectCheckpointMethodRequest:
+      type: object
+      required: [choice]
+      properties:
+        choice:
+          type: string
+          minLength: 1
+          description: The "value" of the chosen CheckpointChoice.
+    VerifyCheckpointRequest:
+      type: object
+      required: [verificationCode]
+      properties:
+        verificationCode:
+          type: string
+          minLength: 1
     VerifyTwoFactorRequest:
       type: object
       required: [verificationCode]

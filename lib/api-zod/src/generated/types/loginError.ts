@@ -20,4 +20,6 @@ export interface LoginError {
   isCaptcha?: boolean;
   /** Heuristic classification of the challenge (e.g. checkpoint, captcha, rate_limit, spam_or_abuse) when isCaptcha is true. */
   captchaType?: string | null;
+  /** True when captchaType is "checkpoint" AND an interactive resolution flow is available — call /auth/checkpoint/options next. When isCaptcha/captchaType=="checkpoint" but this is false/absent, no automated resolution is possible (e.g. FunCaptcha bypass and checkpoint_url extraction both failed). */
+  checkpointRequired?: boolean;
 }

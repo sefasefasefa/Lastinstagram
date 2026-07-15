@@ -24,10 +24,15 @@ import {
   fetchMediaInfo,
   completeTwoFactorLogin,
   extractSessionCookies,
+  fetchChallengeContext,
+  selectChallengeMethod,
+  submitChallengeCode,
   type SessionCookies,
   type RawFeedItem,
   type TwoFactorInfo,
   type TwoFactorMethod,
+  type ChallengeChoice,
+  type DirectLoginResult,
 } from "./direct-login";
 import { solveFuncaptcha } from "./funcaptcha-client";
 
@@ -60,8 +65,24 @@ export class InstagramTwoFactorRequiredError extends Error {
   }
 }
 
-export type { TwoFactorInfo, TwoFactorMethod };
+export type { TwoFactorInfo, TwoFactorMethod, ChallengeChoice };
 export type { LoginErrorType } from "./direct-login";
+
+/**
+ * Instagram bir "checkpoint" (güvenlik doğrulaması / challenge) döndürdüğünde
+ * ve otomatik FunCaptcha bypass'ı başarısız olduğunda fırlatılır. Diğer
+ * InstagramCaptchaChallengeError durumlarından farkı: burada bir
+ * checkpoint_url mevcut, yani InstagramClient interaktif çözümleme akışını
+ * (getCheckpointOptions/selectCheckpointMethod/completeCheckpoint) başlatabilir.
+ * Çağıran taraf (auth.ts) bunu InstagramCaptchaChallengeError'dan ÖNCE
+ * yakalamalı.
+ */
+export class InstagramCheckpointRequiredError extends Error {
+  constructor() {
+    super("Instagram güvenlik doğrulaması (checkpoint) gerektiriyor.");
+    this.name = "InstagramCheckpointRequiredError";
+  }
+}
 
 /**
  * Instagram bir captcha/anti-bot doğrulaması, hız sınırı veya spam/kötüye
@@ -179,6 +200,12 @@ export class InstagramClient {
    * ve ön oturum cookie'leri (csrftoken/mid) burada saklanır.
    */
   private pendingTwoFactor: { context: string; cookieHeader: string } | null = null;
+  /**
+   * Checkpoint gerektiğinde (login() sonrası, funcaptcha bypass başarısız
+   * olduğunda) burada saklanır: getCheckpointOptions/selectCheckpointMethod/
+   * completeCheckpoint çağrıları için checkpoint_url ve ön oturum cookie'leri.
+   */
+  private pendingCheckpoint: { checkpointUrl: string; cookieHeader: string } | null = null;
   /** Keep-alive zamanlayıcısı (clearInterval ile durdurulur) */
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   /** Keep-alive aralığı: belgede önerilen 15-30 dakika → 20 dakika */
@@ -259,6 +286,72 @@ export class InstagramClient {
     this.session = result.extraction.sessionCookies;
     await this.restoreFullSession(result.extraction.sessionCookies);
     await this.client.account.currentUser();
+    this.loggedIn = true;
+    this.startKeepAlive();
+  }
+
+  /** login() bir InstagramCheckpointRequiredError fırlattıysa true döner. */
+  hasPendingCheckpoint(): boolean {
+    return this.pendingCheckpoint !== null;
+  }
+
+  /**
+   * Bekleyen checkpoint'in mevcut adımını (doğrulama yöntemi seçenekleri
+   * veya doğrudan kod girişi) sorgular.
+   */
+  async getCheckpointOptions(): Promise<{
+    stepName: string;
+    choices?: ChallengeChoice[];
+    message?: string;
+  }> {
+    if (!this.pendingCheckpoint) {
+      throw new Error(
+        "Tamamlanacak bekleyen bir checkpoint akışı yok. Önce login() çağrılmalı.",
+      );
+    }
+    const { checkpointUrl, cookieHeader } = this.pendingCheckpoint;
+    const ctx = await fetchChallengeContext(checkpointUrl, cookieHeader, this.client.state.deviceString);
+    if (ctx.error) throw new Error(`Checkpoint adımı sorgulanamadı: ${ctx.error}`);
+    return { stepName: ctx.stepName, choices: ctx.choices, message: ctx.message };
+  }
+
+  /**
+   * step_name === "select_verify_method" adımında, kullanıcının seçtiği
+   * doğrulama yöntemine (choice) Instagram'ın kod göndermesini tetikler.
+   */
+  async selectCheckpointMethod(choice: string): Promise<{ stepName?: string }> {
+    if (!this.pendingCheckpoint) {
+      throw new Error(
+        "Tamamlanacak bekleyen bir checkpoint akışı yok. Önce login() çağrılmalı.",
+      );
+    }
+    const { checkpointUrl, cookieHeader } = this.pendingCheckpoint;
+    const result = await selectChallengeMethod(checkpointUrl, cookieHeader, choice, this.client.state.deviceString);
+    if (!result.success) {
+      throw new Error(`Doğrulama yöntemi seçilemedi: ${result.error ?? "bilinmeyen hata"}`);
+    }
+    return { stepName: result.stepName };
+  }
+
+  /**
+   * step_name === "verify_code" adımında, kullanıcının girdiği güvenlik
+   * kodunu doğrular ve oturumu kurar.
+   */
+  async completeCheckpoint(code: string): Promise<void> {
+    if (!this.pendingCheckpoint) {
+      throw new Error(
+        "Tamamlanacak bekleyen bir checkpoint akışı yok. Önce login() çağrılmalı.",
+      );
+    }
+    const { checkpointUrl, cookieHeader } = this.pendingCheckpoint;
+    const result = await submitChallengeCode(checkpointUrl, cookieHeader, code, this.client.state.deviceString);
+    if (!result.success || !result.sessionCookies) {
+      throw new Error(`Checkpoint doğrulaması başarısız: ${result.error ?? "bilinmeyen hata"}`);
+    }
+
+    this.pendingCheckpoint = null;
+    this.session = result.sessionCookies;
+    await this.restoreFullSession(result.sessionCookies);
     this.loggedIn = true;
     this.startKeepAlive();
   }
@@ -350,6 +443,20 @@ export class InstagramClient {
         // Checkpoint veya captcha → Arkose FunCaptcha ile bypass dene
         if (result.errorType === "checkpoint" || result.errorType === "captcha") {
           if (await trySolveAndRetry()) return;
+
+          // Funcaptcha bypass başarısız ama checkpoint_url mevcutsa,
+          // interaktif challenge/resolve akışını (kod girişi) başlatılabilir
+          // hale getir — auth.ts bunu InstagramCheckpointRequiredError ile yakalar.
+          if (result.errorType === "checkpoint" && result.checkpointUrl) {
+            this.pendingCheckpoint = {
+              checkpointUrl: result.checkpointUrl,
+              cookieHeader: result.cookies
+                ? extractSessionCookies(result.cookies).cookieHeader
+                : "",
+            };
+            throw new InstagramCheckpointRequiredError();
+          }
+
           throw new InstagramCaptchaChallengeError(
             result.errorType,
             result.errorType === "checkpoint"
@@ -399,7 +506,15 @@ export class InstagramClient {
               "Instagram hız sınırı uyguladı. Birkaç dakika bekleyip tekrar deneyin.",
             );
           }
-          // checkpoint veya login_required veya bilinmeyen
+          // checkpoint veya login_required veya bilinmeyen — checkpoint_url
+          // mevcutsa interaktif çözümleme akışını başlatılabilir hale getir.
+          if (verify.checkpointUrl) {
+            this.pendingCheckpoint = {
+              checkpointUrl: verify.checkpointUrl,
+              cookieHeader: this.session.cookieHeader,
+            };
+            throw new InstagramCheckpointRequiredError();
+          }
           throw new InstagramCaptchaChallengeError(
             "checkpoint",
             verify.error ?? "Instagram oturumu login sonrasında kabul etmedi.",
@@ -407,6 +522,7 @@ export class InstagramClient {
         }
       }
     } catch (error) {
+      if (error instanceof InstagramCheckpointRequiredError) throw error;
       if (error instanceof InstagramCaptchaChallengeError) throw error;
       if (error instanceof IgLoginTwoFactorRequiredError) {
         throw new Error(

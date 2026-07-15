@@ -215,6 +215,39 @@ export interface LoginError {
   isCaptcha?: boolean;
   /** Heuristic classification of the challenge (e.g. checkpoint, captcha, rate_limit, spam_or_abuse) when isCaptcha is true. */
   captchaType?: string | null;
+  /** True when captchaType is "checkpoint" AND an interactive resolution flow is available — call /auth/checkpoint/options next. When isCaptcha/captchaType=="checkpoint" but this is false/absent, no automated resolution is possible (e.g. FunCaptcha bypass and checkpoint_url extraction both failed). */
+  checkpointRequired?: boolean;
+}
+
+export interface CheckpointChoice {
+  /** Raw value to send back as "choice" in /auth/checkpoint/select-method. */
+  value: string;
+  /** Human-readable label (e.g. "SMS ile gönder — •••1234"). */
+  label: string;
+}
+
+export interface CheckpointOptions {
+  /** Instagram's current challenge step (e.g. "select_verify_method", "verify_code"). When "verify_code", skip select-method and call /auth/checkpoint/verify directly. */
+  stepName: string;
+  choices?: CheckpointChoice[];
+  message?: string | null;
+}
+
+export interface CheckpointStepResult {
+  stepName?: string | null;
+}
+
+export interface SelectCheckpointMethodRequest {
+  /**
+     * The "value" of the chosen CheckpointChoice.
+     * @minLength 1
+     */
+  choice: string;
+}
+
+export interface VerifyCheckpointRequest {
+  /** @minLength 1 */
+  verificationCode: string;
 }
 
 export type VerifyTwoFactorRequestMethod = typeof VerifyTwoFactorRequestMethod[keyof typeof VerifyTwoFactorRequestMethod];

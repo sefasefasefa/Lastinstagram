@@ -1414,7 +1414,13 @@ export async function pingKeepAlive(
 export async function verifySession(
   cookieHeader: string,
   userAgent = MOBILE_UA,
-): Promise<{ valid: boolean; errorType?: "checkpoint" | "login_required" | "rate_limit" | "spam_or_abuse"; error?: string }> {
+): Promise<{
+  valid: boolean;
+  errorType?: "checkpoint" | "login_required" | "rate_limit" | "spam_or_abuse";
+  error?: string;
+  /** errorType === "checkpoint" olduğunda: challenge/resolve akışı için checkpoint_url. */
+  checkpointUrl?: string;
+}> {
   try {
     const res = await fetch(
       "https://i.instagram.com/api/v1/accounts/current_user/?edit=true",
@@ -1445,7 +1451,12 @@ export async function verifySession(
     const message   = (body["message"]    as string | undefined) ?? `HTTP ${res.status}`;
 
     if (body["checkpoint_url"] || errorType === "checkpoint_challenge_required") {
-      return { valid: false, errorType: "checkpoint", error: "Instagram requires checkpoint verification" };
+      return {
+        valid: false,
+        errorType: "checkpoint",
+        error: "Instagram requires checkpoint verification",
+        checkpointUrl: typeof body["checkpoint_url"] === "string" ? body["checkpoint_url"] : undefined,
+      };
     }
     if (errorType === "login_required" || res.status === 403) {
       return { valid: false, errorType: "login_required", error: message };
@@ -1461,6 +1472,197 @@ export async function verifySession(
   } catch {
     // Network / timeout — fail-open so transient errors don't block logins
     return { valid: true };
+  }
+}
+
+// ── Checkpoint (challenge) çözümleme akışı ───────────────────────────────────
+//
+// Instagram'ın login yanıtında/oturum doğrulamasında checkpoint_url
+// döndüğünde başlatılan "challenge/resolve" akışı:
+//   1. GET  {checkpoint_url}         → step_name ("select_verify_method" |
+//                                       "verify_code" | ...) + step_data
+//                                       (varsa email/telefon ipuçları)
+//   2. POST {checkpoint_url}         → { choice: "<value>" } — seçilen
+//                                       yönteme (SMS/e-posta) kod gönderir
+//   3. POST {checkpoint_url}         → { security_code: "<code>" } — kodu
+//                                       doğrular; başarılı olursa sessionid
+//                                       içeren Set-Cookie döner.
+//
+// NOT: Bu, Instagram'ın belgelenmemiş özel API'sidir — bu üç adımın tam
+// alan adları/choice numaralandırması resmi olarak belgelenmemiştir ve
+// yaygın açık kaynak istemcilerinde (instagrapi, instagram-private-api
+// forkları) gözlemlenen davranışa dayanır. Instagram tarafında değişebilir;
+// gerçek bir hesapla doğrulanmalıdır.
+
+function buildChallengeUrl(checkpointUrl: string): string {
+  if (checkpointUrl.startsWith("http")) return checkpointUrl;
+  return `https://i.instagram.com${checkpointUrl.startsWith("/") ? "" : "/"}${checkpointUrl}`;
+}
+
+export interface ChallengeChoice {
+  /** Instagram'a "choice" alanı olarak gönderilecek ham değer (örn. "0", "1"). */
+  value: string;
+  /** Kullanıcıya gösterilecek etiket (örn. "SMS ile gönder — •••1234"). */
+  label: string;
+}
+
+export interface ChallengeContext {
+  /** Instagram'ın döndürdüğü adım adı (örn. "select_verify_method", "verify_code"). */
+  stepName: string;
+  /** step_name === "select_verify_method" olduğunda seçilebilecek yöntemler. */
+  choices?: ChallengeChoice[];
+  /** Kullanıcıya gösterilecek insan-okunabilir mesaj (varsa). */
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Checkpoint URL'sinin mevcut adımını (step_name/step_data) sorgular.
+ * cookieHeader, login denemesinden dönen ön oturum cookie'leri olmalıdır
+ * (csrftoken/mid — henüz sessionid içermez).
+ */
+export async function fetchChallengeContext(
+  checkpointUrl: string,
+  cookieHeader: string,
+  userAgent = MOBILE_UA,
+): Promise<ChallengeContext> {
+  try {
+    const res = await loginFetch(buildChallengeUrl(checkpointUrl), {
+      method: "GET",
+      headers: {
+        "User-Agent": userAgent,
+        "Cookie": cookieHeader,
+        "X-IG-App-ID": IG_APP_ID,
+        "Accept": "application/json",
+        "Accept-Language": "tr-TR",
+      },
+    });
+
+    let data: Record<string, unknown> = {};
+    try { data = (await res.json()) as Record<string, unknown>; } catch {
+      return { stepName: "unknown", error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    }
+
+    const stepName = typeof data.step_name === "string" ? data.step_name : "unknown";
+    const stepData = (data.step_data ?? {}) as Record<string, unknown>;
+
+    const choices: ChallengeChoice[] = [];
+    if (typeof stepData.phone_number === "string" && stepData.phone_number) {
+      choices.push({ value: "0", label: `SMS ile gönder — ${stepData.phone_number}` });
+    }
+    if (typeof stepData.email === "string" && stepData.email) {
+      choices.push({ value: "1", label: `E-posta ile gönder — ${stepData.email}` });
+    }
+    // Bazı yanıtlar step_data.choice içinde hazır seçenek listesi döndürür.
+    if (Array.isArray(stepData.choice)) {
+      for (const c of stepData.choice as unknown[]) {
+        if (c && typeof c === "object" && "value" in c) {
+          const cc = c as { value: string; label?: string };
+          choices.push({ value: String(cc.value), label: cc.label ?? String(cc.value) });
+        }
+      }
+    }
+
+    return {
+      stepName,
+      choices: choices.length > 0 ? choices : undefined,
+      message: typeof data.message === "string" ? data.message : undefined,
+    };
+  } catch (e) {
+    return { stepName: "unknown", error: `Ağ hatası (challenge context): ${e instanceof Error ? e.message : e}` };
+  }
+}
+
+/**
+ * step_name === "select_verify_method" adımında, kullanıcının seçtiği
+ * yönteme (choice) Instagram'ın kod göndermesini tetikler.
+ */
+export async function selectChallengeMethod(
+  checkpointUrl: string,
+  cookieHeader: string,
+  choice: string,
+  userAgent = MOBILE_UA,
+): Promise<{ success: boolean; stepName?: string; error?: string }> {
+  try {
+    const res = await loginFetch(buildChallengeUrl(checkpointUrl), {
+      method: "POST",
+      headers: {
+        "User-Agent": userAgent,
+        "Cookie": cookieHeader,
+        "X-IG-App-ID": IG_APP_ID,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "Accept-Language": "tr-TR",
+      },
+      body: new URLSearchParams({ choice }).toString(),
+    });
+
+    let data: Record<string, unknown> = {};
+    try { data = (await res.json()) as Record<string, unknown>; } catch {
+      return { success: false, error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    }
+
+    if (!res.ok || data.status === "fail") {
+      const msg = typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+      return { success: false, error: msg };
+    }
+
+    return { success: true, stepName: typeof data.step_name === "string" ? data.step_name : undefined };
+  } catch (e) {
+    return { success: false, error: `Ağ hatası (challenge select): ${e instanceof Error ? e.message : e}` };
+  }
+}
+
+/**
+ * step_name === "verify_code" adımında, kullanıcının girdiği güvenlik
+ * kodunu doğrular. Başarılı olursa Set-Cookie'den sessionid dahil tam
+ * oturum cookie'lerini çıkarır.
+ */
+export async function submitChallengeCode(
+  checkpointUrl: string,
+  cookieHeader: string,
+  code: string,
+  userAgent = MOBILE_UA,
+): Promise<{ success: boolean; sessionCookies?: SessionCookies; error?: string }> {
+  try {
+    const res = await loginFetch(buildChallengeUrl(checkpointUrl), {
+      method: "POST",
+      headers: {
+        "User-Agent": userAgent,
+        "Cookie": cookieHeader,
+        "X-IG-App-ID": IG_APP_ID,
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "Accept-Language": "tr-TR",
+      },
+      body: new URLSearchParams({ security_code: code }).toString(),
+    });
+
+    const setCookies = getSetCookies(res);
+    let data: Record<string, unknown> = {};
+    try { data = (await res.json()) as Record<string, unknown>; } catch {
+      return { success: false, error: `Beklenmeyen yanıt (HTTP ${res.status})` };
+    }
+
+    const sessionCookies = extractSessionCookies(setCookies);
+    const hasSession = Boolean(sessionCookies.sessionid);
+
+    if (!res.ok && !hasSession) {
+      const msg = typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
+      return { success: false, error: msg };
+    }
+    if (data.status === "fail" && !hasSession) {
+      const msg = typeof data.message === "string" ? data.message : "Doğrulama kodu reddedildi";
+      return { success: false, error: msg };
+    }
+    if (!hasSession) {
+      return {
+        success: false,
+        error: typeof data.message === "string" ? data.message : "Kod kabul edildi ama oturum kurulamadı",
+      };
+    }
+
+    return { success: true, sessionCookies };
+  } catch (e) {
+    return { success: false, error: `Ağ hatası (challenge verify): ${e instanceof Error ? e.message : e}` };
   }
 }
 
@@ -1620,6 +1822,13 @@ export interface DirectLoginResult {
   twoFactorIdentifier?: string;
   /** two_factor_info.two_step_verification_context (örn. "default", "sms"). */
   twoStepVerificationContext?: string;
+  /**
+   * errorType === "checkpoint" olduğunda: yanıt gövdesindeki checkpoint_url
+   * (örn. "/challenge/12345678/abcAbc123/"). challenge/resolve akışını
+   * başlatmak için fetchChallengeContext/selectChallengeMethod/submitChallengeCode
+   * çağrılarına geçirilir.
+   */
+  checkpointUrl?: string;
 }
 
 // ── Mobil API girişi ──────────────────────────────────────────────────────────
@@ -1701,7 +1910,18 @@ async function loginViaMobile(
   if (classified) {
     const msg =
       typeof data.message === "string" ? data.message : classified;
-    return { success: false, error: msg, errorType: classified };
+    return {
+      success: false,
+      error: msg,
+      errorType: classified,
+      checkpointUrl:
+        classified === "checkpoint" && typeof data.checkpoint_url === "string"
+          ? data.checkpoint_url
+          : undefined,
+      // Checkpoint çözümleme akışı, checkpoint tetiklenmeden önceki ön oturum
+      // cookie'lerini (csrftoken/mid) gerektirir — 2FA akışıyla aynı mantık.
+      cookies: classified === "checkpoint" ? setCookies : undefined,
+    };
   }
   if (!res.ok || data.status === "fail") {
     const errorType: LoginErrorType =
@@ -1829,7 +2049,16 @@ async function loginViaWeb(
   if (classifiedWeb) {
     const msg =
       typeof data.message === "string" ? data.message : classifiedWeb;
-    return { success: false, error: msg, errorType: classifiedWeb };
+    return {
+      success: false,
+      error: msg,
+      errorType: classifiedWeb,
+      checkpointUrl:
+        classifiedWeb === "checkpoint" && typeof data.checkpoint_url === "string"
+          ? data.checkpoint_url
+          : undefined,
+      cookies: classifiedWeb === "checkpoint" ? [...initCookies, ...setCookies] : undefined,
+    };
   }
   if (!res.ok || !data.authenticated) {
     const msg =

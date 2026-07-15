@@ -1,6 +1,14 @@
-import { useState, type FormEvent } from "react"
+import { useState, useEffect, type FormEvent } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { useLogin, useVerifyTwoFactor, type VerifyTwoFactorRequestMethod } from "@workspace/api-client-react"
+import {
+  useLogin,
+  useVerifyTwoFactor,
+  useGetCheckpointOptions,
+  useSelectCheckpointMethod,
+  useVerifyCheckpoint,
+  type VerifyTwoFactorRequestMethod,
+  type CheckpointChoice,
+} from "@workspace/api-client-react"
 import { Button, Card, Input, Label } from "../components/ui/core"
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert"
 import { ShieldAlert } from "lucide-react"
@@ -38,6 +46,8 @@ export default function LoginPage() {
   const queryClient = useQueryClient()
   const login = useLogin()
   const verifyTwoFactor = useVerifyTwoFactor()
+  const selectCheckpointMethod = useSelectCheckpointMethod()
+  const verifyCheckpoint = useVerifyCheckpoint()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +58,49 @@ export default function LoginPage() {
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
   const [twoFactorMethod, setTwoFactorMethod] = useState<TwoFactorMethod>("totp")
   const [verificationCode, setVerificationCode] = useState("")
+
+  // Instagram checkpoint (güvenlik doğrulaması) çözümleme akışı — /auth/login
+  // checkpointRequired: true döndürdüğünde başlar. Instagram'ın adımı önce
+  // bir yöntem seçimi ("select_verify_method") isteyebilir, ya da doğrudan
+  // kod girişi ("verify_code") isteyebilir; bu yüzden akış tek bir kod ekranı
+  // yerine yöntem seçimini opsiyonel bir ilk adım olarak ele alır.
+  const [checkpointRequired, setCheckpointRequired] = useState(false)
+  const [checkpointStep, setCheckpointStep] = useState<"loading" | "select-method" | "verify-code" | null>(null)
+  const [checkpointChoices, setCheckpointChoices] = useState<CheckpointChoice[]>([])
+  const [checkpointChoice, setCheckpointChoice] = useState("")
+  const [checkpointMessage, setCheckpointMessage] = useState<string | null>(null)
+  const [checkpointCode, setCheckpointCode] = useState("")
+
+  const checkpointOptions = useGetCheckpointOptions({
+    query: { enabled: checkpointRequired && checkpointStep === "loading" },
+  })
+
+  useEffect(() => {
+    if (!checkpointOptions.data) return
+    const { stepName, choices, message } = checkpointOptions.data
+    setCheckpointMessage(message ?? null)
+    if (stepName === "select_verify_method" && choices && choices.length > 0) {
+      setCheckpointChoices(choices)
+      setCheckpointChoice(choices[0]?.value ?? "")
+      setCheckpointStep("select-method")
+    } else {
+      // Zaten "verify_code" adımındaysa (veya tek yöntem otomatik seçildiyse)
+      // doğrudan kod girişine geç.
+      setCheckpointStep("verify-code")
+    }
+  }, [checkpointOptions.data])
+
+  useEffect(() => {
+    if (checkpointOptions.isError) {
+      const msg =
+        (checkpointOptions.error as { data?: { error?: string } })?.data?.error
+        ?? "Checkpoint adımı sorgulanamadı."
+      setError(msg)
+      setCheckpointRequired(false)
+      setCheckpointStep(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkpointOptions.isError])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -72,10 +125,18 @@ export default function LoginPage() {
             twoFactorRequired?: boolean
             isCaptcha?: boolean
             captchaType?: string | null
+            checkpointRequired?: boolean
           } })?.data
 
           if (data?.twoFactorRequired) {
             setTwoFactorRequired(true)
+            setError(null)
+            return
+          }
+
+          if (data?.checkpointRequired) {
+            setCheckpointRequired(true)
+            setCheckpointStep("loading")
             setError(null)
             return
           }
@@ -110,6 +171,54 @@ export default function LoginPage() {
     )
   }
 
+  const handleSelectCheckpointMethod = (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    selectCheckpointMethod.mutate(
+      { data: { choice: checkpointChoice } },
+      {
+        onSuccess: () => {
+          setCheckpointStep("verify-code")
+        },
+        onError: (err: unknown) => {
+          const msg =
+            (err as { data?: { error?: string } })?.data?.error
+            ?? "Doğrulama yöntemi seçilemedi. Lütfen tekrar deneyin."
+          setError(msg)
+        },
+      },
+    )
+  }
+
+  const handleVerifyCheckpoint = (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    verifyCheckpoint.mutate(
+      { data: { verificationCode: checkpointCode } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries()
+        },
+        onError: (err: unknown) => {
+          const msg =
+            (err as { data?: { error?: string } })?.data?.error
+            ?? "Doğrulama kodu kabul edilmedi. Lütfen tekrar deneyin."
+          setError(msg)
+        },
+      },
+    )
+  }
+
+  const resetCheckpoint = () => {
+    setCheckpointRequired(false)
+    setCheckpointStep(null)
+    setCheckpointChoices([])
+    setCheckpointChoice("")
+    setCheckpointMessage(null)
+    setCheckpointCode("")
+    setError(null)
+  }
+
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
       <Card className="w-[400px] max-w-full p-8">
@@ -118,16 +227,105 @@ export default function LoginPage() {
         <div className="flex flex-col items-center mb-7">
           <InstagramIcon className="w-14 h-14 mb-4" />
           <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            {twoFactorRequired ? "İki Adımlı Doğrulama" : "Instagram ile Giriş Yap"}
+            {checkpointRequired
+              ? "Güvenlik Doğrulaması"
+              : twoFactorRequired ? "İki Adımlı Doğrulama" : "Instagram ile Giriş Yap"}
           </h1>
           <p className="text-sm text-muted-foreground mt-1 text-center">
-            {twoFactorRequired
-              ? "Instagram hesabınız için gönderilen doğrulama kodunu girin"
-              : "Instagram kullanıcı adı ve şifrenizi girin"}
+            {checkpointRequired
+              ? (checkpointStep === "select-method"
+                  ? "Instagram'ın kodu göndereceği yöntemi seçin"
+                  : "Instagram'ın gönderdiği doğrulama kodunu girin")
+              : twoFactorRequired
+                ? "Instagram hesabınız için gönderilen doğrulama kodunu girin"
+                : "Instagram kullanıcı adı ve şifrenizi girin"}
           </p>
         </div>
 
-        {twoFactorRequired ? (
+        {checkpointRequired ? (
+          <div className="space-y-4">
+            {checkpointStep === "loading" && (
+              <p className="text-sm text-muted-foreground text-center py-4">Doğrulama adımı sorgulanıyor...</p>
+            )}
+
+            {checkpointStep === "select-method" && (
+              <form onSubmit={handleSelectCheckpointMethod} className="space-y-4">
+                {checkpointMessage && (
+                  <p className="text-sm text-muted-foreground">{checkpointMessage}</p>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="checkpoint-method">Doğrulama Yöntemi</Label>
+                  <select
+                    id="checkpoint-method"
+                    value={checkpointChoice}
+                    onChange={(e) => setCheckpointChoice(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    {checkpointChoices.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {error && (
+                  <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5">
+                    <p className="text-sm text-destructive leading-snug">{error}</p>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
+                  disabled={selectCheckpointMethod.isPending}
+                >
+                  {selectCheckpointMethod.isPending ? "Gönderiliyor..." : "Kodu Gönder"}
+                </Button>
+                <Button type="button" variant="ghost" className="w-full" onClick={resetCheckpoint}>
+                  Geri dön
+                </Button>
+              </form>
+            )}
+
+            {checkpointStep === "verify-code" && (
+              <form onSubmit={handleVerifyCheckpoint} className="space-y-4">
+                {checkpointMessage && (
+                  <p className="text-sm text-muted-foreground">{checkpointMessage}</p>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="checkpoint-code">Doğrulama Kodu</Label>
+                  <Input
+                    id="checkpoint-code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="123456"
+                    maxLength={8}
+                    value={checkpointCode}
+                    onChange={(e) => setCheckpointCode(e.target.value.replace(/\D/g, ""))}
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                {error && (
+                  <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5">
+                    <p className="text-sm text-destructive leading-snug">{error}</p>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
+                  disabled={verifyCheckpoint.isPending}
+                >
+                  {verifyCheckpoint.isPending ? "Doğrulanıyor..." : "Doğrula"}
+                </Button>
+                <Button type="button" variant="ghost" className="w-full" onClick={resetCheckpoint}>
+                  Geri dön
+                </Button>
+              </form>
+            )}
+          </div>
+        ) : twoFactorRequired ? (
           <form onSubmit={handleVerify} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="two-factor-method">Doğrulama Yöntemi</Label>

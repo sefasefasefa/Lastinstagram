@@ -9,6 +9,7 @@ import { logger } from "../lib/logger";
 import {
   InstagramTwoFactorRequiredError,
   InstagramCaptchaChallengeError,
+  InstagramCheckpointRequiredError,
   type TwoFactorMethod,
 } from "@workspace/instagram-client";
 
@@ -111,6 +112,22 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       return;
     }
 
+    // Checkpoint with a resolvable interactive flow: Instagram returned a
+    // checkpoint_url and the automated FunCaptcha bypass failed, but the
+    // client kept the pending challenge state so the user can pick a
+    // verification method (SMS/email) and enter the code themselves —
+    // see /auth/checkpoint/*. This must be caught BEFORE the generic
+    // InstagramCaptchaChallengeError branch below.
+    if (err instanceof InstagramCheckpointRequiredError) {
+      res.status(401).json({
+        error: "Instagram hesabında güvenlik doğrulaması (checkpoint) gerekiyor. Bir doğrulama yöntemi seçip kodu girin.",
+        isCaptcha: true,
+        captchaType: "checkpoint",
+        checkpointRequired: true,
+      });
+      return;
+    }
+
     // Captcha / checkpoint / rate-limit / spam-block: this is NOT a wrong
     // username or password, so it must never surface the generic
     // "kullanıcı adı veya şifrenizi kontrol edin" message — show a
@@ -190,6 +207,90 @@ router.post("/auth/verify-2fa", async (req, res): Promise<void> => {
     await igClient.completeTwoFactorLogin(verificationCode, method);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "İki adımlı doğrulama başarısız";
+    res.status(401).json({ error: msg });
+    return;
+  }
+
+  const igUser = await upsertInstagramUser(igClient.getUsername());
+
+  req.session.regenerate((err) => {
+    if (err) { res.status(500).json({ error: "Failed to establish session" }); return; }
+    req.session.userId = igUser.id;
+    res.json(LoginResponse.parse({
+      id: igUser.id,
+      username: igUser.username,
+      sessionExpiry: sessionExpiryOf(req),
+    }));
+  });
+});
+
+/**
+ * Checkpoint (güvenlik doğrulaması) çözümleme akışı — /auth/login bir
+ * checkpointRequired: true yanıtı döndürdükten sonra kullanılır:
+ *   1. GET  /auth/checkpoint/options       → doğrulama yöntemi seçenekleri
+ *   2. POST /auth/checkpoint/select-method → seçilen yönteme kod gönder
+ *   3. POST /auth/checkpoint/verify        → alınan kodu doğrula, oturumu kur
+ *
+ * NOT: Bu, Instagram'ın belgelenmemiş özel API'sine dayanır (bkz.
+ * direct-login.ts'teki challenge/resolve yorumları) — gerçek bir hesapla
+ * doğrulanmalıdır.
+ */
+router.get("/auth/checkpoint/options", async (_req, res): Promise<void> => {
+  const igClient = getActiveClient();
+  if (!igClient || !igClient.hasPendingCheckpoint()) {
+    res.status(400).json({ error: "Tamamlanacak bekleyen bir checkpoint akışı bulunamadı. Lütfen tekrar giriş yapın." });
+    return;
+  }
+
+  try {
+    const options = await igClient.getCheckpointOptions();
+    res.json(options);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Checkpoint adımı sorgulanamadı";
+    res.status(502).json({ error: msg });
+  }
+});
+
+router.post("/auth/checkpoint/select-method", async (req, res): Promise<void> => {
+  const choice = typeof req.body?.choice === "string" ? req.body.choice.trim() : "";
+  if (!choice) {
+    res.status(400).json({ error: "choice is required" });
+    return;
+  }
+
+  const igClient = getActiveClient();
+  if (!igClient || !igClient.hasPendingCheckpoint()) {
+    res.status(400).json({ error: "Tamamlanacak bekleyen bir checkpoint akışı bulunamadı. Lütfen tekrar giriş yapın." });
+    return;
+  }
+
+  try {
+    const result = await igClient.selectCheckpointMethod(choice);
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Doğrulama yöntemi seçilemedi";
+    res.status(502).json({ error: msg });
+  }
+});
+
+router.post("/auth/checkpoint/verify", async (req, res): Promise<void> => {
+  const verificationCode =
+    typeof req.body?.verificationCode === "string" ? req.body.verificationCode.trim() : "";
+  if (!verificationCode) {
+    res.status(400).json({ error: "verificationCode is required" });
+    return;
+  }
+
+  const igClient = getActiveClient();
+  if (!igClient || !igClient.hasPendingCheckpoint()) {
+    res.status(400).json({ error: "Tamamlanacak bekleyen bir checkpoint akışı bulunamadı. Lütfen tekrar giriş yapın." });
+    return;
+  }
+
+  try {
+    await igClient.completeCheckpoint(verificationCode);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Checkpoint doğrulaması başarısız";
     res.status(401).json({ error: msg });
     return;
   }

@@ -23,6 +23,8 @@ import type {
   AuthUser,
   AutomationJob,
   AutomationJobInput,
+  CheckpointOptions,
+  CheckpointStepResult,
   DashboardSummary,
   HealthStatus,
   InstagramActionResponse,
@@ -46,8 +48,10 @@ import type {
   RequestConfigInput,
   RequestConfigTestResult,
   RequestRunLogEntry,
+  SelectCheckpointMethodRequest,
   TrackedUser,
   TrackedUserInput,
+  VerifyCheckpointRequest,
   VerifyTwoFactorRequest
 } from './api.schemas';
 
@@ -517,6 +521,231 @@ export const useVerifyTwoFactor = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getVerifyTwoFactorMutationOptions(options));
+    }
+
+export const getGetCheckpointOptionsUrl = () => {
+
+
+
+
+  return `/api/auth/checkpoint/options`
+}
+
+/**
+ * @summary Get the current step of a pending Instagram checkpoint challenge (after /auth/login responded with checkpointRequired: true) — available verification methods (SMS/email) or a direct code prompt.
+
+ */
+export const getCheckpointOptions = async ( options?: RequestInit): Promise<CheckpointOptions> => {
+
+  return customFetch<CheckpointOptions>(getGetCheckpointOptionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCheckpointOptionsQueryKey = () => {
+    return [
+    `/api/auth/checkpoint/options`
+    ] as const;
+    }
+
+
+export const getGetCheckpointOptionsQueryOptions = <TData = Awaited<ReturnType<typeof getCheckpointOptions>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCheckpointOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCheckpointOptionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCheckpointOptions>>> = ({ signal }) => getCheckpointOptions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCheckpointOptions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCheckpointOptionsQueryResult = NonNullable<Awaited<ReturnType<typeof getCheckpointOptions>>>
+export type GetCheckpointOptionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the current step of a pending Instagram checkpoint challenge (after /auth/login responded with checkpointRequired: true) — available verification methods (SMS/email) or a direct code prompt.
+
+ */
+
+export function useGetCheckpointOptions<TData = Awaited<ReturnType<typeof getCheckpointOptions>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCheckpointOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCheckpointOptionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSelectCheckpointMethodUrl = () => {
+
+
+
+
+  return `/api/auth/checkpoint/select-method`
+}
+
+/**
+ * @summary Choose a verification method (e.g. SMS or email) for a pending checkpoint challenge, triggering Instagram to send the code.
+
+ */
+export const selectCheckpointMethod = async (selectCheckpointMethodRequest: SelectCheckpointMethodRequest, options?: RequestInit): Promise<CheckpointStepResult> => {
+
+  return customFetch<CheckpointStepResult>(getSelectCheckpointMethodUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(selectCheckpointMethodRequest)
+  }
+);}
+
+
+
+
+
+export const getSelectCheckpointMethodMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof selectCheckpointMethod>>, TError,{data: BodyType<SelectCheckpointMethodRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof selectCheckpointMethod>>, TError,{data: BodyType<SelectCheckpointMethodRequest>}, TContext> => {
+
+const mutationKey = ['selectCheckpointMethod'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof selectCheckpointMethod>>, {data: BodyType<SelectCheckpointMethodRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  selectCheckpointMethod(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SelectCheckpointMethodMutationResult = NonNullable<Awaited<ReturnType<typeof selectCheckpointMethod>>>
+    export type SelectCheckpointMethodMutationBody = BodyType<SelectCheckpointMethodRequest>
+    export type SelectCheckpointMethodMutationError = ErrorType<void>
+
+    /**
+ * @summary Choose a verification method (e.g. SMS or email) for a pending checkpoint challenge, triggering Instagram to send the code.
+
+ */
+export const useSelectCheckpointMethod = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof selectCheckpointMethod>>, TError,{data: BodyType<SelectCheckpointMethodRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof selectCheckpointMethod>>,
+        TError,
+        {data: BodyType<SelectCheckpointMethodRequest>},
+        TContext
+      > => {
+      return useMutation(getSelectCheckpointMethodMutationOptions(options));
+    }
+
+export const getVerifyCheckpointUrl = () => {
+
+
+
+
+  return `/api/auth/checkpoint/verify`
+}
+
+/**
+ * @summary Complete a pending Instagram checkpoint challenge by submitting the verification code the user received via SMS/email.
+
+ */
+export const verifyCheckpoint = async (verifyCheckpointRequest: VerifyCheckpointRequest, options?: RequestInit): Promise<AuthUser> => {
+
+  return customFetch<AuthUser>(getVerifyCheckpointUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(verifyCheckpointRequest)
+  }
+);}
+
+
+
+
+
+export const getVerifyCheckpointMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyCheckpoint>>, TError,{data: BodyType<VerifyCheckpointRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyCheckpoint>>, TError,{data: BodyType<VerifyCheckpointRequest>}, TContext> => {
+
+const mutationKey = ['verifyCheckpoint'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyCheckpoint>>, {data: BodyType<VerifyCheckpointRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyCheckpoint(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyCheckpointMutationResult = NonNullable<Awaited<ReturnType<typeof verifyCheckpoint>>>
+    export type VerifyCheckpointMutationBody = BodyType<VerifyCheckpointRequest>
+    export type VerifyCheckpointMutationError = ErrorType<void>
+
+    /**
+ * @summary Complete a pending Instagram checkpoint challenge by submitting the verification code the user received via SMS/email.
+
+ */
+export const useVerifyCheckpoint = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyCheckpoint>>, TError,{data: BodyType<VerifyCheckpointRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyCheckpoint>>,
+        TError,
+        {data: BodyType<VerifyCheckpointRequest>},
+        TContext
+      > => {
+      return useMutation(getVerifyCheckpointMutationOptions(options));
     }
 
 export const getLogoutUrl = () => {

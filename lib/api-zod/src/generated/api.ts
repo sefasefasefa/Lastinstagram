@@ -106,6 +106,55 @@ export const VerifyTwoFactorResponse = zod.object({
 
 
 /**
+ * @summary Get the current step of a pending Instagram checkpoint challenge (after /auth/login responded with checkpointRequired: true) — available verification methods (SMS/email) or a direct code prompt.
+
+ */
+export const GetCheckpointOptionsResponse = zod.object({
+  "stepName": zod.string().describe('Instagram\'s current challenge step (e.g. \"select_verify_method\", \"verify_code\"). When \"verify_code\", skip select-method and call \/auth\/checkpoint\/verify directly.'),
+  "choices": zod.array(zod.object({
+  "value": zod.string().describe('Raw value to send back as \"choice\" in \/auth\/checkpoint\/select-method.'),
+  "label": zod.string().describe('Human-readable label (e.g. \"SMS ile gönder — •••1234\").')
+})).optional(),
+  "message": zod.string().nullish()
+})
+
+
+/**
+ * @summary Choose a verification method (e.g. SMS or email) for a pending checkpoint challenge, triggering Instagram to send the code.
+
+ */
+
+
+
+export const SelectCheckpointMethodBody = zod.object({
+  "choice": zod.string().min(1).describe('The \"value\" of the chosen CheckpointChoice.')
+})
+
+export const SelectCheckpointMethodResponse = zod.object({
+  "stepName": zod.string().nullish()
+})
+
+
+/**
+ * @summary Complete a pending Instagram checkpoint challenge by submitting the verification code the user received via SMS/email.
+
+ */
+
+
+
+export const VerifyCheckpointBody = zod.object({
+  "verificationCode": zod.string().min(1)
+})
+
+export const VerifyCheckpointResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "sessionExpiry": zod.coerce.date().describe('When the current session cookie expires.'),
+  "deviceProfile": zod.string().nullish().describe('Optional client-supplied device\/browser identifier, echoed back as received. Not used for anything server-side.')
+})
+
+
+/**
  * @summary Log out the current session. Idempotent - returns 204 even if not authenticated.
  */
 export const LogoutResponse = zod.void()
