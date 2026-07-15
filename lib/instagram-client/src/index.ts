@@ -340,7 +340,7 @@ export class InstagramClient {
    * step_name === "select_verify_method" adımında, kullanıcının seçtiği
    * doğrulama yöntemine (choice) Instagram'ın kod göndermesini tetikler.
    */
-  async selectCheckpointMethod(choice: string): Promise<{ stepName?: string }> {
+  async selectCheckpointMethod(choice: string): Promise<{ stepName?: string; loginCompleted?: boolean }> {
     if (!this.pendingCheckpoint) {
       throw new Error(
         "Tamamlanacak bekleyen bir checkpoint akışı yok. Önce login() çağrılmalı.",
@@ -351,6 +351,34 @@ export class InstagramClient {
     if (!result.success) {
       throw new Error(`Doğrulama yöntemi seçilemedi: ${result.error ?? "bilinmeyen hata"}`);
     }
+
+    // action:"close" → Instagram checkpoint'i bypass etti, oturum hemen kuruldu.
+    if (result.action === "close" && result.sessionCookies?.sessionid) {
+      this.pendingCheckpoint = null;
+      this.session = result.sessionCookies;
+      await this.restoreFullSession(result.sessionCookies);
+      this.loggedIn = true;
+      this.startKeepAlive();
+      console.log("[selectCheckpointMethod] action:close → login tamamlandı");
+      return { loginCompleted: true };
+    }
+
+    // action:"close" ama session cookie yoksa: checkpoint bypass edildi ama
+    // oturum bilgisi gelmedi — mevcut cookie'lerle currentUser çağır.
+    if (result.action === "close") {
+      console.log("[selectCheckpointMethod] action:close ama sessionid yok — currentUser ile doğrulanıyor");
+      try {
+        await this.client.account.currentUser();
+        this.pendingCheckpoint = null;
+        this.loggedIn = true;
+        this.startKeepAlive();
+        console.log("[selectCheckpointMethod] currentUser başarılı → login tamamlandı");
+        return { loginCompleted: true };
+      } catch {
+        console.log("[selectCheckpointMethod] currentUser başarısız — kod girişi gerekebilir");
+      }
+    }
+
     return { stepName: result.stepName };
   }
 

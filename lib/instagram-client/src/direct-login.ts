@@ -2077,7 +2077,7 @@ export async function selectChallengeMethod(
   choice: string,
   userAgent = MOBILE_UA,
   challengeContext?: string,
-): Promise<{ success: boolean; stepName?: string; error?: string }> {
+): Promise<{ success: boolean; stepName?: string; action?: string; sessionCookies?: SessionCookies; error?: string }> {
   const isAuthPlatform = checkpointUrl.includes("auth_platform");
   const csrfToken = extractCsrfFromCookie(cookieHeader);
 
@@ -2119,13 +2119,21 @@ export async function selectChallengeMethod(
         body: new URLSearchParams(mobileBody).toString(),
       });
 
+      const mobileCookiesSelect = getSetCookies(mobileRes);
       const mobileText = await mobileRes.text().catch(() => "");
-      console.log("[selectChallengeMethod] mobil API status:", mobileRes.status, "bodyPreview:", JSON.stringify(mobileText.slice(0, 200)));
+      console.log("[selectChallengeMethod] mobil API status:", mobileRes.status, "setCookies:", mobileCookiesSelect.length, "bodyPreview:", JSON.stringify(mobileText.slice(0, 200)));
 
       let mobileData: Record<string, unknown> = {};
       try { mobileData = mobileText ? (JSON.parse(mobileText) as Record<string, unknown>) : {}; } catch {}
 
       if (mobileRes.ok && mobileData.status !== "fail") {
+        // action:"close" → Instagram checkpoint'i kapattı, oturum hemen kuruldu.
+        // Set-Cookie'den sessionid'yi yakala ve döndür.
+        const sc = extractSessionCookies(mobileCookiesSelect);
+        if (mobileData.action === "close") {
+          console.log("[selectChallengeMethod] action:close — checkpoint bypass edildi, sessionid:", sc.sessionid ? "VAR" : "YOK");
+          return { success: true, action: "close", sessionCookies: sc.sessionid ? sc : undefined };
+        }
         console.log("[selectChallengeMethod] mobil API başarılı — kod gönderildi");
         return { success: true, stepName: typeof mobileData.step_name === "string" ? mobileData.step_name : undefined };
       }
