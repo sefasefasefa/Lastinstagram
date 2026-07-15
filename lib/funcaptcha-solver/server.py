@@ -1464,6 +1464,11 @@ class preset:
                 "siteurl": "https://www.instagram.com",
                 "sitekey": "B7D8911C-5CC8-A9A3-35B0-554ACEE604DA",
                 "apiurl": "https://client-api.arkoselabs.com",
+                # blob="undefined" zorunlu — bu alan eksik olduğunda Arkose
+                # "DENIED ACCESS" döndürüp solver "invalid blob" hatasıyla
+                # çöküyor. Instagram'ın kendi Arkose entegrasyonunda blob
+                # değeri yoksa "undefined" string'i gönderilir.
+                "blob": "undefined",
                 "data": {
                     "window__ancestor_origins": ["https://www.instagram.com"],
                     "client_config__sitedata_location_href": "https://www.instagram.com/accounts/login/",
