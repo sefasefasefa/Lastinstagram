@@ -678,6 +678,38 @@ export async function fetchSelfProfile(
       },
     );
 
+    // 429: verifySession ile aynı endpoint'e art arda istek → kısa bekleme + tekrar
+    if (res.status === 429) {
+      console.log("[fetchSelfProfile] 429 rate-limit — 5 sn bekleniyor, tekrar deneniyor");
+      await new Promise((r) => setTimeout(r, 5_000));
+      const retry = await fetch(
+        "https://www.instagram.com/api/v1/accounts/current_user/?edit=true",
+        {
+          headers: {
+            "User-Agent": WEB_UA,
+            "Cookie": cookieHeader,
+            "X-IG-App-ID": WEB_APP_ID,
+            "X-CSRFToken": csrftoken,
+            "X-ASBD-ID": "359341",
+            "X-IG-WWW-Claim": "0",
+            "Accept": "*/*",
+            "Accept-Language": "tr,en;q=0.9",
+            "Origin": "https://www.instagram.com",
+            "Referer": "https://www.instagram.com/",
+          },
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      if (!retry.ok) return { success: false, error: `HTTP ${retry.status} (retry sonrası)` };
+      let retryData: Record<string, unknown> = {};
+      try { retryData = (await retry.json()) as Record<string, unknown>; } catch {
+        return { success: false, error: "Yanıt JSON parse edilemedi" };
+      }
+      const retryUser = retryData.user as RawInstagramUser | undefined;
+      if (!retryUser) return { success: false, error: "Kullanıcı verisi bulunamadı" };
+      return { success: true, user: retryUser };
+    }
+
     if (!res.ok) {
       return { success: false, error: `HTTP ${res.status}` };
     }

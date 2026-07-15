@@ -209,6 +209,8 @@ export class InstagramClient {
   private loginPromise: Promise<void> | null = null;
   /** Oturum cookie'lerinin tamamı — keep-alive ve CSRF yenileme için kullanılır */
   private session: SessionCookies | null = null;
+  /** getMyProfile() sonucu cache — 5 dakika geçerliliği var (rate-limit koruması) */
+  private myProfileCache: { profile: InstagramProfile; expiresAt: number } | null = null;
   /**
    * 2FA gerektiğinde login() bir InstagramTwoFactorRequiredError fırlatır;
    * completeTwoFactorLogin() çağrısı için gereken two_step_verification_context
@@ -1044,12 +1046,16 @@ export class InstagramClient {
     if (!this.session?.cookieHeader) {
       throw new Error("Aktif Instagram oturumu bulunamadı");
     }
+    // 5 dakikalık cache — aynı endpoint'e art arda istek yapılmasını engeller
+    if (this.myProfileCache && Date.now() < this.myProfileCache.expiresAt) {
+      return this.myProfileCache.profile;
+    }
     const result = await fetchSelfProfile(this.session.cookieHeader);
     if (!result.success || !result.user) {
       throw new Error(result.error ?? "Profil bilgisi alınamadı");
     }
     const u = result.user;
-    return {
+    const profile: InstagramProfile = {
       username: u.username,
       pk: String(u.pk),
       fullName: u.full_name ?? "",
@@ -1061,11 +1067,14 @@ export class InstagramClient {
       externalUrl: u.external_url ?? undefined,
       isPrivate: u.is_private,
     };
+    this.myProfileCache = { profile, expiresAt: Date.now() + 5 * 60 * 1000 };
+    return profile;
   }
 
   async logout(): Promise<void> {
     if (!this.loggedIn) return;
     this.stopKeepAlive();
+    this.myProfileCache = null;
     try {
       await this.client.account.logout();
     } catch { /* oturum zaten sona ermiş olabilir */ }
