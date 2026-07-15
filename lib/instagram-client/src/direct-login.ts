@@ -435,6 +435,13 @@ function signBody(json: string): {
 // ── Yardımcı fonksiyonlar ─────────────────────────────────────────────────────
 
 function getSetCookies(res: Response): string[] {
+  // Stealth bridge (BridgeResponseWrapper) cookie'leri response objesinin kendi
+  // getSetCookie() metodunda tutar — headers nesnesi değil, çünkü Set-Cookie
+  // başlıkları bridge tarafından ayrı bir dizi olarak iletilir.
+  // Native fetch ise cookie'leri headers.getSetCookie() üzerinden verir.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fromResponse = ((res as any).getSetCookie?.() as string[] | undefined);
+  if (fromResponse && fromResponse.length > 0) return fromResponse;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (res.headers as any).getSetCookie?.() ?? [];
 }
