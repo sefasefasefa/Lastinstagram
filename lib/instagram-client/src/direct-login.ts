@@ -2222,12 +2222,16 @@ export async function loginToInstagram(
   const webResult = await loginViaWeb(username, encPassword);
   if (webResult.success) return webResult;
 
+  // 2FA / checkpoint / captcha vb. web sonucundan geliyorsa checkpointUrl dahil
+  // tüm alanları koru — yeni bir obje oluşturursak checkpointUrl düşer.
+  if (webResult.errorType && SHORT_CIRCUIT_TYPES.includes(webResult.errorType)) {
+    console.log("[loginToInstagram] Web short-circuit:", webResult.errorType, "checkpointUrl:", webResult.checkpointUrl ?? "(YOK)");
+    return webResult;
+  }
+
   return {
     success: false,
     error: `${mobileResult.error} / ${webResult.error}`,
-    errorType:
-      webResult.errorType && SHORT_CIRCUIT_TYPES.includes(webResult.errorType)
-        ? webResult.errorType
-        : "unknown",
+    errorType: "unknown",
   };
 }
