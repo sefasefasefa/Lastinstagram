@@ -2110,6 +2110,11 @@ export async function selectChallengeMethod(
           "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
           "Accept": "application/json",
           "Accept-Language": "tr-TR",
+          "Origin": "https://www.instagram.com",
+          "Referer": "https://www.instagram.com/",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Site": "same-site",
+          "Sec-Fetch-Dest": "empty",
         },
         body: new URLSearchParams(mobileBody).toString(),
       });
@@ -2236,6 +2241,11 @@ export async function submitChallengeCode(
           "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
           "Accept": "application/json",
           "Accept-Language": "tr-TR",
+          "Origin": "https://www.instagram.com",
+          "Referer": "https://www.instagram.com/",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Site": "same-site",
+          "Sec-Fetch-Dest": "empty",
         },
         body: new URLSearchParams(mobileBody).toString(),
       });
