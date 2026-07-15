@@ -1,48 +1,57 @@
 # Takipçi Paneli
 
-A Turkish Instagram follower/interaction management panel. Full-stack monorepo with a React/Vite frontend, Express/TypeScript API backend, and an optional Python bridge for Instagram stealth requests.
+A Turkish-language Instagram follower tracking and automation panel.
 
 ## Stack
-
-- **Frontend:** React + Vite + Tailwind CSS + ShadcnUI (`artifacts/takipci-paneli`)
-- **Backend:** Express + TypeScript, built with esbuild (`artifacts/api-server`)
-- **Database:** PostgreSQL via Drizzle ORM; falls back to embedded PGlite when `DATABASE_URL` is absent
-- **Python bridge:** `lib/stealth-requests` / `main.py` — optional, used for Instagram login via `curl-cffi`
-- **Shared libs:** `lib/db`, `lib/api-spec`, `lib/api-zod`, `lib/instagram-client`, `lib/funcaptcha-solver`
+- **Frontend**: React 19 + Vite + Tailwind CSS 4 + Radix UI + TanStack Query (at `artifacts/takipci-paneli/`)
+- **Backend**: Express 5 + Drizzle ORM (at `artifacts/api-server/`)
+- **Database**: PGlite (embedded file-based Postgres at `lib/db/.pglite-data`) — no external Postgres needed
+- **Instagram**: Python bridge via `stealth-requests` + `instagram-private-api` (optional, off by default on Replit)
+- **Package manager**: pnpm workspaces
 
 ## How to Run
 
 Both services start automatically via Replit workflows:
+- **Frontend** (`artifacts/takipci-paneli: web`): Vite dev server, served at `/`
+- **API Server** (`artifacts/api-server: API Server`): Express, served at `/api`
 
-| Workflow | Command |
-|---|---|
-| `artifacts/api-server: API Server` | `pnpm --filter @workspace/api-server run dev` (port 8080) |
-| `artifacts/takipci-paneli: web` | `pnpm --filter @workspace/takipci-paneli run dev` (port 18973) |
+To restart manually:
+```
+# Frontend
+pnpm --filter @workspace/takipci-paneli run dev
 
-The frontend is available at `/` and the API at `/api`.
+# Backend
+pnpm --filter @workspace/api-server run dev
+```
 
-## Default Login
+## Database Setup
 
-Panel login: **admin / admin123** (change before production use).
+Schema is managed by Drizzle ORM. To reset and re-seed:
+```bash
+pnpm --filter @workspace/db run push          # push schema
+pnpm --filter @workspace/scripts run db:seed  # seed sample data + admin user
+```
 
-## Environment Variables
+Default login: **admin / admin123** (enter your Instagram credentials on the login screen)
 
-| Variable | Required | Notes |
-|---|---|---|
-| `SESSION_SECRET` | Yes | Already set in Replit Secrets |
-| `DATABASE_URL` | No | Falls back to local PGlite file at `lib/db/.pglite-data` |
-| `USE_STEALTH_REQUESTS` | No | Set to `true` to enable the Python bridge (default: `true`) |
-| `STEALTH_REQUESTS_PYTHON` | No | Path to Python interpreter for the bridge |
+## Environment
 
-## Database
+- `SESSION_SECRET` — set as a Replit secret (auto-injected)
+- `DATABASE_URL` — not set; app uses embedded PGlite automatically
+- `USE_STEALTH_REQUESTS` — set to `false` on Replit (Python bridge disabled)
 
-- Schema push: `pnpm --filter @workspace/db run push`
-- Restore default seed data: `pnpm --filter @workspace/scripts run db:restore`
-  - Note: run schema push first if the DB is empty; db-restore includes CREATE TABLE statements that conflict with an existing schema. Seed the admin user manually if needed:
-    ```sql
-    INSERT INTO users VALUES (1, 'admin', '<bcrypt-hash>', now()) ON CONFLICT DO NOTHING;
-    ```
+## Project Structure
+
+```
+artifacts/
+  api-server/       Express API server
+  takipci-paneli/   React frontend
+lib/
+  db/               Drizzle schema, PGlite config, backup SQL
+  instagram-client/ Instagram API client (native + Python bridge)
+  api-spec/         Shared Zod schemas
+scripts/            DB seed/restore scripts
+```
 
 ## User Preferences
-
-- Keep the existing project structure — do not restructure or migrate to a different stack.
+- Keep existing project structure — do not restructure or migrate to a different stack
