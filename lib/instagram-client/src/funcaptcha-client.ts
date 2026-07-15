@@ -35,12 +35,18 @@ interface GetTaskResponse {
  * Attempts to solve an Arkose FunCaptcha challenge using the local solver server.
  *
  * @param preset  Solver preset name. Use "instagram_login" for Instagram.
- * @param options Optional blob, proxy, and chrome version.
+ * @param options Optional blob, proxy, chrome version, and timeoutMs.
  * @returns       The solved arkose token string, or null if solving failed.
  */
 export async function solveFuncaptcha(
   preset: string,
-  options: { blob?: string; proxy?: string; chromeVersion?: string } = {},
+  options: {
+    blob?: string;
+    proxy?: string;
+    chromeVersion?: string;
+    /** Poll timeout in ms. Default 60 000. Lower for fast proxy rotation. */
+    timeoutMs?: number;
+  } = {},
 ): Promise<string | null> {
   try {
     // Step 1 — create task
@@ -49,7 +55,7 @@ export async function solveFuncaptcha(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         preset,
-        chrome_version: options.chromeVersion ?? "130",
+        chrome_version: options.chromeVersion ?? "129",
         ...(options.proxy ? { proxy: options.proxy } : {}),
         ...(options.blob ? { blob: options.blob } : {}),
       }),
@@ -64,8 +70,8 @@ export async function solveFuncaptcha(
 
     const taskId = created.task_id;
 
-    // Step 2 — poll until completed or timeout (60 s)
-    const deadline = Date.now() + 60_000;
+    // Step 2 — poll until completed or timeout
+    const deadline = Date.now() + (options.timeoutMs ?? 60_000);
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 1500));
 
@@ -81,8 +87,8 @@ export async function solveFuncaptcha(
       if (task.status === "completed") {
         if (task.captcha?.success && task.captcha.token) {
           console.log(
-            "[funcaptcha] Solved! token starts with:",
-            task.captcha.token.slice(0, 30),
+            "[funcaptcha] Çözüldü! Token:",
+            task.captcha.token.slice(0, 30) + "...",
           );
           return task.captcha.token;
         }
@@ -101,6 +107,50 @@ export async function solveFuncaptcha(
     );
     return null;
   }
+}
+
+/**
+ * Proxy listesinden proxy'leri alarak paralel funcaptcha çözümü dener.
+ * İlk başarılı sonucu döndürür. Tüm proxy'ler başarısız olursa null döner.
+ *
+ * @param preset      Solver preset adı.
+ * @param proxyList   Denenecek proxy URL listesi.
+ * @param concurrency Aynı anda denenen proxy sayısı (default 3).
+ */
+export async function solveFuncaptchaWithProxies(
+  preset: string,
+  proxyList: string[],
+  concurrency = 3,
+): Promise<string | null> {
+  if (proxyList.length === 0) return null;
+
+  // Proxy'leri concurrency boyutlu gruplar halinde sıraya al
+  const chunks: string[][] = [];
+  for (let i = 0; i < proxyList.length; i += concurrency) {
+    chunks.push(proxyList.slice(i, i + concurrency));
+  }
+
+  for (const chunk of chunks) {
+    console.log(
+      `[funcaptcha] ${chunk.length} proxy ile paralel deneme: ${chunk.map((p) => p.split("@").pop()).join(", ")}`,
+    );
+
+    // Chunk içindeki proxy'leri aynı anda dene — ilk başarılıyı al
+    const result = await Promise.any(
+      chunk.map((proxy) =>
+        solveFuncaptcha(preset, { proxy, timeoutMs: 30_000 }).then((token) => {
+          if (!token) throw new Error("no token");
+          return token;
+        }),
+      ),
+    ).catch(() => null as string | null);
+
+    if (result) return result;
+
+    console.warn(`[funcaptcha] Chunk başarısız, sonraki ${concurrency} proxy deneniyor...`);
+  }
+
+  return null;
 }
 
 /**
