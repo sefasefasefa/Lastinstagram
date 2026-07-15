@@ -1580,24 +1580,47 @@ export async function fetchChallengeContext(
   userAgent = MOBILE_UA,
 ): Promise<ChallengeContext> {
   try {
-    const res = await loginFetch(buildChallengeUrl(checkpointUrl), {
+    const fullUrl = buildChallengeUrl(checkpointUrl);
+    console.log("[fetchChallengeContext] GET", fullUrl.slice(0, 80), "...");
+    const res = await loginFetch(fullUrl, {
       method: "GET",
       headers: {
         "User-Agent": userAgent,
         "Cookie": cookieHeader,
         "X-IG-App-ID": IG_APP_ID,
-        "Accept": "application/json",
+        "Accept": "application/json, text/html, */*",
         "Accept-Language": "tr-TR",
       },
     });
 
+    const rawText = await res.text().catch(() => "");
+    console.log("[fetchChallengeContext] status:", res.status, "bodyLen:", rawText.length, "bodyPreview:", JSON.stringify(rawText.slice(0, 400)));
+
     let data: Record<string, unknown> = {};
-    try { data = (await res.json()) as Record<string, unknown>; } catch {
+    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {
+      // JSON parse başarısız — ham yanıt zaten loglandı
+    }
+
+    // auth_platform formatını eski challenge formatına normalize et
+    // auth_platform: { step_name, step_data } veya { type, data } veya farklı yapı döner
+    // HTTP 201 = challenge başarıyla başlatıldı (auth_platform akışında geçerli)
+    const isOk = res.status === 200 || res.status === 201;
+
+    if (!isOk && Object.keys(data).length === 0) {
       return { stepName: "unknown", error: `Beklenmeyen yanıt (HTTP ${res.status})` };
     }
 
-    const stepName = typeof data.step_name === "string" ? data.step_name : "unknown";
-    const stepData = (data.step_data ?? {}) as Record<string, unknown>;
+    // Eski /challenge/ formatı: data.step_name
+    // auth_platform formatı: data.step_name veya data.type veya data.nonce_code vb.
+    let stepName = typeof data.step_name === "string" ? data.step_name : "";
+
+    // auth_platform bazen "type" alanıyla adımı bildirir
+    if (!stepName && typeof data.type === "string") {
+      stepName = data.type;
+    }
+    if (!stepName) stepName = "select_verify_method";  // güvenli varsayılan
+
+    const stepData = (data.step_data ?? data.data ?? {}) as Record<string, unknown>;
 
     const choices: ChallengeChoice[] = [];
     if (typeof stepData.phone_number === "string" && stepData.phone_number) {
@@ -1614,6 +1637,14 @@ export async function fetchChallengeContext(
           choices.push({ value: String(cc.value), label: cc.label ?? String(cc.value) });
         }
       }
+    }
+
+    // auth_platform: telefon/email bilgisi üst seviyede de gelebilir
+    if (choices.length === 0) {
+      if (typeof data.phone_number === "string" && data.phone_number)
+        choices.push({ value: "0", label: `SMS ile gönder — ${data.phone_number}` });
+      if (typeof data.email === "string" && data.email)
+        choices.push({ value: "1", label: `E-posta ile gönder — ${data.email}` });
     }
 
     return {
