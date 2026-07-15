@@ -2194,6 +2194,12 @@ export async function loginToInstagram(
 
   // ── Mobil API ─────────────────────────────────────────────────────────────
   const mobileResult = await loginViaMobile(username, encPassword, ig, options);
+  console.log("[loginToInstagram] mobileResult:", JSON.stringify({
+    success: mobileResult.success,
+    errorType: mobileResult.errorType,
+    checkpointUrl: mobileResult.checkpointUrl ?? "(YOK)",
+    hasCookies: !!(mobileResult.cookies?.length),
+  }));
   if (mobileResult.success) return mobileResult;
 
   // 2FA / checkpoint / captcha / hız sınırı / spam → web API'yi denemeye gerek yok
@@ -2208,6 +2214,7 @@ export async function loginToInstagram(
     mobileResult.errorType &&
     SHORT_CIRCUIT_TYPES.includes(mobileResult.errorType)
   ) {
+    console.log("[loginToInstagram] Short-circuit: returning mobileResult with checkpointUrl:", mobileResult.checkpointUrl ?? "(YOK)");
     return mobileResult;
   }
 
