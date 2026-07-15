@@ -16,12 +16,16 @@ import {
   updateCsrfInHeader,
   fetchUserInfo,
   fetchSelfProfile,
+  fetchWebProfileInfo,
+  fetchFriendships,
   fetchUserFeed,
   fetchUserClips,
   fetchUserStories,
   markStorySeenRaw,
   likeMediaRaw,
   unlikeMediaRaw,
+  addCommentRaw,
+  commentLikeRaw,
   fetchMediaInfo,
   completeTwoFactorLogin,
   extractSessionCookies,
@@ -30,6 +34,7 @@ import {
   submitChallengeCode,
   type SessionCookies,
   type RawFeedItem,
+  type RawFriendshipUser,
   type TwoFactorInfo,
   type TwoFactorMethod,
   type ChallengeChoice,
@@ -129,6 +134,15 @@ export interface InstagramClientConfig {
   userAgent?: string;
   proxyUrl?: string;
   useProxy?: boolean;
+}
+
+export interface InstagramFollowUser {
+  pk: string;
+  username: string;
+  fullName: string;
+  profilePicUrl?: string;
+  isPrivate?: boolean;
+  isVerified?: boolean;
 }
 
 export interface InstagramProfile {
@@ -768,48 +782,22 @@ export class InstagramClient {
    */
   async getProfile(username: string): Promise<InstagramProfile> {
     await this.ensureAuthenticated();
-    return this.withErrorRecovery(async () => {
-      const basic = await this.client.user.searchExact(username);
-      const pk = String(basic.pk);
-
-      if (this.session?.cookieHeader) {
-        const result = await fetchUserInfo(
-          pk,
-          this.session.cookieHeader,
-          this.client.state.deviceString,
-        );
-        if (result.success && result.user) {
-          const u = result.user;
-          return {
-            username: u.username,
-            pk: String(u.pk),
-            fullName: u.full_name ?? "",
-            profilePicUrl: u.profile_pic_url,
-            followerCount: u.follower_count,
-            followingCount: u.following_count,
-            mediaCount: u.media_count,
-            biography: u.biography ?? undefined,
-            externalUrl: u.external_url ?? undefined,
-            isPrivate: u.is_private,
-          };
-        }
-        // Ham istek başarısız — kütüphane tabanlı yönteme geri dön.
-      }
-
-      const info = await this.client.user.info(basic.pk);
-      return {
-        username: info.username,
-        pk: String(info.pk),
-        fullName: info.full_name,
-        profilePicUrl: info.profile_pic_url,
-        followerCount: info.follower_count,
-        followingCount: info.following_count,
-        mediaCount: info.media_count,
-        biography: info.biography ?? undefined,
-        externalUrl: info.external_url ?? undefined,
-        isPrivate: info.is_private,
-      };
-    });
+    if (!this.session?.cookieHeader) throw new Error("Aktif Instagram oturumu bulunamadı");
+    // web_profile_info endpoint'i — www.instagram.com, Replit'ten erişilebilir
+    const result = await fetchWebProfileInfo(username, this.session.cookieHeader);
+    if (!result.success || !result.user) throw new Error(result.error ?? "Profil bilgisi alınamadı");
+    const u = result.user;
+    return {
+      username: u.username,
+      pk: u.id,
+      fullName: u.full_name ?? "",
+      profilePicUrl: u.profile_pic_url_hd ?? u.profile_pic_url,
+      followerCount: u.edge_followed_by?.count,
+      followingCount: u.edge_follow?.count,
+      mediaCount: u.edge_owner_to_timeline_media?.count,
+      biography: u.biography ?? undefined,
+      isPrivate: u.is_private,
+    };
   }
 
   /**
@@ -823,40 +811,21 @@ export class InstagramClient {
    */
   async getUserPosts(username: string, limit = 20): Promise<InstagramPost[]> {
     await this.ensureAuthenticated();
+    if (!this.session?.cookieHeader) throw new Error("Aktif Instagram oturumu bulunamadı");
     const safeLimit = Math.min(Math.max(limit, 1), 50);
-    return this.withErrorRecovery(async () => {
-      const user = await this.client.user.searchExact(username);
-      const userId = String(user.pk);
-
-      if (this.session?.cookieHeader) {
-        const posts: InstagramPost[] = [];
-        let maxId: string | undefined;
-        do {
-          const result = await fetchUserFeed(userId, this.session.cookieHeader, {
-            maxId,
-            userAgent: this.client.state.deviceString,
-          });
-          if (!result.success || !result.items) break;
-          posts.push(...result.items.map(mapRawMediaToPost));
-          maxId = result.moreAvailable ? result.nextMaxId : undefined;
-        } while (maxId && posts.length < safeLimit);
-        if (posts.length > 0) return posts.slice(0, safeLimit);
-      }
-
-      // Ham istek başarısız veya cookie header yok — kütüphaneye geri dön.
-      const items = await this.client.feed.user(user.pk).items();
-      return items.slice(0, safeLimit).map((media) => ({
-        id: String(media.pk),
-        code: media.code,
-        mediaType: media.media_type,
-        caption: media.caption?.text,
-        likeCount: media.like_count ?? 0,
-        commentCount: media.comment_count ?? 0,
-        displayUrl: media.image_versions2?.candidates?.[0]?.url,
-        videoUrl: media.video_versions?.[0]?.url,
-        hasLiked: media.has_liked ?? false,
-      }));
-    });
+    // web_profile_info → user_id → feed/user/{id}/ (her ikisi de www.instagram.com)
+    const profileResult = await fetchWebProfileInfo(username, this.session.cookieHeader);
+    if (!profileResult.success || !profileResult.user) throw new Error(profileResult.error ?? "Profil bulunamadı");
+    const userId = profileResult.user.id;
+    const posts: InstagramPost[] = [];
+    let maxId: string | undefined;
+    do {
+      const result = await fetchUserFeed(userId, this.session.cookieHeader, { maxId });
+      if (!result.success || !result.items) break;
+      posts.push(...result.items.map(mapRawMediaToPost));
+      maxId = result.moreAvailable ? result.nextMaxId : undefined;
+    } while (maxId && posts.length < safeLimit);
+    return posts.slice(0, safeLimit);
   }
 
   /**
@@ -867,45 +836,22 @@ export class InstagramClient {
    */
   async getUserStories(username: string): Promise<InstagramStory[]> {
     await this.ensureAuthenticated();
-    return this.withErrorRecovery(async () => {
-      const user = await this.client.user.searchExact(username);
-      const userId = String(user.pk);
-
-      if (this.session?.cookieHeader) {
-        const result = await fetchUserStories(
-          userId,
-          this.session.cookieHeader,
-          this.client.state.deviceString,
-        );
-        if (result.success && result.items) {
-          return result.items.map((media) => ({
-            id: String(media.pk ?? media.id ?? ""),
-            mediaType: media.media_type ?? 1,
-            thumbnailUrl: media.image_versions2?.candidates?.[0]?.url,
-            videoUrl: media.video_versions?.[0]?.url,
-            displayUrl: media.image_versions2?.candidates?.[0]?.url,
-            timestamp: (media.taken_at ?? 0) * 1000,
-            ownerId: userId,
-            takenAt: media.taken_at,
-          }));
-        }
-        // Ham istek başarısız — kütüphane tabanlı yönteme geri dön.
-      }
-
-      const items = await this.client.feed
-        .reelsMedia({ userIds: [userId] })
-        .items();
-      return items.map((media) => ({
-        id: String(media.pk),
-        mediaType: media.media_type,
-        thumbnailUrl: media.image_versions2?.candidates?.[0]?.url,
-        videoUrl: media.video_versions?.[0]?.url,
-        displayUrl: media.image_versions2?.candidates?.[0]?.url,
-        timestamp: media.taken_at * 1000,
-        ownerId: userId,
-        takenAt: media.taken_at,
-      }));
-    });
+    if (!this.session?.cookieHeader) throw new Error("Aktif Instagram oturumu bulunamadı");
+    const profileResult = await fetchWebProfileInfo(username, this.session.cookieHeader);
+    if (!profileResult.success || !profileResult.user) throw new Error(profileResult.error ?? "Profil bulunamadı");
+    const userId = profileResult.user.id;
+    const result = await fetchUserStories(userId, this.session.cookieHeader);
+    if (!result.success || !result.items) throw new Error(result.error ?? "Hikayeler alınamadı");
+    return result.items.map((media) => ({
+      id: String(media.pk ?? media.id ?? ""),
+      mediaType: media.media_type ?? 1,
+      thumbnailUrl: media.image_versions2?.candidates?.[0]?.url,
+      videoUrl: media.video_versions?.[0]?.url,
+      displayUrl: media.image_versions2?.candidates?.[0]?.url,
+      timestamp: (media.taken_at ?? 0) * 1000,
+      ownerId: userId,
+      takenAt: media.taken_at,
+    }));
   }
 
   /**
@@ -919,42 +865,30 @@ export class InstagramClient {
    */
   async getUserReels(username: string, limit = 10): Promise<InstagramReel[]> {
     await this.ensureAuthenticated();
+    if (!this.session?.cookieHeader) throw new Error("Aktif Instagram oturumu bulunamadı");
     const safeLimit = Math.min(Math.max(limit, 1), 30);
-    return this.withErrorRecovery(async () => {
-      const user = await this.client.user.searchExact(username);
-      const userId = String(user.pk);
-
-      if (this.session?.cookieHeader) {
-        const reels: InstagramReel[] = [];
-        let maxId = "";
-        do {
-          const result = await fetchUserClips(userId, this.session.cookieHeader, {
-            maxId,
-            pageSize: Math.min(safeLimit, 20),
-            userAgent: this.client.state.deviceString,
-          });
-          if (!result.success || !result.items) break;
-          reels.push(
-            ...result.items.map((item) => ({
-              ...mapRawMediaToPost(item),
-              playCount: Number(item.play_count ?? 0),
-              viewCount: Number(item.view_count ?? 0) || undefined,
-              timestamp: (item.taken_at ?? 0) * 1000,
-            })),
-          );
-          maxId = result.moreAvailable ? result.nextMaxId ?? "" : "";
-        } while (maxId && reels.length < safeLimit);
-        if (reels.length > 0) return reels.slice(0, safeLimit);
-      }
-
-      // Ham istek başarısız veya cookie header yok — normal gönderi
-      // akışından (media_type=2, video) reels türet.
-      const posts = await this.getUserPosts(username, Math.max(limit * 3, 20));
-      return posts
-        .filter((post) => post.mediaType === 2 && post.videoUrl)
-        .slice(0, safeLimit)
-        .map((post) => ({ ...post, playCount: 0, viewCount: 0, timestamp: Date.now() }));
-    });
+    const profileResult = await fetchWebProfileInfo(username, this.session.cookieHeader);
+    if (!profileResult.success || !profileResult.user) throw new Error(profileResult.error ?? "Profil bulunamadı");
+    const userId = profileResult.user.id;
+    const reels: InstagramReel[] = [];
+    let maxId = "";
+    do {
+      const result = await fetchUserClips(userId, this.session.cookieHeader, {
+        maxId,
+        pageSize: Math.min(safeLimit, 20),
+      });
+      if (!result.success || !result.items) break;
+      reels.push(
+        ...result.items.map((item) => ({
+          ...mapRawMediaToPost(item),
+          playCount: Number(item.play_count ?? 0),
+          viewCount: Number(item.view_count ?? 0) || undefined,
+          timestamp: (item.taken_at ?? 0) * 1000,
+        })),
+      );
+      maxId = result.moreAvailable ? result.nextMaxId ?? "" : "";
+    } while (maxId && reels.length < safeLimit);
+    return reels.slice(0, safeLimit);
   }
 
   /**
@@ -1141,6 +1075,95 @@ export class InstagramClient {
 
   isAuthenticated(): boolean {
     return this.loggedIn;
+  }
+
+  /**
+   * Takip edilen hesapların listesini çeker (www.instagram.com — Replit'ten erişilebilir).
+   * @param limit Maksimum kullanıcı sayısı (varsayılan 100, max 1000)
+   */
+  async getFollowing(limit = 100): Promise<InstagramFollowUser[]> {
+    await this.ensureAuthenticated();
+    if (!this.session?.cookieHeader) throw new Error("Aktif Instagram oturumu bulunamadı");
+    // Önce kendi user_id'mizi alalım
+    const me = await fetchSelfProfile(this.session.cookieHeader);
+    if (!me.success || !me.user) throw new Error(me.error ?? "Profil bilgisi alınamadı");
+    const userId = String(me.user.pk);
+    const safeLimit = Math.min(Math.max(limit, 1), 1000);
+    const users: InstagramFollowUser[] = [];
+    let maxId: string | undefined;
+    do {
+      const result = await fetchFriendships(userId, "following", this.session.cookieHeader, {
+        maxId,
+        count: Math.min(safeLimit - users.length, 100),
+      });
+      if (!result.success || !result.users) break;
+      users.push(...result.users.map((u: RawFriendshipUser) => ({
+        pk: String(u.pk),
+        username: u.username,
+        fullName: u.full_name ?? "",
+        profilePicUrl: u.profile_pic_url,
+        isPrivate: u.is_private,
+        isVerified: u.is_verified,
+      })));
+      maxId = result.moreAvailable ? result.nextMaxId : undefined;
+    } while (maxId && users.length < safeLimit);
+    return users.slice(0, safeLimit);
+  }
+
+  /**
+   * Takipçi listesini çeker (www.instagram.com — Replit'ten erişilebilir).
+   * @param limit Maksimum kullanıcı sayısı (varsayılan 100, max 1000)
+   */
+  async getFollowers(limit = 100): Promise<InstagramFollowUser[]> {
+    await this.ensureAuthenticated();
+    if (!this.session?.cookieHeader) throw new Error("Aktif Instagram oturumu bulunamadı");
+    const me = await fetchSelfProfile(this.session.cookieHeader);
+    if (!me.success || !me.user) throw new Error(me.error ?? "Profil bilgisi alınamadı");
+    const userId = String(me.user.pk);
+    const safeLimit = Math.min(Math.max(limit, 1), 1000);
+    const users: InstagramFollowUser[] = [];
+    let maxId: string | undefined;
+    do {
+      const result = await fetchFriendships(userId, "followers", this.session.cookieHeader, {
+        maxId,
+        count: Math.min(safeLimit - users.length, 100),
+      });
+      if (!result.success || !result.users) break;
+      users.push(...result.users.map((u: RawFriendshipUser) => ({
+        pk: String(u.pk),
+        username: u.username,
+        fullName: u.full_name ?? "",
+        profilePicUrl: u.profile_pic_url,
+        isPrivate: u.is_private,
+        isVerified: u.is_verified,
+      })));
+      maxId = result.moreAvailable ? result.nextMaxId : undefined;
+    } while (maxId && users.length < safeLimit);
+    return users.slice(0, safeLimit);
+  }
+
+  /** Bir medyaya yorum ekler. */
+  async addComment(mediaId: string, text: string): Promise<boolean> {
+    await this.ensureAuthenticated();
+    if (!this.session?.cookieHeader) return false;
+    const result = await addCommentRaw(mediaId, text, this.session.cookieHeader);
+    return result.success;
+  }
+
+  /** Bir yorumu beğenir. */
+  async likeComment(commentId: string): Promise<boolean> {
+    await this.ensureAuthenticated();
+    if (!this.session?.cookieHeader) return false;
+    const result = await commentLikeRaw(commentId, "comment_like", this.session.cookieHeader);
+    return result.success;
+  }
+
+  /** Bir yorum beğenisini kaldırır. */
+  async unlikeComment(commentId: string): Promise<boolean> {
+    await this.ensureAuthenticated();
+    if (!this.session?.cookieHeader) return false;
+    const result = await commentLikeRaw(commentId, "comment_unlike", this.session.cookieHeader);
+    return result.success;
   }
 
   /** Yapılandırılan Instagram kullanıcı adı — 2FA doğrulaması sonrası yerel kullanıcı eşleme için. */

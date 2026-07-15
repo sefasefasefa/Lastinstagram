@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { InstagramClient } from "@workspace/instagram-client";
+import { InstagramClient, type InstagramFollowUser } from "@workspace/instagram-client";
 import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -97,6 +97,36 @@ router.get("/instagram/me", async (_req, res): Promise<void> => {
   try {
     const profile = await c.getMyProfile();
     res.json({ success: true, profile });
+  } catch (error) {
+    res.status(502).json({ success: false, error: errorMessage(error) });
+  }
+});
+
+router.get("/instagram/following", async (req, res): Promise<void> => {
+  const c = getActiveClient();
+  if (!c || !c.isAuthenticated()) {
+    res.status(401).json({ success: false, error: "Instagram oturumu açık değil" });
+    return;
+  }
+  try {
+    const limit = parseLimit(req.query.limit, 100, 1000);
+    const users: InstagramFollowUser[] = await c.getFollowing(limit);
+    res.json({ success: true, users, count: users.length });
+  } catch (error) {
+    res.status(502).json({ success: false, error: errorMessage(error) });
+  }
+});
+
+router.get("/instagram/followers", async (req, res): Promise<void> => {
+  const c = getActiveClient();
+  if (!c || !c.isAuthenticated()) {
+    res.status(401).json({ success: false, error: "Instagram oturumu açık değil" });
+    return;
+  }
+  try {
+    const limit = parseLimit(req.query.limit, 100, 1000);
+    const users: InstagramFollowUser[] = await c.getFollowers(limit);
+    res.json({ success: true, users, count: users.length });
   } catch (error) {
     res.status(502).json({ success: false, error: errorMessage(error) });
   }
@@ -207,6 +237,46 @@ router.post("/instagram/unlike-reel", async (req, res): Promise<void> => {
   res.status(success ? 200 : 502).json({
     success,
     message: success ? "Reel unliked" : "Instagram rejected the unlike request",
+  });
+});
+
+router.post("/instagram/comment", async (req, res): Promise<void> => {
+  const mediaId = typeof req.body?.mediaId === "string" ? req.body.mediaId : "";
+  const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+  if (!mediaId || !text) {
+    res.status(400).json({ success: false, error: "mediaId ve text zorunludur" });
+    return;
+  }
+  const success = await getClient().addComment(mediaId, text);
+  res.status(success ? 200 : 502).json({
+    success,
+    message: success ? "Yorum eklendi" : "Instagram yorum isteğini reddetti",
+  });
+});
+
+router.post("/instagram/like-comment", async (req, res): Promise<void> => {
+  const commentId = typeof req.body?.commentId === "string" ? req.body.commentId : "";
+  if (!commentId) {
+    res.status(400).json({ success: false, error: "commentId zorunludur" });
+    return;
+  }
+  const success = await getClient().likeComment(commentId);
+  res.status(success ? 200 : 502).json({
+    success,
+    message: success ? "Yorum beğenildi" : "Instagram yorum beğeni isteğini reddetti",
+  });
+});
+
+router.post("/instagram/unlike-comment", async (req, res): Promise<void> => {
+  const commentId = typeof req.body?.commentId === "string" ? req.body.commentId : "";
+  if (!commentId) {
+    res.status(400).json({ success: false, error: "commentId zorunludur" });
+    return;
+  }
+  const success = await getClient().unlikeComment(commentId);
+  res.status(success ? 200 : 502).json({
+    success,
+    message: success ? "Yorum beğenisi kaldırıldı" : "Instagram isteği reddetti",
   });
 });
 

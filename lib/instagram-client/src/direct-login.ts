@@ -695,6 +695,144 @@ export async function fetchSelfProfile(
   }
 }
 
+// ── Başka kullanıcı profili (web endpoint) ───────────────────────────────────
+
+export interface RawWebProfileUser {
+  id: string;
+  username: string;
+  full_name?: string;
+  biography?: string;
+  profile_pic_url_hd?: string;
+  profile_pic_url?: string;
+  is_private?: boolean;
+  is_verified?: boolean;
+  edge_followed_by?: { count: number };
+  edge_follow?: { count: number };
+  edge_owner_to_timeline_media?: { count: number };
+}
+
+export interface WebProfileInfoResult {
+  success: boolean;
+  user?: RawWebProfileUser;
+  error?: string;
+}
+
+/**
+ * Başka bir kullanıcının profilini web endpoint'i üzerinden çeker.
+ *   GET https://www.instagram.com/api/v1/users/web_profile_info/?username={username}
+ * i.instagram.com bloklu olduğundan www.instagram.com kullanılır.
+ */
+export async function fetchWebProfileInfo(
+  username: string,
+  cookieHeader: string,
+): Promise<WebProfileInfoResult> {
+  const csrftoken = cookieHeader.match(/csrftoken=([^;]+)/)?.[1] ?? "";
+  try {
+    const res = await fetch(
+      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`,
+      {
+        headers: {
+          "User-Agent": WEB_UA,
+          "Cookie": cookieHeader,
+          "X-IG-App-ID": WEB_APP_ID,
+          "X-CSRFToken": csrftoken,
+          "X-ASBD-ID": "359341",
+          "X-IG-WWW-Claim": "0",
+          "Accept": "*/*",
+          "Accept-Language": "tr,en;q=0.9",
+          "Referer": `https://www.instagram.com/${username}/`,
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty",
+        },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!res.ok) return { success: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as { data?: { user?: RawWebProfileUser } };
+    const user = data.data?.user;
+    if (!user) return { success: false, error: "Kullanıcı verisi bulunamadı" };
+    return { success: true, user };
+  } catch (e) {
+    return { success: false, error: `Ağ hatası (web_profile_info): ${e instanceof Error ? e.message : e}` };
+  }
+}
+
+// ── Takipçi / Takip edilen listesi ───────────────────────────────────────────
+
+export interface RawFriendshipUser {
+  pk: string | number;
+  username: string;
+  full_name?: string;
+  profile_pic_url?: string;
+  is_private?: boolean;
+  is_verified?: boolean;
+}
+
+export interface FriendshipsResult {
+  success: boolean;
+  users?: RawFriendshipUser[];
+  nextMaxId?: string;
+  moreAvailable?: boolean;
+  error?: string;
+}
+
+/**
+ * Takipçi veya takip edilen listesini çeker.
+ * www.instagram.com kullanılır (i.instagram.com Replit'ten bloklu).
+ *   GET /api/v1/friendships/{userId}/followers/
+ *   GET /api/v1/friendships/{userId}/following/
+ * count, max_id (sayfalama), search_surface parametreleri belgede tanımlı.
+ */
+export async function fetchFriendships(
+  userId: string,
+  type: "followers" | "following",
+  cookieHeader: string,
+  opts: { maxId?: string; count?: number } = {},
+): Promise<FriendshipsResult> {
+  const csrftoken = cookieHeader.match(/csrftoken=([^;]+)/)?.[1] ?? "";
+  const params = new URLSearchParams({
+    count: String(opts.count ?? 100),
+    search_surface: "follow_list_page",
+    ...(opts.maxId ? { max_id: opts.maxId } : {}),
+  });
+  try {
+    const res = await fetch(
+      `https://www.instagram.com/api/v1/friendships/${userId}/${type}/?${params}`,
+      {
+        headers: {
+          "User-Agent": WEB_UA,
+          "Cookie": cookieHeader,
+          "X-IG-App-ID": WEB_APP_ID,
+          "X-CSRFToken": csrftoken,
+          "X-ASBD-ID": "359341",
+          "X-IG-WWW-Claim": "0",
+          "Accept": "*/*",
+          "Accept-Language": "tr,en;q=0.9",
+          "Referer": "https://www.instagram.com/",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty",
+        },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    if (!res.ok) return { success: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as {
+      users?: RawFriendshipUser[];
+      next_max_id?: string;
+    };
+    return {
+      success: true,
+      users: data.users ?? [],
+      nextMaxId: data.next_max_id,
+      moreAvailable: !!data.next_max_id,
+    };
+  } catch (e) {
+    return { success: false, error: `Ağ hatası (friendships): ${e instanceof Error ? e.message : e}` };
+  }
+}
+
 // ── Gönderi ve Reels İçeriklerini Listeleme (doğrudan HTTP) ──────────────────
 
 /** Feed / clips yanıtlarındaki ham medya öğesi. */
@@ -741,16 +879,25 @@ export async function fetchUserFeed(
   options: { maxId?: string; userAgent?: string } = {},
 ): Promise<UserFeedResult> {
   try {
-    const url = new URL(`https://i.instagram.com/api/v1/feed/user/${userId}/`);
+    const url = new URL(`https://www.instagram.com/api/v1/feed/user/${userId}/`);
     if (options.maxId) url.searchParams.set("max_id", options.maxId);
+    const csrftoken = cookieHeader.match(/csrftoken=([^;]+)/)?.[1] ?? "";
 
     const res = await fetch(url, {
       method: "GET",
       headers: {
-        "User-Agent": options.userAgent ?? MOBILE_UA,
-        "X-IG-App-ID": IG_APP_ID,
+        "User-Agent": WEB_UA,
+        "X-IG-App-ID": WEB_APP_ID,
         "Cookie": cookieHeader,
-        "Accept-Language": "tr-TR",
+        "X-CSRFToken": csrftoken,
+        "X-ASBD-ID": "359341",
+        "X-IG-WWW-Claim": "0",
+        "Accept": "*/*",
+        "Accept-Language": "tr,en;q=0.9",
+        "Referer": "https://www.instagram.com/",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
       },
     });
 
@@ -807,16 +954,25 @@ export async function fetchUserClips(
   options: { maxId?: string; pageSize?: number; userAgent?: string } = {},
 ): Promise<UserClipsResult> {
   try {
+    const csrfClips = cookieHeader.match(/csrftoken=([^;]+)/)?.[1] ?? "";
     const res = await fetch(
-      "https://i.instagram.com/api/v1/clips/user_clips/",
+      "https://www.instagram.com/api/v1/clips/user_clips/",
       {
         method: "POST",
         headers: {
-          "User-Agent": options.userAgent ?? MOBILE_UA,
-          "X-IG-App-ID": IG_APP_ID,
+          "User-Agent": WEB_UA,
+          "X-IG-App-ID": WEB_APP_ID,
           "Cookie": cookieHeader,
           "Content-Type": "application/json",
-          "Accept-Language": "tr-TR",
+          "X-CSRFToken": csrfClips,
+          "X-ASBD-ID": "359341",
+          "X-IG-WWW-Claim": "0",
+          "Accept": "*/*",
+          "Accept-Language": "tr,en;q=0.9",
+          "Referer": "https://www.instagram.com/",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty",
         },
         body: JSON.stringify({
           target_user_id: userId,
@@ -931,14 +1087,22 @@ export async function fetchUserStories(
 ): Promise<UserStoriesResult> {
   try {
     const res = await fetch(
-      `https://i.instagram.com/api/v1/feed/reels_media/?user_ids=${userId}`,
+      `https://www.instagram.com/api/v1/feed/reels_media/?user_ids=${userId}`,
       {
         method: "GET",
         headers: {
-          "User-Agent": userAgent,
-          "X-IG-App-ID": IG_APP_ID,
+          "User-Agent": WEB_UA,
+          "X-IG-App-ID": WEB_APP_ID,
           "Cookie": cookieHeader,
-          "Accept-Language": "tr-TR",
+          "X-CSRFToken": cookieHeader.match(/csrftoken=([^;]+)/)?.[1] ?? "",
+          "X-ASBD-ID": "359341",
+          "X-IG-WWW-Claim": "0",
+          "Accept": "*/*",
+          "Accept-Language": "tr,en;q=0.9",
+          "Referer": "https://www.instagram.com/",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty",
         },
       },
     );
@@ -1106,7 +1270,102 @@ export function unlikeMediaRaw(
   return postMediaLikeAction("unlike", mediaId, cookieHeader, options);
 }
 
-// ── 5. Beğenilme ve Görüntülenme Verilerini Çekme (Metrics) ─────────────────
+// ── 5. Yorum Ekleme / Yorum Beğenme ─────────────────────────────────────────
+
+/**
+ * Bir medyaya yorum ekler.
+ *   POST /api/v1/media/{media_id}/comment/
+ * user_breadcrumb: klavye hızı/süre simülasyonu (belgede tanımlı)
+ * idempotency_token: ağ kesintisinde çift yorum engeli (UUID)
+ */
+export async function addCommentRaw(
+  mediaId: string,
+  text: string,
+  cookieHeader: string,
+): Promise<RawActionResult> {
+  const idempotencyToken = crypto.randomUUID();
+  const typingMs = Math.floor(text.length * 120 + Math.random() * 500);
+  const userBreadcrumb = `${text.length}_${Date.now()}_${typingMs}`;
+  const payload = {
+    comment_text: text,
+    user_breadcrumb: userBreadcrumb,
+    idempotency_token: idempotencyToken,
+  };
+  try {
+    const csrftoken = cookieHeader.match(/csrftoken=([^;]+)/)?.[1] ?? "";
+    const res = await fetch(
+      `https://www.instagram.com/api/v1/media/${mediaId}/comment/`,
+      {
+        method: "POST",
+        headers: {
+          "User-Agent": WEB_UA,
+          "X-IG-App-ID": WEB_APP_ID,
+          "Cookie": cookieHeader,
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-CSRFToken": csrftoken,
+          "X-ASBD-ID": "359341",
+          "X-IG-WWW-Claim": "0",
+          "Accept": "*/*",
+          "Accept-Language": "tr,en;q=0.9",
+          "Referer": "https://www.instagram.com/",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty",
+        },
+        body: buildSignedBodyForm(payload),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!res.ok) return { success: false, error: `Yorum API: ${await extractErrorMessage(res)}` };
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: `Ağ hatası (yorum): ${e instanceof Error ? e.message : e}` };
+  }
+}
+
+/**
+ * Bir yorumu beğenir veya beğeniyi kaldırır.
+ *   POST /api/v1/media/{comment_id}/comment_like/
+ *   POST /api/v1/media/{comment_id}/comment_unlike/
+ */
+export async function commentLikeRaw(
+  commentId: string,
+  action: "comment_like" | "comment_unlike",
+  cookieHeader: string,
+): Promise<RawActionResult> {
+  const csrftoken = cookieHeader.match(/csrftoken=([^;]+)/)?.[1] ?? "";
+  try {
+    const res = await fetch(
+      `https://www.instagram.com/api/v1/media/${commentId}/${action}/`,
+      {
+        method: "POST",
+        headers: {
+          "User-Agent": WEB_UA,
+          "X-IG-App-ID": WEB_APP_ID,
+          "Cookie": cookieHeader,
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-CSRFToken": csrftoken,
+          "X-ASBD-ID": "359341",
+          "X-IG-WWW-Claim": "0",
+          "Accept": "*/*",
+          "Accept-Language": "tr,en;q=0.9",
+          "Referer": "https://www.instagram.com/",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty",
+        },
+        body: buildSignedBodyForm({ comment_id: commentId }),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!res.ok) return { success: false, error: `${action}: ${await extractErrorMessage(res)}` };
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: `Ağ hatası (${action}): ${e instanceof Error ? e.message : e}` };
+  }
+}
+
+// ── 6. Beğenilme ve Görüntülenme Verilerini Çekme (Metrics) ─────────────────
 
 /** media/{id}/info/ yanıtındaki items[0] alanları. */
 export interface RawMediaInfoItem {
