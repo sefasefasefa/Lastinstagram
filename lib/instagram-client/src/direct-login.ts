@@ -1426,7 +1426,6 @@ export async function verifySession(
           "X-IG-Capabilities": "3brTvw0=",
           "X-IG-Connection-Type": "WIFI",
           "Accept-Language": "tr-TR",
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         },
         signal: AbortSignal.timeout(10_000),
       },

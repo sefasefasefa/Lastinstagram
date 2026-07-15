@@ -369,10 +369,9 @@ export class InstagramClient {
       // login_required (403) döndürür. verifySession() doğrudan fetch ile aynı
       // endpoint'e basit headerlar göndererek bu sorunu aşar.
       if (this.session) {
-        const verify = await verifySession(
-          this.session.cookieHeader,
-          this.client.state.deviceString,
-        );
+        // Don't pass deviceString as userAgent — it's an internal IgApiClient
+        // device descriptor, not a proper HTTP User-Agent.  Default MOBILE_UA is used.
+        const verify = await verifySession(this.session.cookieHeader);
         if (!verify.valid) {
           const et = verify.errorType ?? "login_required";
           if (et === "checkpoint") {
