@@ -1,68 +1,38 @@
 # Takipçi Paneli
 
-A Turkish-language Instagram follower tracking and automation panel.
+A Turkish Instagram follower/tracker management dashboard. Users log in with their Instagram credentials and the app tracks follower data via the Instagram private API.
 
-## Stack
-- **Frontend**: React 19 + Vite + Tailwind CSS 4 + Radix UI + TanStack Query (at `artifacts/takipci-paneli/`)
-- **Backend**: Express 5 + Drizzle ORM (at `artifacts/api-server/`)
-- **Database**: PGlite (embedded file-based Postgres at `lib/db/.pglite-data`) — no external Postgres needed
-- **Instagram**: Python bridge via `stealth-requests` + `instagram-private-api` (optional, off by default on Replit)
-- **Package manager**: pnpm workspaces
+## Architecture
 
-## How to Run
+- **Monorepo** managed with pnpm workspaces
+- **Frontend** (`artifacts/takipci-paneli`): React 19 + Vite + Tailwind CSS 4 + TanStack Query
+- **Backend** (`artifacts/api-server`): Node.js + Express + Drizzle ORM
+- **Database**: PGLite (embedded, zero-config) or external PostgreSQL via `DATABASE_URL`
+- **Instagram client** (`lib/instagram-client`): Private API integration
 
-Both services start automatically via Replit workflows:
-- **Frontend** (`artifacts/takipci-paneli: web`): Vite dev server, served at `/`
-- **API Server** (`artifacts/api-server: API Server`): Express, served at `/api`
+## Running on Replit
 
-To restart manually:
-```
-# Frontend
-pnpm --filter @workspace/takipci-paneli run dev
+Both services are managed via Replit workflows and start automatically:
 
-# Backend
-pnpm --filter @workspace/api-server run dev
-```
+- **Frontend** workflow: `artifacts/takipci-paneli: web` → serves at `/`
+- **API** workflow: `artifacts/api-server: API Server` → serves at `/api`
 
-## Database Setup
+## Secrets
 
-Schema is managed by Drizzle ORM. To reset and re-seed:
+| Secret | Required | Purpose |
+|--------|----------|---------|
+| `SESSION_SECRET` | Yes | Express session signing |
+| `DATABASE_URL` | No | External PostgreSQL (defaults to embedded PGLite) |
+
+## Running locally
+
 ```bash
-pnpm --filter @workspace/db run push          # push schema
-pnpm --filter @workspace/scripts run db:seed  # seed sample data + admin user
+pnpm install
+pnpm --filter @workspace/api-server run dev   # API on :3000
+pnpm --filter @workspace/takipci-paneli run dev  # Frontend on :5173
 ```
 
-Default login: **admin / admin123** (enter your Instagram credentials on the login screen)
+## Notes
 
-## Environment
-
-- `SESSION_SECRET` — set as a Replit secret (auto-injected)
-- `DATABASE_URL` — not set; app uses embedded PGlite automatically
-- `STEALTH_REQUESTS_PYTHON` / `FUNCAPTCHA_PYTHON` — set to `/home/runner/workspace/.venv/bin/python3` (shared env var); points API server at the virtualenv with all Python deps installed
-
-## Python Virtual Environment
-
-Python deps (cryptography, pycryptodome, curl_cffi, flask, colorama, numpy, stealth-requests) are installed in `.venv/`. The env vars above ensure Node spawns the venv Python for the stealth bridge and funcaptcha solver.
-
-To reinstall after a fresh import:
-```bash
-python3 -m venv .venv
-.venv/bin/pip install cryptography pycryptodome curl_cffi flask colorama numpy
-.venv/bin/pip install -e lib/stealth-requests/
-```
-
-## Project Structure
-
-```
-artifacts/
-  api-server/       Express API server
-  takipci-paneli/   React frontend
-lib/
-  db/               Drizzle schema, PGlite config, backup SQL
-  instagram-client/ Instagram API client (native + Python bridge)
-  api-spec/         Shared Zod schemas
-scripts/            DB seed/restore scripts
-```
-
-## User Preferences
-- Keep existing project structure — do not restructure or migrate to a different stack
+- The funcaptcha solver sidecar (`lib/funcaptcha-solver`) requires a Python `.venv` with `curl_cffi`. It is **non-blocking** — Instagram login works without it.
+- Default login for the dashboard: `admin` / `admin123`
