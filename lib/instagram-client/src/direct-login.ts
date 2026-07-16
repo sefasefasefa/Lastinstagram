@@ -2794,13 +2794,17 @@ export async function loginToInstagram(
   }));
   if (mobileResult.success) return mobileResult;
 
-  // 2FA / checkpoint / captcha / hız sınırı / spam → web API'yi denemeye gerek yok
+  // 2FA / checkpoint / captcha / hız sınırı / spam / yanlış şifre → web API'yi denemeye gerek yok.
+  // Özellikle bad_password: mobil API "şifre yanlış" dediğinde web fallback'e geçmemeli —
+  // Instagram web'de aynı yanlış şifreye checkpoint_required döndürebilir, bu da
+  // şifre hatası yerine OTP ekranı gösterilmesine yol açar.
   const SHORT_CIRCUIT_TYPES: LoginErrorType[] = [
     "2fa",
     "checkpoint",
     "captcha",
     "rate_limit",
     "spam_or_abuse",
+    "bad_password",
   ];
   if (
     mobileResult.errorType &&
