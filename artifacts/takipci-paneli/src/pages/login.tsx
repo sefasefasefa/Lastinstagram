@@ -70,6 +70,7 @@ export default function LoginPage() {
   const [checkpointChoice, setCheckpointChoice] = useState("")
   const [checkpointMessage, setCheckpointMessage] = useState<string | null>(null)
   const [checkpointCode, setCheckpointCode] = useState("")
+  const [checkpointVerifyUrl, setCheckpointVerifyUrl] = useState<string | null>(null)
 
   const checkpointOptions = useGetCheckpointOptions({
     query: { enabled: checkpointRequired && checkpointStep === "loading" },
@@ -126,6 +127,7 @@ export default function LoginPage() {
             isCaptcha?: boolean
             captchaType?: string | null
             checkpointRequired?: boolean
+            checkpointVerifyUrl?: string
           } })?.data
 
           if (data?.twoFactorRequired) {
@@ -137,6 +139,7 @@ export default function LoginPage() {
           if (data?.checkpointRequired) {
             setCheckpointRequired(true)
             setCheckpointStep("loading")
+            if (data.checkpointVerifyUrl) setCheckpointVerifyUrl(data.checkpointVerifyUrl)
             setError(null)
             return
           }
@@ -250,6 +253,26 @@ export default function LoginPage() {
 
         {checkpointRequired ? (
           <div className="space-y-4">
+            {/* Instagram'ın tarayıcı doğrulaması gerektiğinde manuel açılabilecek link */}
+            {checkpointVerifyUrl && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-2">
+                <p className="text-xs text-amber-800 dark:text-amber-300 font-medium">Kod gelmiyor mu?</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                  Instagram sunucu ortamından gönderilen kod isteklerini engelliyor olabilir.
+                  Aşağıdaki butona tıklayıp doğrulamayı <strong>kendi tarayıcında</strong> tamamla,
+                  ardından buraya geri dön ve kodu gir.
+                </p>
+                <a
+                  href={checkpointVerifyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-800 dark:text-amber-300 underline underline-offset-2 hover:text-amber-600"
+                >
+                  ↗ Instagram Doğrulama Sayfasını Aç
+                </a>
+              </div>
+            )}
+
             {checkpointStep === "loading" && (
               <p className="text-sm text-muted-foreground text-center py-4">Doğrulama adımı sorgulanıyor...</p>
             )}

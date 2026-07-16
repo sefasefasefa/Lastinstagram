@@ -124,6 +124,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
         isCaptcha: true,
         captchaType: "checkpoint",
         checkpointRequired: true,
+        checkpointVerifyUrl: err.checkpointVerifyUrl,
       });
       return;
     }

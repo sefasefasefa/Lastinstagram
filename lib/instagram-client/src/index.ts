@@ -87,9 +87,13 @@ export { extractChallengeContextResilient, CHALLENGE_HTML_DUMP_PATH } from "./di
  * yakalamalı.
  */
 export class InstagramCheckpointRequiredError extends Error {
-  constructor() {
+  /** Kullanıcının tarayıcısında açabileceği tam doğrulama URL'si (opsiyonel). */
+  readonly checkpointVerifyUrl?: string;
+
+  constructor(checkpointVerifyUrl?: string) {
     super("Instagram güvenlik doğrulaması (checkpoint) gerektiriyor.");
     this.name = "InstagramCheckpointRequiredError";
+    this.checkpointVerifyUrl = checkpointVerifyUrl;
   }
 }
 
@@ -516,7 +520,10 @@ export class InstagramClient {
                 ? extractSessionCookies(result.cookies).cookieHeader
                 : "",
             };
-            throw new InstagramCheckpointRequiredError();
+            const verifyUrl = result.checkpointUrl.startsWith("http")
+              ? result.checkpointUrl
+              : `https://www.instagram.com${result.checkpointUrl}`;
+            throw new InstagramCheckpointRequiredError(verifyUrl);
           }
 
           throw new InstagramCaptchaChallengeError(
@@ -586,7 +593,10 @@ export class InstagramClient {
               checkpointUrl: verify.checkpointUrl,
               cookieHeader: this.session.cookieHeader,
             };
-            throw new InstagramCheckpointRequiredError();
+            const verifyUrl2 = verify.checkpointUrl.startsWith("http")
+              ? verify.checkpointUrl
+              : `https://www.instagram.com${verify.checkpointUrl}`;
+            throw new InstagramCheckpointRequiredError(verifyUrl2);
           }
           // checkpoint_url YOK: Instagram bize çözülebilir bir challenge vermedi,
           // sadece login sonrası oturumu genel biçimde reddetti (çoğunlukla otomasyon/
