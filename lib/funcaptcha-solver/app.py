@@ -1,6 +1,8 @@
 import base64
-import os
+import ctypes
 import json
+import os
+import platform
 import random
 import time
 from queue import Queue
@@ -17,7 +19,10 @@ import tls_requests
 from tls_requests import TLSClient
 
 exceptions = helpers.exceptions
-def SetConsoleTitle(title): pass
+if platform.system() == "Windows":
+    SetConsoleTitle = ctypes.windll.kernel32.SetConsoleTitleW
+else:
+    def SetConsoleTitle(title): pass
 TLSClient.initialize()
 
 _PROXIES = None
@@ -595,7 +600,7 @@ if __name__ == "__main__":
 
             if not private_key:
                 return jsonify({'error': 'Missing required parameter: private_key'}), 400
-            if False:  # niggamode always allowed
+            if not og_proxy and not data.get('niggamode'):
                 return jsonify({'error': 'Missing required parameter: og_proxy'}), 400
 
             preset = helpers.presets.get_preset(private_key)
@@ -630,6 +635,6 @@ if __name__ == "__main__":
             #print(traceback.format_exc())
             return jsonify({'error': 'Internal server error'}), 500
 
-    Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("FUNCAPTCHA_SERVER_PORT", 8003))), daemon=True).start()
+    Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("FUNCAPTCHA_SERVER_PORT", 8003))), daemon=True).start()
     while not stop_event.is_set():
         time.sleep(1)
