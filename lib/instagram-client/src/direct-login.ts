@@ -2034,6 +2034,88 @@ export async function fetchChallengeContext(
   cookieHeader: string,
   userAgent = MOBILE_UA,
 ): Promise<ChallengeContext> {
+  const isAuthPlatform = checkpointUrl.includes("auth_platform");
+
+  // ── auth_platform: web HTML DEĞİL, mobil API GET kullan ───────────────────
+  // auth_platform/?apc=... sayfası tamamen client-side render edilen bir React
+  // SPA'sıdır — başlangıç HTML'inde challenge_context, phone/email ipucu veya
+  // herhangi bir adım verisi BULUNMAZ. Doğru yol:
+  //   GET https://i.instagram.com/api/v1/challenge/?challenge_context={"apc":"..."}
+  // Bu endpoint JSON döner: step_name, step_data (phone/email), challenge_context.
+  if (isAuthPlatform) {
+    const apcMatch = checkpointUrl.match(/[?&]apc=([^&]+)/);
+    const apc = apcMatch ? decodeURIComponent(apcMatch[1]) : "";
+    const ctxParam = JSON.stringify({ apc });
+    const mobileUrl = `https://i.instagram.com/api/v1/challenge/?challenge_context=${encodeURIComponent(ctxParam)}`;
+    console.log("[fetchChallengeContext] mobil GET /api/v1/challenge/ (auth_platform)");
+
+    try {
+      const res = await loginFetch(mobileUrl, {
+        method: "GET",
+        headers: {
+          "User-Agent": userAgent,
+          "Cookie": cookieHeader,
+          "X-IG-App-ID": IG_APP_ID,
+          "Accept": "application/json",
+          "Accept-Language": "tr-TR",
+        },
+      });
+
+      const rawText = await res.text().catch(() => "");
+      console.log("[fetchChallengeContext] mobil GET status:", res.status, "bodyPreview:", JSON.stringify(rawText.slice(0, 400)));
+
+      let data: Record<string, unknown> = {};
+      try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {}
+
+      if ((res.status === 200 || res.status === 201) && data.status !== "fail") {
+        // Gerçek challenge_context'i yakala
+        const challengeCtx = typeof data.challenge_context === "string" ? data.challenge_context : undefined;
+        console.log("[fetchChallengeContext] mobil GET başarılı — challenge_context:", challengeCtx ? `VAR (${challengeCtx.length} char)` : "YOK");
+
+        const stepData = (data.step_data ?? {}) as Record<string, unknown>;
+        const phoneHint = typeof stepData.phone_number === "string" ? stepData.phone_number : undefined;
+        const emailHint = typeof stepData.email === "string" ? stepData.email : undefined;
+        if (phoneHint) console.log("[fetchChallengeContext] telefon ipucu:", phoneHint);
+        if (emailHint) console.log("[fetchChallengeContext] e-posta ipucu:", emailHint);
+
+        let stepName = typeof data.step_name === "string" ? data.step_name : "select_verify_method";
+
+        const choices: ChallengeChoice[] = [];
+        if (stepName === "select_verify_method" || choices.length === 0) {
+          if (phoneHint) choices.push({ value: "0", label: `SMS ile gönder — ${phoneHint}` });
+          else choices.push({ value: "0", label: "SMS ile gönder (telefon)" });
+          if (emailHint) choices.push({ value: "1", label: `E-posta ile gönder — ${emailHint}` });
+          else choices.push({ value: "1", label: "E-posta ile gönder" });
+        }
+
+        return {
+          stepName,
+          choices: choices.length > 0 ? choices : undefined,
+          message: typeof data.message === "string" ? data.message : "Instagram hesabınızı doğrulamak için bir yöntem seçin.",
+          _challengeContext: challengeCtx,
+        };
+      }
+
+      // Mobil GET başarısız — hata logla, devam et (aşağıdaki eski akışa düşme)
+      console.warn("[fetchChallengeContext] mobil GET başarısız:", res.status, rawText.slice(0, 200));
+    } catch (e) {
+      console.warn("[fetchChallengeContext] mobil GET ağ hatası:", e instanceof Error ? e.message : e);
+    }
+
+    // ── Fallback: mobil GET çalışmadıysa varsayılan seçenekler döndür ────────
+    // challenge_context yok — selectChallengeMethod {"apc":"..."} ile deneyecek
+    console.log("[fetchChallengeContext] Fallback: varsayılan select_verify_method döndürülüyor");
+    return {
+      stepName: "select_verify_method",
+      choices: [
+        { value: "0", label: "SMS ile gönder (telefon)" },
+        { value: "1", label: "E-posta ile gönder" },
+      ],
+      message: "Instagram hesabınızı doğrulamak için bir yöntem seçin.",
+    };
+  }
+
+  // ── Eski /challenge/ JSON akışı (auth_platform olmayan checkpoint'ler) ─────
   try {
     const fullUrl = buildChallengeUrl(checkpointUrl);
     console.log("[fetchChallengeContext] GET", fullUrl.slice(0, 80), "...");
@@ -2052,62 +2134,13 @@ export async function fetchChallengeContext(
     console.log("[fetchChallengeContext] status:", res.status, "bodyLen:", rawText.length, "bodyPreview:", JSON.stringify(rawText.slice(0, 400)));
 
     let data: Record<string, unknown> = {};
-    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {
-      // JSON parse başarısız — ham yanıt zaten loglandı
-    }
+    try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {}
 
-    // auth_platform formatını eski challenge formatına normalize et
-    // auth_platform: { step_name, step_data } veya { type, data } veya farklı yapı döner
-    // HTTP 201 = challenge başarıyla başlatıldı (auth_platform akışında geçerli)
-    const isAuthPlatform = checkpointUrl.includes("auth_platform");
     const isOk = res.status === 200 || res.status === 201;
-
     if (!isOk && Object.keys(data).length === 0) {
       return { stepName: "unknown", error: `Beklenmeyen yanıt (HTTP ${res.status})` };
     }
 
-    // ── auth_platform HTML sayfasından challenge_context parse et ──────────────
-    // auth_platform bir JavaScript web uygulaması olduğu için yalnızca HTML
-    // döndürür. HTML içinde gömülü "challenge_context" JSON'u, Instagram'ın
-    // mobil /api/v1/challenge/ endpoint'ine POST yapmak için gereklidir.
-    let parsedChallengeContext: string | undefined;
-    if (isAuthPlatform && rawText.length > 100) {
-      parsedChallengeContext = extractChallengeContextResilient(rawText);
-
-      // HTML'den phone_number ve email ipuçlarını da bul
-      const phoneHint = rawText.match(/"phone_number"\s*:\s*"([^"]+)"/)?.[1];
-      const emailHint = rawText.match(/"email"\s*:\s*"([^"]+)"/)?.[1];
-      if (phoneHint) console.log("[fetchChallengeContext] telefon ipucu:", phoneHint);
-      if (emailHint) console.log("[fetchChallengeContext] e-posta ipucu:", emailHint);
-
-      // auth_platform HTML → varsayılan seçeneklerle "select_verify_method" döndür
-      const choices: ChallengeChoice[] = [];
-      if (phoneHint) choices.push({ value: "0", label: `SMS ile gönder — ${phoneHint}` });
-      else choices.push({ value: "0", label: "SMS ile gönder (telefon)" });
-      if (emailHint) choices.push({ value: "1", label: `E-posta ile gönder — ${emailHint}` });
-      else choices.push({ value: "1", label: "E-posta ile gönder" });
-
-      return {
-        stepName: "select_verify_method",
-        choices,
-        message: "Instagram hesabınızı doğrulamak için bir yöntem seçin.",
-        _challengeContext: parsedChallengeContext,
-      };
-    }
-
-    // auth_platform boş body (HTTP 201) → yöntem seçim ekranı
-    if (isAuthPlatform && rawText.trim() === "") {
-      return {
-        stepName: "select_verify_method",
-        choices: [
-          { value: "0", label: "SMS ile gönder (telefon)" },
-          { value: "1", label: "E-posta ile gönder" },
-        ],
-        message: "Instagram hesabınızı doğrulamak için bir yöntem seçin.",
-      };
-    }
-
-    // ── Eski /challenge/ JSON formatı ─────────────────────────────────────────
     // data.step_name veya data.type ile adım belirlenir.
     let stepName = typeof data.step_name === "string" ? data.step_name : "";
     if (!stepName && typeof data.type === "string") stepName = data.type;
