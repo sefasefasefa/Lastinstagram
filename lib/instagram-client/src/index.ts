@@ -505,31 +505,19 @@ export class InstagramClient {
         if (result.errorType === "checkpoint" || result.errorType === "captcha") {
           if (await trySolveAndRetry()) return;
 
-          // Funcaptcha bypass başarısız ama checkpoint_url mevcutsa,
-          // interaktif challenge/resolve akışını (kod girişi) başlatılabilir
-          // hale getir — auth.ts bunu InstagramCheckpointRequiredError ile yakalar.
+          // Funcaptcha bypass başarısız — doğrulama kodu ekranı gösterme.
+          // Bloks checkpoint API'si Replit/bulut ortamından 500 döndürdüğünden
+          // interaktif kod girişi akışı zaten kırık. Captcha uyarısı göster;
+          // kullanıcıyı Instagram uygulamasından giriş yapıp hesabı doğrulamaya yönlendir.
           console.log("[instagram-client] Checkpoint sonrası durum:", JSON.stringify({
             errorType: result.errorType,
             checkpointUrl: result.checkpointUrl ?? "(YOK)",
             hasCookies: !!(result.cookies?.length),
           }));
-          if (result.errorType === "checkpoint" && result.checkpointUrl) {
-            this.pendingCheckpoint = {
-              checkpointUrl: result.checkpointUrl,
-              cookieHeader: result.cookies
-                ? extractSessionCookies(result.cookies).cookieHeader
-                : "",
-            };
-            const verifyUrl = result.checkpointUrl.startsWith("http")
-              ? result.checkpointUrl
-              : `https://www.instagram.com${result.checkpointUrl}`;
-            throw new InstagramCheckpointRequiredError(verifyUrl);
-          }
-
           throw new InstagramCaptchaChallengeError(
-            result.errorType,
+            result.errorType === "checkpoint" ? "checkpoint" : result.errorType,
             result.errorType === "checkpoint"
-              ? "Instagram güvenlik doğrulaması (checkpoint) gerektiriyor. Funcaptcha bypass başarısız."
+              ? "Instagram bu sunucudan yapılan girişi güvenlik denetiminden geçiriyor ve otomatik çözüm başarısız oldu. Instagram uygulamasından hesabınıza giriş yapıp birkaç dakika kullandıktan sonra tekrar deneyin."
               : (result.error ?? "Instagram captcha doğrulaması gerektiriyor."),
           );
         }
@@ -586,25 +574,13 @@ export class InstagramClient {
               "Instagram hız sınırı uyguladı. Birkaç dakika bekleyip tekrar deneyin.",
             );
           }
-          // checkpoint veya login_required veya bilinmeyen — checkpoint_url
-          // mevcutsa interaktif çözümleme akışını başlatılabilir hale getir.
-          if (verify.checkpointUrl) {
-            this.pendingCheckpoint = {
-              checkpointUrl: verify.checkpointUrl,
-              cookieHeader: this.session.cookieHeader,
-            };
-            const verifyUrl2 = verify.checkpointUrl.startsWith("http")
-              ? verify.checkpointUrl
-              : `https://www.instagram.com${verify.checkpointUrl}`;
-            throw new InstagramCheckpointRequiredError(verifyUrl2);
-          }
-          // checkpoint_url YOK: Instagram bize çözülebilir bir challenge vermedi,
-          // sadece login sonrası oturumu genel biçimde reddetti (çoğunlukla otomasyon/
-          // bot tespiti — gerçek bir "kod gir" checkpoint'i olmayabilir). Bu durumu
-          // "checkpoint" olarak etiketlemek yanıltıcı olur; ayrı bir tür kullan.
+          // checkpoint_url olsa da olmasa da doğrulama kodu ekranı gösterme —
+          // Bloks API Replit ortamından 500 döndürdüğünden akış zaten kırık.
           throw new InstagramCaptchaChallengeError(
-            "blocked",
-            verify.error ?? "Instagram oturumu login sonrasında kabul etmedi.",
+            verify.checkpointUrl ? "checkpoint" : "blocked",
+            verify.checkpointUrl
+              ? "Instagram bu sunucudan yapılan girişi güvenlik denetiminden geçiriyor ve otomatik çözüm başarısız oldu. Instagram uygulamasından hesabınıza giriş yapıp birkaç dakika kullandıktan sonra tekrar deneyin."
+              : (verify.error ?? "Instagram oturumu login sonrasında kabul etmedi."),
           );
         }
       }
