@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSummary, getGetMonitoringStatusQueryKey, useGetMe, useLogout } from "@workspace/api-client-react"
 import { useQuery } from "@tanstack/react-query"
-import { Link } from "wouter"
+import { Link, useLocation } from "wouter"
 import { Button, Card, Input } from "../components/ui/core"
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/radix"
 import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio, Settings, Video, ChevronDown, ChevronUp, Search, RefreshCw } from "lucide-react"
@@ -33,6 +33,7 @@ interface FollowUser {
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
+  const [, navigate] = useLocation()
   const { data: me } = useGetMe()
   const logout = useLogout()
 
@@ -76,7 +77,8 @@ export default function DashboardPage() {
   const handleSignOut = () => {
     logout.mutate(undefined, {
       onSuccess: () => {
-        queryClient.invalidateQueries()
+        queryClient.clear()
+        navigate("/login")
       },
     })
   }

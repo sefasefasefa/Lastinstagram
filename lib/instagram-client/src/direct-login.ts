@@ -2636,6 +2636,22 @@ async function loginViaMobile(
 
   const user = (data.logged_in_user ?? {}) as Record<string, string>;
   const sessionCookies = extractSessionCookies(setCookies);
+
+  // Replit'in ağ katmanı i.instagram.com Set-Cookie başlıklarını siliyor.
+  // Mobil login "başarılı" görünse de sessionid yoksa web fallback'e bırak.
+  if (!sessionCookies.sessionid) {
+    console.warn(
+      "[loginViaMobile] 200 OK ama sessionid yok — Replit ağ katmanı cookie'leri silmiş olabilir.",
+      "Web API fallback'e geçiliyor.",
+      "logged_in_user keys:", Object.keys(user),
+    );
+    return {
+      success: false,
+      error: "Mobil API: oturum cookie'si alınamadı (ağ katmanı sorunu)",
+      errorType: "unknown",
+    };
+  }
+
   return {
     success: true,
     cookies: setCookies,
@@ -2763,6 +2779,12 @@ async function loginViaWeb(
 
   const allCookies = [...initCookies, ...setCookies];
   const sessionCookies = extractSessionCookies(allCookies);
+  console.log("[loginViaWeb] HTTP status:", res.status,
+    "| initCookies:", initCookies.length,
+    "| setCookies:", setCookies.length,
+    "| sessionid:", sessionCookies.sessionid ? "VAR" : "YOK",
+    "| raw set-cookie (POST):", (res.headers.get("set-cookie") ?? "(YOK)").slice(0, 120),
+  );
   return {
     success: true,
     cookies: allCookies,
