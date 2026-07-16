@@ -45,6 +45,13 @@ const IG_SIG_KEY_VERSION = "4";
 const IG_APP_ID = "1217981644879628";
 
 /**
+ * Instagram Bloks versioning ID — mobil uygulama sürümüne bağlı;
+ * sürüm çıkışlarında değişebilir ancak eski değerler de kabul edilir.
+ */
+const BLOKS_VERSION_ID =
+  "e2004ef1a4f9800e4ab26af7c5bec76dc99c7cf8c6b1f60c3c1bb7b26c58dfca";
+
+/**
  * Instagram login akışındaki doğrudan HTTP istekleri için Stealth-Requests
  * (Python/curl_cffi) köprüsünü kullanır. Köprü çalışmazsa otomatik olarak
  * native fetch'e geri döner. `USE_STEALTH_REQUESTS=false` ile tamamen devre
@@ -2036,74 +2043,72 @@ export async function fetchChallengeContext(
 ): Promise<ChallengeContext> {
   const isAuthPlatform = checkpointUrl.includes("auth_platform");
 
-  // ── auth_platform: web HTML DEĞİL, mobil API GET kullan ───────────────────
-  // auth_platform/?apc=... sayfası tamamen client-side render edilen bir React
-  // SPA'sıdır — başlangıç HTML'inde challenge_context, phone/email ipucu veya
-  // herhangi bir adım verisi BULUNMAZ. Doğru yol:
-  //   GET https://i.instagram.com/api/v1/challenge/?challenge_context={"apc":"..."}
-  // Bu endpoint JSON döner: step_name, step_data (phone/email), challenge_context.
+  // ── auth_platform: Instagram Bloks API'sini kullan ────────────────────────
+  // auth_platform/?apc=... sayfası tamamen client-side SPA; HTML'de hiç veri
+  // yok. Eski /api/v1/challenge/ GET/POST hep action:close döndürüyor çünkü
+  // APC token'ı yalnızca Bloks sistemine ait.
+  // Doğru endpoint:
+  //   POST https://i.instagram.com/api/v1/bloks/apps/com.instagram.challenge.navigation.take_challenge/
+  //   params={"apc":"...","bloks_versioning_id":"..."}
   if (isAuthPlatform) {
     const apcMatch = checkpointUrl.match(/[?&]apc=([^&]+)/);
     const apc = apcMatch ? decodeURIComponent(apcMatch[1]) : "";
-    const ctxParam = JSON.stringify({ apc });
-    const mobileUrl = `https://i.instagram.com/api/v1/challenge/?challenge_context=${encodeURIComponent(ctxParam)}`;
-    console.log("[fetchChallengeContext] mobil GET /api/v1/challenge/ (auth_platform)");
+
+    console.log("[fetchChallengeContext] Bloks take_challenge (auth_platform), apc uzunluğu:", apc.length);
 
     try {
-      const res = await loginFetch(mobileUrl, {
-        method: "GET",
-        headers: {
-          "User-Agent": userAgent,
-          "Cookie": cookieHeader,
-          "X-IG-App-ID": IG_APP_ID,
-          "Accept": "application/json",
-          "Accept-Language": "tr-TR",
+      const bloksParams = JSON.stringify({ apc, bloks_versioning_id: BLOKS_VERSION_ID });
+      const bloksRes = await loginFetch(
+        "https://i.instagram.com/api/v1/bloks/apps/com.instagram.challenge.navigation.take_challenge/",
+        {
+          method: "POST",
+          headers: {
+            "User-Agent": userAgent,
+            "Cookie": cookieHeader,
+            "X-IG-App-ID": IG_APP_ID,
+            "Accept": "application/json",
+            "Accept-Language": "tr-TR",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          },
+          body: new URLSearchParams({ params: bloksParams }).toString(),
         },
-      });
+      );
 
-      const rawText = await res.text().catch(() => "");
-      console.log("[fetchChallengeContext] mobil GET status:", res.status, "bodyPreview:", JSON.stringify(rawText.slice(0, 400)));
+      const bloksText = await bloksRes.text().catch(() => "");
+      console.log("[fetchChallengeContext] Bloks status:", bloksRes.status, "bodyLen:", bloksText.length, "bodyPreview:", JSON.stringify(bloksText.slice(0, 500)));
 
-      let data: Record<string, unknown> = {};
-      try { data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {}; } catch {}
+      // Bloks yanıtından phone/email ipuçlarını ve challenge_context'i çıkar
+      const phoneHint = bloksText.match(/"phone_number"\s*:\s*"([^"]+)"/)?.[1]
+        ?? bloksText.match(/\+\d[\d\s*]{5,15}\d/)?.[0];
+      const emailHint = bloksText.match(/"email"\s*:\s*"([^"]+)"/)?.[1]
+        ?? bloksText.match(/[a-z*]+@[a-z*]+\.[a-z]+/i)?.[0];
+      const challengeCtx = bloksText.match(/"challenge_context"\s*:\s*"((?:[^"\\]|\\.)*)"/)?.[1];
 
-      if ((res.status === 200 || res.status === 201) && data.status !== "fail") {
-        // Gerçek challenge_context'i yakala
-        const challengeCtx = typeof data.challenge_context === "string" ? data.challenge_context : undefined;
-        console.log("[fetchChallengeContext] mobil GET başarılı — challenge_context:", challengeCtx ? `VAR (${challengeCtx.length} char)` : "YOK");
+      if (phoneHint) console.log("[fetchChallengeContext] Bloks telefon ipucu:", phoneHint);
+      if (emailHint) console.log("[fetchChallengeContext] Bloks e-posta ipucu:", emailHint);
+      if (challengeCtx) console.log("[fetchChallengeContext] Bloks challenge_context: VAR", challengeCtx.length, "char");
 
-        const stepData = (data.step_data ?? {}) as Record<string, unknown>;
-        const phoneHint = typeof stepData.phone_number === "string" ? stepData.phone_number : undefined;
-        const emailHint = typeof stepData.email === "string" ? stepData.email : undefined;
-        if (phoneHint) console.log("[fetchChallengeContext] telefon ipucu:", phoneHint);
-        if (emailHint) console.log("[fetchChallengeContext] e-posta ipucu:", emailHint);
-
-        let stepName = typeof data.step_name === "string" ? data.step_name : "select_verify_method";
-
+      if (bloksRes.status === 200 || bloksRes.status === 201) {
         const choices: ChallengeChoice[] = [];
-        if (stepName === "select_verify_method" || choices.length === 0) {
-          if (phoneHint) choices.push({ value: "0", label: `SMS ile gönder — ${phoneHint}` });
-          else choices.push({ value: "0", label: "SMS ile gönder (telefon)" });
-          if (emailHint) choices.push({ value: "1", label: `E-posta ile gönder — ${emailHint}` });
-          else choices.push({ value: "1", label: "E-posta ile gönder" });
-        }
+        if (phoneHint) choices.push({ value: "0", label: `SMS ile gönder — ${phoneHint}` });
+        else choices.push({ value: "0", label: "SMS ile gönder (telefon)" });
+        if (emailHint) choices.push({ value: "1", label: `E-posta ile gönder — ${emailHint}` });
+        else choices.push({ value: "1", label: "E-posta ile gönder" });
 
         return {
-          stepName,
-          choices: choices.length > 0 ? choices : undefined,
-          message: typeof data.message === "string" ? data.message : "Instagram hesabınızı doğrulamak için bir yöntem seçin.",
+          stepName: "select_verify_method",
+          choices,
+          message: "Instagram hesabınızı doğrulamak için bir yöntem seçin.",
           _challengeContext: challengeCtx,
         };
       }
 
-      // Mobil GET başarısız — hata logla, devam et (aşağıdaki eski akışa düşme)
-      console.warn("[fetchChallengeContext] mobil GET başarısız:", res.status, rawText.slice(0, 200));
+      console.warn("[fetchChallengeContext] Bloks başarısız:", bloksRes.status, bloksText.slice(0, 300));
     } catch (e) {
-      console.warn("[fetchChallengeContext] mobil GET ağ hatası:", e instanceof Error ? e.message : e);
+      console.warn("[fetchChallengeContext] Bloks ağ hatası:", e instanceof Error ? e.message : e);
     }
 
-    // ── Fallback: mobil GET çalışmadıysa varsayılan seçenekler döndür ────────
-    // challenge_context yok — selectChallengeMethod {"apc":"..."} ile deneyecek
+    // ── Fallback: Bloks çalışmadıysa varsayılan seçenekler ──────────────────
     console.log("[fetchChallengeContext] Fallback: varsayılan select_verify_method döndürülüyor");
     return {
       stepName: "select_verify_method",
@@ -2203,67 +2208,58 @@ export async function selectChallengeMethod(
   const isAuthPlatform = checkpointUrl.includes("auth_platform");
   const csrfToken = extractCsrfFromCookie(cookieHeader);
 
-  // ── Önce mobil challenge API'sini dene (/api/v1/challenge/) ──────────────
-  // auth_platform web sayfası basit form POST'u işlemiyor; mobil API gerekli.
-  // challenge_context HTML'den parse edilmişse kullan; yoksa apc'yi fallback yap.
+  // ── Bloks take_challenge API (auth_platform için tek doğru yol) ─────────
+  // Eski /api/v1/challenge/ POST hep action:close döndürüyor; APC token Bloks'a ait.
   if (isAuthPlatform) {
     const apcMatch = checkpointUrl.match(/[?&]apc=([^&]+)/);
     const apc = apcMatch ? decodeURIComponent(apcMatch[1]) : "";
 
-    // challenge_context ya parse edilmiş JSON ya da {"apc":"..."} şeklinde bir wrapper
-    const ctxToSend = challengeContext ?? (apc ? JSON.stringify({ apc }) : "");
-
-    const mobileBody: Record<string, string> = {
+    // choice: "0" = SMS/telefon, "1" = e-posta
+    const bloksParams = JSON.stringify({
+      apc,
+      bloks_versioning_id: BLOKS_VERSION_ID,
       choice,
-      _csrftoken: csrfToken,
-    };
-    if (ctxToSend) mobileBody.challenge_context = ctxToSend;
+    });
 
-    console.log("[selectChallengeMethod] mobil API deneniyor: choice=" + choice + " challengeContext:", ctxToSend ? ctxToSend.slice(0, 80) + "..." : "(yok)");
+    console.log("[selectChallengeMethod] Bloks take_challenge choice=" + choice);
 
     try {
-      const mobileRes = await loginFetch("https://i.instagram.com/api/v1/challenge/", {
-        method: "POST",
-        headers: {
-          "User-Agent": userAgent,
-          "Cookie": cookieHeader,
-          "X-IG-App-ID": IG_APP_ID,
-          "X-CSRFToken": csrfToken,
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "Accept": "application/json",
-          "Accept-Language": "tr-TR",
-          "Origin": "https://www.instagram.com",
-          "Referer": "https://www.instagram.com/",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Site": "same-site",
-          "Sec-Fetch-Dest": "empty",
+      const bloksRes = await loginFetch(
+        "https://i.instagram.com/api/v1/bloks/apps/com.instagram.challenge.navigation.take_challenge/",
+        {
+          method: "POST",
+          headers: {
+            "User-Agent": userAgent,
+            "Cookie": cookieHeader,
+            "X-IG-App-ID": IG_APP_ID,
+            "X-CSRFToken": csrfToken,
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Accept": "application/json",
+            "Accept-Language": "tr-TR",
+          },
+          body: new URLSearchParams({ params: bloksParams }).toString(),
         },
-        body: new URLSearchParams(mobileBody).toString(),
-      });
+      );
 
-      const mobileCookiesSelect = getSetCookies(mobileRes);
-      const mobileText = await mobileRes.text().catch(() => "");
-      console.log("[selectChallengeMethod] mobil API status:", mobileRes.status, "setCookies:", mobileCookiesSelect.length, "bodyPreview:", JSON.stringify(mobileText.slice(0, 200)));
+      const bloksCookies = getSetCookies(bloksRes);
+      const bloksText = await bloksRes.text().catch(() => "");
+      console.log("[selectChallengeMethod] Bloks status:", bloksRes.status, "setCookies:", bloksCookies.length, "bodyPreview:", JSON.stringify(bloksText.slice(0, 400)));
 
-      let mobileData: Record<string, unknown> = {};
-      try { mobileData = mobileText ? (JSON.parse(mobileText) as Record<string, unknown>) : {}; } catch {}
-
-      if (mobileRes.ok && mobileData.status !== "fail") {
-        // action:"close" → Instagram checkpoint'i kapattı, oturum hemen kuruldu.
-        // Set-Cookie'den sessionid'yi yakala ve döndür.
-        const sc = extractSessionCookies(mobileCookiesSelect);
-        if (mobileData.action === "close") {
-          console.log("[selectChallengeMethod] action:close — checkpoint bypass edildi, sessionid:", sc.sessionid ? "VAR" : "YOK");
-          return { success: true, action: "close", sessionCookies: sc.sessionid ? sc : undefined };
-        }
-        console.log("[selectChallengeMethod] mobil API başarılı — kod gönderildi");
-        return { success: true, stepName: typeof mobileData.step_name === "string" ? mobileData.step_name : undefined };
+      const sc = extractSessionCookies(bloksCookies);
+      if (sc.sessionid) {
+        console.log("[selectChallengeMethod] Bloks → sessionid alındı (bypass)");
+        return { success: true, action: "close", sessionCookies: sc };
       }
 
-      const mobileErr = typeof mobileData.message === "string" ? mobileData.message : `HTTP ${mobileRes.status}`;
-      console.log("[selectChallengeMethod] mobil API başarısız:", mobileErr, "— auth_platform URL yedek yoluna geçiliyor");
+      if (bloksRes.status === 200 || bloksRes.status === 201) {
+        // 200 ama sessionid yok → kod gönderildi, kullanıcı kodu girecek
+        console.log("[selectChallengeMethod] Bloks → kod gönderildi (verify_code adımı bekleniyor)");
+        return { success: true, stepName: "verify_code" };
+      }
+
+      console.warn("[selectChallengeMethod] Bloks başarısız:", bloksRes.status, bloksText.slice(0, 200));
     } catch (e) {
-      console.log("[selectChallengeMethod] mobil API ağ hatası:", e instanceof Error ? e.message : e, "— yedek yola geçiliyor");
+      console.warn("[selectChallengeMethod] Bloks ağ hatası:", e instanceof Error ? e.message : e);
     }
   }
 
@@ -2346,46 +2342,43 @@ export async function submitChallengeCode(
     return null; // başarı ama session yok — devam et
   }
 
-  // ── 1. Mobil challenge API (/api/v1/challenge/) ───────────────────────────
+  // ── 1. Bloks take_challenge API (auth_platform için) ─────────────────────
   if (isAuthPlatform) {
     const apcMatch = checkpointUrl.match(/[?&]apc=([^&]+)/);
     const apc = apcMatch ? decodeURIComponent(apcMatch[1]) : "";
-    const ctxToSend = challengeContext ?? (apc ? JSON.stringify({ apc }) : "");
 
-    const mobileBody: Record<string, string> = {
+    const bloksParams = JSON.stringify({
+      apc,
+      bloks_versioning_id: BLOKS_VERSION_ID,
       security_code: code,
-      _csrftoken: csrfToken,
-    };
-    if (ctxToSend) mobileBody.challenge_context = ctxToSend;
+    });
 
-    console.log("[submitChallengeCode] mobil API deneniyor, challenge_context:", ctxToSend ? ctxToSend.slice(0, 60) + "..." : "(yok)");
+    console.log("[submitChallengeCode] Bloks take_challenge code=***");
 
     try {
-      const mobileRes = await loginFetch("https://i.instagram.com/api/v1/challenge/", {
-        method: "POST",
-        headers: {
-          "User-Agent": userAgent,
-          "Cookie": cookieHeader,
-          "X-IG-App-ID": IG_APP_ID,
-          "X-CSRFToken": csrfToken,
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "Accept": "application/json",
-          "Accept-Language": "tr-TR",
-          "Origin": "https://www.instagram.com",
-          "Referer": "https://www.instagram.com/",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Site": "same-site",
-          "Sec-Fetch-Dest": "empty",
+      const bloksRes = await loginFetch(
+        "https://i.instagram.com/api/v1/bloks/apps/com.instagram.challenge.navigation.take_challenge/",
+        {
+          method: "POST",
+          headers: {
+            "User-Agent": userAgent,
+            "Cookie": cookieHeader,
+            "X-IG-App-ID": IG_APP_ID,
+            "X-CSRFToken": csrfToken,
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Accept": "application/json",
+            "Accept-Language": "tr-TR",
+          },
+          body: new URLSearchParams({ params: bloksParams }).toString(),
         },
-        body: new URLSearchParams(mobileBody).toString(),
-      });
-      const mobileCookies = getSetCookies(mobileRes);
-      const mobileText = await mobileRes.text().catch(() => "");
-      const mobileResult = parseSessionFromResponse(mobileCookies, mobileText, mobileRes.status, "mobil");
-      if (mobileResult) return mobileResult;
+      );
+      const bloksCookies = getSetCookies(bloksRes);
+      const bloksText = await bloksRes.text().catch(() => "");
+      const bloksResult = parseSessionFromResponse(bloksCookies, bloksText, bloksRes.status, "bloks");
+      if (bloksResult) return bloksResult;
       // null → belirsiz; yedek yola geç
     } catch (e) {
-      console.log("[submitChallengeCode] mobil API ağ hatası:", e instanceof Error ? e.message : e);
+      console.log("[submitChallengeCode] Bloks ağ hatası:", e instanceof Error ? e.message : e);
     }
   }
 
