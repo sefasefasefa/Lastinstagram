@@ -78,6 +78,36 @@ router.post("/instagram/login", async (_req, res): Promise<void> => {
   }
 });
 
+/**
+ * Tarayıcıdan kopyalanan sessionid cookie değeriyle doğrudan oturum açar.
+ * Datacenter IP'sinden şifre girişi Instagram tarafından engellediğinde
+ * bu endpoint kullanılır.
+ */
+router.post("/instagram/session-cookie", async (req, res): Promise<void> => {
+  const { sessionCookie } = req.body as { sessionCookie?: string };
+  if (!sessionCookie || typeof sessionCookie !== "string" || !sessionCookie.trim()) {
+    res.status(400).json({ success: false, error: "sessionCookie alanı gerekli." });
+    return;
+  }
+  const cookie = sessionCookie.trim();
+  // "sessionid=XXX" formatını da kabul et — sadece değer kısmını al
+  const value = cookie.startsWith("sessionid=") ? cookie.split("=").slice(1).join("=") : cookie;
+
+  try {
+    client = new InstagramClient({
+      instagramUsername: "",
+      instagramSessionCookie: value,
+      proxyUrl: process.env.PROXY_URL,
+      useProxy: process.env.USE_PROXY === "true",
+    });
+    await client.login();
+    res.json({ success: true, message: "Instagram oturumu başarıyla açıldı." });
+  } catch (error) {
+    client = null;
+    res.status(502).json({ success: false, error: errorMessage(error) });
+  }
+});
+
 router.post("/instagram/logout", async (_req, res): Promise<void> => {
   try {
     await client?.logout();

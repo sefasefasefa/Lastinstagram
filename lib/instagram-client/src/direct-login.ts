@@ -48,6 +48,7 @@ const IG_APP_ID = "1217981644879628";
  * dışı bırakılabilir.
  */
 const loginFetch = process.env.USE_STEALTH_REQUESTS === "false" ? fetch : stealthFetch;
+console.log("[instagram-client] loginFetch:", process.env.USE_STEALTH_REQUESTS === "false" ? "native fetch" : "stealth bridge (Python/curl_cffi)");
 
 /** OnePlus 6 / Android 10 mobil UA */
 const MOBILE_UA =
@@ -2637,17 +2638,23 @@ async function loginViaMobile(
   const user = (data.logged_in_user ?? {}) as Record<string, string>;
   const sessionCookies = extractSessionCookies(setCookies);
 
+  // Tüm data key'lerini logla — session token body'de mi geliyor?
+  console.log("[loginViaMobile] data keys:", Object.keys(data),
+    "| logged_in_user keys:", Object.keys(user),
+    "| data.sessionid:", (data as Record<string,unknown>).sessionid ?? "(yok)",
+    "| user.session_id:", user.session_id ?? "(yok)",
+  );
+
   // Replit'in ağ katmanı i.instagram.com Set-Cookie başlıklarını siliyor.
   // Mobil login "başarılı" görünse de sessionid yoksa web fallback'e bırak.
   if (!sessionCookies.sessionid) {
     console.warn(
-      "[loginViaMobile] 200 OK ama sessionid yok — Replit ağ katmanı cookie'leri silmiş olabilir.",
-      "Web API fallback'e geçiliyor.",
+      "[loginViaMobile] 200 OK ama sessionid yok — web fallback'e geçiliyor.",
       "logged_in_user keys:", Object.keys(user),
     );
     return {
       success: false,
-      error: "Mobil API: oturum cookie'si alınamadı (ağ katmanı sorunu)",
+      error: "Mobil API: oturum cookie'si alınamadı",
       errorType: "unknown",
     };
   }
@@ -2767,23 +2774,26 @@ async function loginViaWeb(
       cookies: classifiedWeb === "checkpoint" ? [...initCookies, ...setCookies] : undefined,
     };
   }
+  // Web login sonuç logu — hem başarısız hem başarılı yol için
+  console.log("[loginViaWeb] HTTP status:", res.status,
+    "| initCookies:", initCookies.length,
+    "| setCookies:", setCookies.length,
+    "| data.authenticated:", data.authenticated,
+    "| data keys:", Object.keys(data),
+    "| raw set-cookie (init):", (initRes.headers.get("set-cookie") ?? "(YOK)").slice(0, 80),
+    "| raw set-cookie (POST):", (res.headers.get("set-cookie") ?? "(YOK)").slice(0, 80),
+  );
+
   if (!res.ok || !data.authenticated) {
     const msg =
       typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
-    console.error(
-      "[instagram-client] Unclassified web login failure — raw response:",
-      JSON.stringify({ status: res.status, message: data.message, keys: Object.keys(data) }),
-    );
     return { success: false, error: `Web API: ${msg}`, errorType: "unknown" };
   }
 
   const allCookies = [...initCookies, ...setCookies];
   const sessionCookies = extractSessionCookies(allCookies);
-  console.log("[loginViaWeb] HTTP status:", res.status,
-    "| initCookies:", initCookies.length,
-    "| setCookies:", setCookies.length,
-    "| sessionid:", sessionCookies.sessionid ? "VAR" : "YOK",
-    "| raw set-cookie (POST):", (res.headers.get("set-cookie") ?? "(YOK)").slice(0, 120),
+  console.log("[loginViaWeb] sessionid:", sessionCookies.sessionid ? "VAR" : "YOK",
+    "| cookieHeader:", sessionCookies.cookieHeader.slice(0, 80) || "(boş)",
   );
   return {
     success: true,

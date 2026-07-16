@@ -1,10 +1,10 @@
 import { useState } from "react"
 import { useGetMonitoringStatus, useUpdateMonitoringStatus, useGetDashboardSummary, getGetMonitoringStatusQueryKey, useGetMe, useLogout } from "@workspace/api-client-react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation } from "@tanstack/react-query"
 import { Link, useLocation } from "wouter"
 import { Button, Card, Input } from "../components/ui/core"
 import { Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/radix"
-import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio, Settings, Video, ChevronDown, ChevronUp, Search, RefreshCw } from "lucide-react"
+import { Activity, Users, Heart, Image as ImageIcon, LogOut, Radio, Settings, Video, ChevronDown, ChevronUp, Search, RefreshCw, Link2, ExternalLink } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { TrackedUserList } from "../components/tracked-user-list"
@@ -49,6 +49,26 @@ export default function DashboardPage() {
     retry: false,
   })
   const myProfile = myProfileData?.profile
+
+  const [sessionCookie, setSessionCookie] = useState("")
+  const connectWithCookie = useMutation({
+    mutationFn: async (cookie: string) => {
+      const r = await fetch("/api/instagram/session-cookie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionCookie: cookie }),
+      })
+      const data = await r.json() as { success: boolean; error?: string; message?: string }
+      if (!data.success) throw new Error(data.error ?? "Bağlantı başarısız")
+      return data
+    },
+    onSuccess: () => {
+      toast.success("Instagram hesabı bağlandı!")
+      setSessionCookie("")
+      queryClient.invalidateQueries({ queryKey: ["instagram-me"] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
 
   const [showFollowers, setShowFollowers] = useState(false)
   const [followerSearch, setFollowerSearch] = useState("")
@@ -192,6 +212,58 @@ export default function DashboardPage() {
             trend="Video içerikler"
           />
         </section>
+
+        {/* Instagram Bağlantı Kartı — yalnızca bağlı değilken göster */}
+        {!myProfileLoading && !myProfile && (
+          <section>
+            <Card className="p-6 border-amber-500/30 bg-amber-500/5">
+              <div className="flex flex-col sm:flex-row gap-6">
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="w-5 h-5 text-amber-400" />
+                    <h2 className="font-semibold text-base">Instagram Hesabını Bağla</h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Sunucu IP'si Instagram tarafından kısıtlandığı için şifre ile giriş yapılamıyor.
+                    Tarayıcından <code className="bg-muted px-1 rounded text-xs">sessionid</code> çerezini kopyala ve aşağıya yapıştır.
+                  </p>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium text-foreground/70">Nasıl bulunur?</p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Tarayıcında Instagram'a giriş yap</li>
+                      <li>F12 → Application → Cookies → instagram.com</li>
+                      <li><code className="bg-muted px-1 rounded">sessionid</code> satırının değerini kopyala</li>
+                    </ol>
+                  </div>
+                  <a
+                    href="https://www.instagram.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Instagram'ı aç
+                  </a>
+                </div>
+                <div className="sm:w-72 space-y-3 flex flex-col justify-center">
+                  <Input
+                    placeholder="sessionid değerini yapıştır…"
+                    value={sessionCookie}
+                    onChange={e => setSessionCookie(e.target.value)}
+                    className="font-mono text-xs"
+                  />
+                  <Button
+                    className="w-full"
+                    disabled={!sessionCookie.trim() || connectWithCookie.isPending}
+                    onClick={() => connectWithCookie.mutate(sessionCookie.trim())}
+                  >
+                    {connectWithCookie.isPending ? "Bağlanıyor…" : "Bağlan"}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </section>
+        )}
 
         {/* Kendi Instagram Hesabım */}
         {myProfile && (
