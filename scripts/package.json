@@ -13,10 +13,12 @@
   "dependencies": {
     "@workspace/db": "workspace:*",
     "@workspace/instagram-client": "workspace:*",
+    "bcryptjs": "^3.0.2",
     "dotenv": "^16.4.7",
     "node-cron": "^3.0.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node-cron": "^3.0.11",
     "@types/node": "catalog:",
     "tsx": "catalog:"

@@ -2,20 +2,8 @@ import express, { type Express } from "express";
 import cors from "cors";
 import session from "express-session";
 import pinoHttp from "pino-http";
-import { pool } from "@workspace/db";
 import router from "./routes";
 import { logger } from "./lib/logger";
-
-// connect-pg-simple requires a real pg.Pool — it is not compatible with PGlite.
-// Only load it when DATABASE_URL is set (i.e. a real Postgres is configured).
-// Without DATABASE_URL the app uses PGlite (embedded) and express-session's
-// built-in MemoryStore, which is perfectly fine for a single-server VDS.
-let sessionStore: session.Store | undefined;
-if (process.env.DATABASE_URL) {
-  const createPgSessionStore = (await import("connect-pg-simple")).default;
-  const PgSessionStore = createPgSessionStore(session);
-  sessionStore = new PgSessionStore({ pool: pool as never, createTableIfMissing: false });
-}
 
 const app: Express = express();
 
@@ -59,20 +47,10 @@ if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET must be set.");
 }
 
+// Sessions are stored in memory (SQLite DB, no external Postgres needed).
+// Sessions are lost only on server restart — perfectly fine for a single VDS.
 app.use(
   session({
-    // Session data lives in Postgres (auto-creates its "session" table on
-    // first use) so sessions survive restarts and work across multiple
-    // server instances, unlike express-session's default in-memory store.
-    // The "session" table is created out-of-band (see lib/db migrations),
-    // not via createTableIfMissing: that option reads a table.sql asset
-    // from connect-pg-simple's package directory, which isn't copied into
-    // the esbuild bundle and throws ENOENT at runtime.
-    // `pool` is a `pg.Pool` when DATABASE_URL is set, or a PGlite instance
-    // for the local no-Docker fallback (see lib/db/src/index.ts) — both
-    // expose a compatible `.query(sql, params)`, which is all
-    // connect-pg-simple needs, hence the cast.
-    ...(sessionStore ? { store: sessionStore } : {}),
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,

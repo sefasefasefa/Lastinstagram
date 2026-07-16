@@ -1,12 +1,5 @@
-import {
-  pgTable,
-  text,
-  serial,
-  timestamp,
-  integer,
-  boolean,
-  bigint,
-} from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -17,26 +10,26 @@ export const trackedUserCategoryValues = [
   "liked_reel",
 ] as const;
 
-export const trackedUsersTable = pgTable("tracked_users", {
-  id: serial("id").primaryKey(),
+export const trackedUsersTable = sqliteTable("tracked_users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   username: text("username").notNull(),
   fullName: text("full_name").notNull(),
   avatarUrl: text("avatar_url").notNull(),
   category: text("category", { enum: trackedUserCategoryValues }).notNull(),
-  addedAt: timestamp("added_at", { withTimezone: true })
+  addedAt: integer("added_at", { mode: "timestamp" })
     .notNull()
-    .defaultNow(),
+    .default(sql`(unixepoch())`),
   // The following are stored fields only - nothing in this codebase writes
   // to lastInteractionAt/interactionCount automatically, and autoLikeEnabled
   // does not trigger any automated action. There is no scheduler/bot in
   // this codebase; see lib/db/src/schema/automationJobs.ts for why.
-  lastInteractionAt: timestamp("last_interaction_at", { withTimezone: true }),
+  lastInteractionAt: integer("last_interaction_at", { mode: "timestamp" }),
   interactionCount: integer("interaction_count").notNull().default(0),
-  autoLikeEnabled: boolean("auto_like_enabled").notNull().default(false),
+  autoLikeEnabled: integer("auto_like_enabled", { mode: "boolean" }).notNull().default(false),
   // Follower count tracking — updated on demand via POST /tracked-users/:id/refresh-followers
-  followerCount: bigint("follower_count", { mode: "number" }),
-  previousFollowerCount: bigint("previous_follower_count", { mode: "number" }),
-  followerCountUpdatedAt: timestamp("follower_count_updated_at", { withTimezone: true }),
+  followerCount: integer("follower_count"),
+  previousFollowerCount: integer("previous_follower_count"),
+  followerCountUpdatedAt: integer("follower_count_updated_at", { mode: "timestamp" }),
 });
 
 export const insertTrackedUserSchema = createInsertSchema(

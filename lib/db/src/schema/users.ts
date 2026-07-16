@@ -1,14 +1,15 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const usersTable = pgTable("users", {
-  id: serial("id").primaryKey(),
+export const usersTable = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
-    .defaultNow(),
+    .default(sql`(unixepoch())`),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({

@@ -1,4 +1,5 @@
-import { pgTable, serial, integer, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 /**
  * History of manually-triggered test requests sent from the Settings page
@@ -6,13 +7,15 @@ import { pgTable, serial, integer, text, timestamp, boolean } from "drizzle-orm/
  * explicitly clicking "Test Et" - nothing in this codebase inserts a row
  * here on its own; there is no scheduler or cron job.
  */
-export const requestRunLogTable = pgTable("request_run_log", {
-  id: serial("id").primaryKey(),
-  success: boolean("success").notNull(),
+export const requestRunLogTable = sqliteTable("request_run_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  success: integer("success", { mode: "boolean" }).notNull(),
   status: integer("status"),
   statusText: text("status_text"),
   errorMessage: text("error_message"),
-  ranAt: timestamp("ran_at", { withTimezone: true }).notNull().defaultNow(),
+  ranAt: integer("ran_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
 });
 
 export type RequestRunLog = typeof requestRunLogTable.$inferSelect;

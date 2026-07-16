@@ -1,4 +1,5 @@
-import { pgTable, integer, text, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import { z } from "zod/v4";
 
 /**
@@ -9,14 +10,20 @@ import { z } from "zod/v4";
  * this codebase; a user must explicitly send a test request from the
  * settings page.
  */
-export const requestConfigTable = pgTable("request_config", {
+export const requestConfigTable = sqliteTable("request_config", {
   id: integer("id").primaryKey().default(1),
   targetUrl: text("target_url"),
-  headers: jsonb("headers").notNull().default({}),
-  cookies: jsonb("cookies").notNull().default({}),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
+  headers: text("headers", { mode: "json" })
+    .$type<Record<string, string>>()
     .notNull()
-    .defaultNow(),
+    .default({}),
+  cookies: text("cookies", { mode: "json" })
+    .$type<Record<string, string>>()
+    .notNull()
+    .default({}),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
 });
 
 export const keyValueMapSchema = z.record(z.string(), z.string());
