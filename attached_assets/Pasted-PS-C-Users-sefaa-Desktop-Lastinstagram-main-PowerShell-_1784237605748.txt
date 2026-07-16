@@ -1,0 +1,130 @@
+PS C:\Users\sefaa\Desktop\Lastinstagram-main> PowerShell -ExecutionPolicy Bypass -File .\scripts\setup-python.ps1
+Python versiyonu kontrol ediliyor...
+  Python 3.13.5 (py launcher)
+Sanal ortam olusturuluyor (.venv)...
+pip guncelleniyor...
+
+[notice] A new release of pip is available: 25.1.1 -> 26.1.2
+[notice] To update, run: C:\Users\sefaa\Desktop\Lastinstagram-main\.venv\Scripts\python.exe -m pip install --upgrade pip
+ERROR: To modify pip, please run the following command:
+C:\Users\sefaa\Desktop\Lastinstagram-main\.venv\Scripts\python.exe -m pip install --upgrade pip --quiet
+Funcaptcha solver bagimliliklar kuruluyor...
+Collecting curl_cffi
+  Using cached curl_cffi-0.15.0-cp310-abi3-win_amd64.whl.metadata (18 kB)
+Collecting flask
+  Using cached flask-3.1.3-py3-none-any.whl.metadata (3.2 kB)
+Collecting orjson
+  Using cached orjson-3.11.9-cp313-cp313-win_amd64.whl.metadata (43 kB)
+Collecting urllib3
+  Using cached urllib3-2.7.0-py3-none-any.whl.metadata (6.9 kB)
+Collecting cryptography
+  Using cached cryptography-49.0.0-cp311-abi3-win_amd64.whl.metadata (4.3 kB)
+Collecting mmh3
+  Using cached mmh3-5.2.1-cp313-cp313-win_amd64.whl.metadata (15 kB)
+Collecting numpy
+  Using cached numpy-2.5.1-cp313-cp313-win_amd64.whl.metadata (6.6 kB)
+Collecting pytz
+  Using cached pytz-2026.2-py2.py3-none-any.whl.metadata (22 kB)
+Collecting requests
+  Using cached requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+Collecting typing_extensions
+  Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting rich
+  Using cached rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+Collecting javascript
+  Using cached javascript-1%211.2.6-py3-none-any.whl.metadata (14 kB)
+Collecting wrapper_tls_requests
+  Using cached wrapper_tls_requests-1.2.5-py3-none-any.whl.metadata (8.6 kB)
+Collecting cffi>=2.0.0 (from curl_cffi)
+  Using cached cffi-2.1.0-cp313-cp313-win_amd64.whl.metadata (2.6 kB)
+Collecting certifi>=2024.2.2 (from curl_cffi)
+  Using cached certifi-2026.6.17-py3-none-any.whl.metadata (2.5 kB)
+Collecting blinker>=1.9.0 (from flask)
+  Using cached blinker-1.9.0-py3-none-any.whl.metadata (1.6 kB)
+Collecting click>=8.1.3 (from flask)
+  Using cached click-8.4.2-py3-none-any.whl.metadata (2.6 kB)
+Collecting itsdangerous>=2.2.0 (from flask)
+  Using cached itsdangerous-2.2.0-py3-none-any.whl.metadata (1.9 kB)
+Collecting jinja2>=3.1.2 (from flask)
+  Using cached jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting markupsafe>=2.1.1 (from flask)
+  Using cached markupsafe-3.0.3-cp313-cp313-win_amd64.whl.metadata (2.8 kB)
+Collecting werkzeug>=3.1.0 (from flask)
+  Using cached werkzeug-3.1.8-py3-none-any.whl.metadata (4.0 kB)
+Collecting charset_normalizer<4,>=2 (from requests)
+  Using cached charset_normalizer-3.4.9-cp313-cp313-win_amd64.whl.metadata (42 kB)
+Collecting idna<4,>=2.5 (from requests)
+  Using cached idna-3.18-py3-none-any.whl.metadata (6.1 kB)
+Collecting markdown-it-py>=2.2.0 (from rich)
+  Using cached markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting pygments<3.0.0,>=2.13.0 (from rich)
+  Using cached pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting pycparser (from cffi>=2.0.0->curl_cffi)
+  Using cached pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+Collecting colorama (from click>=8.1.3->flask)
+  Using cached colorama-0.4.6-py2.py3-none-any.whl.metadata (17 kB)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich)
+  Using cached mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Using cached curl_cffi-0.15.0-cp310-abi3-win_amd64.whl (1.7 MB)
+Using cached flask-3.1.3-py3-none-any.whl (103 kB)
+Using cached orjson-3.11.9-cp313-cp313-win_amd64.whl (127 kB)
+Using cached urllib3-2.7.0-py3-none-any.whl (131 kB)
+Using cached cryptography-49.0.0-cp311-abi3-win_amd64.whl (3.8 MB)
+Using cached mmh3-5.2.1-cp313-cp313-win_amd64.whl (41 kB)
+Using cached numpy-2.5.1-cp313-cp313-win_amd64.whl (12.4 MB)
+Using cached pytz-2026.2-py2.py3-none-any.whl (510 kB)
+Using cached requests-2.34.2-py3-none-any.whl (73 kB)
+Using cached charset_normalizer-3.4.9-cp313-cp313-win_amd64.whl (161 kB)
+Using cached idna-3.18-py3-none-any.whl (65 kB)
+Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Using cached rich-15.0.0-py3-none-any.whl (310 kB)
+Using cached pygments-2.20.0-py3-none-any.whl (1.2 MB)
+Using cached javascript-1%211.2.6-py3-none-any.whl (34 kB)
+Using cached wrapper_tls_requests-1.2.5-py3-none-any.whl (57 kB)
+Using cached blinker-1.9.0-py3-none-any.whl (8.5 kB)
+Using cached certifi-2026.6.17-py3-none-any.whl (133 kB)
+Using cached cffi-2.1.0-cp313-cp313-win_amd64.whl (185 kB)
+Using cached click-8.4.2-py3-none-any.whl (119 kB)
+Using cached itsdangerous-2.2.0-py3-none-any.whl (16 kB)
+Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
+Using cached markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+Using cached mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Using cached markupsafe-3.0.3-cp313-cp313-win_amd64.whl (15 kB)
+Using cached werkzeug-3.1.8-py3-none-any.whl (226 kB)
+Using cached colorama-0.4.6-py2.py3-none-any.whl (25 kB)
+Using cached pycparser-3.0-py3-none-any.whl (48 kB)
+Installing collected packages: pytz, urllib3, typing_extensions, pygments, pycparser, orjson, numpy, mmh3, mdurl, markupsafe, javascript, itsdangerous, idna, colorama, charset_normalizer, certifi, blinker, wrapper_tls_requests, werkzeug, requests, markdown-it-py, jinja2, click, cffi, rich, flask, cryptography, curl_cffi
+Successfully installed blinker-1.9.0 certifi-2026.6.17 cffi-2.1.0 charset_normalizer-3.4.9 click-8.4.2 colorama-0.4.6 cryptography-49.0.0 curl_cffi-0.15.0 flask-3.1.3 idna-3.18 itsdangerous-2.2.0 javascript-1!1.2.6 jinja2-3.1.6 markdown-it-py-4.2.0 markupsafe-3.0.3 mdurl-0.1.2 mmh3-5.2.1 numpy-2.5.1 orjson-3.11.9 pycparser-3.0 pygments-2.20.0 pytz-2026.2 requests-2.34.2 rich-15.0.0 typing_extensions-4.16.0 urllib3-2.7.0 werkzeug-3.1.8 wrapper_tls_requests-1.2.5
+
+[notice] A new release of pip is available: 25.1.1 -> 26.1.2
+[notice] To update, run: C:\Users\sefaa\Desktop\Lastinstagram-main\.venv\Scripts\python.exe -m pip install --upgrade pip
+
+Kurulum tamamlandi!
+Stealth bridge ve funcaptcha solver artik Windows'ta calisir.
+
+Eger 'py' komutu API sunucusu tarafindan bulunamazsa .env dosyaniza ekleyin:
+  STEALTH_REQUESTS_PYTHON=.venv\Scripts\python.exe
+PS C:\Users\sefaa\Desktop\Lastinstagram-main> pnpm --filter @workspace/api-server run dev                        
+Scope: all 9 workspace projects
+✓ Lockfile passes supply-chain policies (verified 31m ago)
+Lockfile is up to date, resolution step is skipped
+Already up to date
+. preinstall$ node -e "const fs=require('fs');for(const f of ['package-lock.json','yarn.lock']){try{fs.unlinkSync(f)}catch{}}if(!/pnpm\//.test…
+└─ Done in 269ms
+[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: better-sqlite3@11.10.0
+
+Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+[ERROR] Command failed with exit code 1: "C:\Users\sefaa\AppData\Local\pnpm\global\v11\3dc8-19f5bd70cce-2373c4d4e911b7c3\node_modules\@pnpm\exe\pnpm.exe" install
+
+pnpm: Command failed with exit code 1: "C:\Users\sefaa\AppData\Local\pnpm\global\v11\3dc8-19f5bd70cce-2373c4d4e911b7c3\node_modules\@pnpm\exe\pnpm.exe" install
+    at getFinalError (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:36343:14)
+    at makeError (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:38650:21)
+    at getSyncResult (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:40494:10)
+    at spawnSubprocessSync (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:40454:14)
+    at execaCoreSync (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:40384:23)
+    at callBoundExeca (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:42912:23)
+    at boundExeca (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:42889:49)
+    at sync (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:43048:10)
+    at runPnpmCli (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:247928:5)
+    at runDepsStatusCheck (file:///C:/Users/sefaa/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.12.0/1bcee9602eb248a3a927ec9888e36b94622199201a33aed0a6c2e5632ce3dc90/node_modules/@pnpm/exe/dist/pnpm.mjs:249680:7)
+PS C:\Users\sefaa\Desktop\Lastinstagram-main> 
