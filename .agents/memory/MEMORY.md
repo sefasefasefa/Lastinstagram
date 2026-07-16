@@ -5,7 +5,7 @@
 - [pnpm firewall blocks transitive package](pnpm-firewall-transitive-block.md) — a vulnerable version deep in an abandoned dependency (e.g. `request`) can 403; pin it via root `pnpm.overrides`.
 - [Fresh re-import empty database](fresh-reimport-empty-database.md) — re-import provisions a brand-new empty DB; backup SQL isn't auto-restored, so seed rows (default login) may be missing.
 - [PGlite local DB fallback](pglite-local-db-fallback.md) — no-install local Postgres via embedded PGlite; watch bundler-breaks-__dirname and pg_dump COPY/restrict pitfalls.
-- [Windows local dev compat](windows-local-dev-compat.md) — Replit pnpm workspaces often strip non-linux platform binaries and use bash-only script syntax; both break Windows.
+- [Windows local dev compat](windows-local-dev-compat.md) — pnpm-workspace.yaml preserves win32/darwin binaries; seed scripts & pool→db import fixed; post-merge.ps1 + setup-python.sh added.
 - [Instagram login error classification](instagram-login-error-classification.md) — Instagram's checkpoint/captcha/rate-limit/spam signals are inconsistent (error_type vs message text vs URL fields); centralize classification, don't string-match ad hoc per call site.
 - [Instagram encryption key sources](instagram-encryption-key-sources.md) — `/data/shared_data/` can return a 32-byte hex key incompatible with RSA/EC SPKI DER password encryption; use `/api/v1/qe/sync/` (directly, with stealth bridge) as the primary key source because it returns a valid base64 PEM public key even on 400 responses.
 - [api-client-react ApiError shape](api-client-react-error-shape.md) — this generated fetch client's error puts the parsed body on `err.data`, not `err.response.data` (not axios); reading the axios path silently yields undefined.

@@ -28,10 +28,36 @@ The API server listens on port 8080 (`/api`). The frontend dev server listens on
 pnpm --filter @workspace/db run push
 
 # 2. Seed default admin user
-pnpm --filter @workspace/scripts exec tsx ./src/db-seed-admin.ts
+pnpm --filter @workspace/scripts run db:seed-admin
+
+# Optional: seed mock data (tracked users, liked media, etc.)
+pnpm --filter @workspace/scripts run db:seed
 ```
 
-Without `DATABASE_URL`, PGlite stores data in `lib/db/.pglite-data/` (gitignored).
+The database is SQLite — a single file at `lib/db/data.db`. No Postgres, no Docker needed.
+
+## Windows setup
+
+```powershell
+# 1. Install Node deps
+pnpm install
+
+# 2. Push schema & seed
+pnpm --filter @workspace/db run push
+pnpm --filter @workspace/scripts run db:seed-admin
+
+# 3. Python venv (for Instagram stealth bridge & funcaptcha solver)
+.\scripts\setup-python.ps1
+
+# 4. Start both services in separate terminals
+pnpm --filter @workspace/api-server run dev
+pnpm --filter @workspace/takipci-paneli run dev
+```
+
+The Python venv path is auto-detected (`py` launcher on Windows). If you have multiple Python versions, add to `.env`:
+```
+STEALTH_REQUESTS_PYTHON=.venv\Scripts\python.exe
+```
 
 ## Default login
 
