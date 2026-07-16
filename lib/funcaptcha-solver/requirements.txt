@@ -1,12 +1,13 @@
 cryptography
 curl_cffi
-Flask
+flask
 javascript
 mmh3
 numpy
 orjson
+pycryptodome
 pytz
-Requests
+requests
 rich
 typing_extensions
 urllib3
