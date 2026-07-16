@@ -2722,8 +2722,14 @@ async function loginViaMobile(
     };
   }
   if (!res.ok || data.status === "fail") {
+    // bad_password + sıfır cookie: Replit/bulut IP'sinden gelen isteklerde
+    // Instagram bot tespiti nedeniyle gerçek şifre hatası yerine bu kodu
+    // döndürebilir. Gerçek bir şifre hatasında en az csrftoken cookie'si
+    // gelir; cookie yoksa captcha olarak işle — funcaptcha bypass dener,
+    // başarısız olursa captcha ekranı gösterilir (yanlış şifre ekranı değil).
+    const isBadPassword = data.error_type === "bad_password";
     const errorType: LoginErrorType =
-      data.error_type === "bad_password" ? "bad_password" : "unknown";
+      isBadPassword && setCookies.length === 0 ? "captcha" : isBadPassword ? "bad_password" : "unknown";
     const msg =
       typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
     // Diagnostic: an "unknown" failure (not classified as bad_password) is
@@ -2735,6 +2741,9 @@ async function loginViaMobile(
         "[instagram-client] Unclassified mobile login failure — raw response:",
         JSON.stringify({ status: res.status, error_type: data.error_type, message: data.message, keys: Object.keys(data) }),
       );
+    }
+    if (errorType === "captcha") {
+      console.log("[loginViaMobile] bad_password + no cookies → bot detection (captcha) reclassification");
     }
     return { success: false, error: `Mobil API: ${msg}`, errorType };
   }
@@ -2947,17 +2956,17 @@ export async function loginToInstagram(
   }));
   if (mobileResult.success) return mobileResult;
 
-  // 2FA / checkpoint / captcha / hız sınırı / spam → web API'yi denemeye gerek yok.
-  // Not: bad_password artık kısa devre listesinde DEĞİL — Replit/bulut IP'lerinden
-  // gelen isteklerde Instagram mobil API bazen gerçek bir "yanlış şifre" yerine
-  // bot tespiti nedeniyle bad_password döndürebilir. Web fallback bu durumu
-  // checkpoint veya authenticated olarak düzeltebilir.
+  // 2FA / checkpoint / captcha / hız sınırı / spam / yanlış şifre → web API'yi denemeye gerek yok.
+  // Özellikle bad_password: mobil API "şifre yanlış" dediğinde web fallback'e geçmemeli —
+  // Instagram web'de aynı yanlış şifreye checkpoint_required döndürebilir, bu da
+  // şifre hatası yerine OTP ekranı gösterilmesine yol açar.
   const SHORT_CIRCUIT_TYPES: LoginErrorType[] = [
     "2fa",
     "checkpoint",
     "captcha",
     "rate_limit",
     "spam_or_abuse",
+    "bad_password",
   ];
   if (
     mobileResult.errorType &&
