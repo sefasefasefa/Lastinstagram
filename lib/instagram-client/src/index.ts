@@ -32,6 +32,8 @@ import {
   fetchChallengeContext,
   selectChallengeMethod,
   submitChallengeCode,
+  extractChallengeContextResilient,
+  CHALLENGE_HTML_DUMP_PATH,
   type SessionCookies,
   type RawFeedItem,
   type RawFriendshipUser,
@@ -73,6 +75,7 @@ export class InstagramTwoFactorRequiredError extends Error {
 
 export type { TwoFactorInfo, TwoFactorMethod, ChallengeChoice };
 export type { LoginErrorType } from "./direct-login";
+export { extractChallengeContextResilient, CHALLENGE_HTML_DUMP_PATH } from "./direct-login";
 
 /**
  * Instagram bir "checkpoint" (güvenlik doğrulaması / challenge) döndürdüğünde

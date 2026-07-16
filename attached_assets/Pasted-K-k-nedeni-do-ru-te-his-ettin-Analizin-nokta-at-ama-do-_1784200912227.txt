@@ -1,0 +1,84 @@
+Kök nedeni doğru teşhis ettin. Analizin nokta atışı, ama doğrulamak için sunduğun o yöntem — yani 575KB'lık HTML'i loglara basıp orada cımbızla veri aramak — tam bir zaman, odak ve kaynak katili.
+Bunu yaparsan ne olacağını söyleyeyim: Log satırların limitler yüzünden kırpılacak, kullandığın log yönetim aracı kasacak, o spagetti HTML ve JavaScript yığınının içinde kaybolacaksın. Bu sırada kaybolan 2 saatinin fırsat maliyeti, bu hatayı çözmekten çok daha büyük olacak.
+Bunu "ilkel" yöntemlerle değil, cerrahi bir operasyonla çözeceğiz.
+Instagram'ın Güncel Hilesi: challenge_context Nerede?
+Instagram, /auth_platform/ sayfasındaki bootstrap verilerini artık düz ve okunabilir JSON stringleri olarak saklamıyor. Büyük ihtimalle karşılaştığın durum şunlardan biri:
+ * HTML-Encoded Veri: Karakterler &quot; veya \u0022 şeklinde escape edildiği için eski regex'in ("challenge_context") eşleşme sağlayamıyor.
+ * Global State Objesi: Veri artık window._sharedData, window.__additionalDataLoaded veya Relay/GraphQL bootstrap scriptleri (BigPipe, JSIG vb.) içine gömüldü.
+ * Base64 veya Sıkıştırılmış Payload: Ağ yükünü azaltmak ve senin gibi bot/kütüphane yazarlarının işini zorlaştırmak için payload'ları encode ediyorlar.
+Adım 1: İzole ve Güvenli Teşhis (Local Dumper)
+Üretim (production) loglarını kirletmek yerine, aşağıdaki izole analiz scriptini yerel makinende çalıştır. Bu script, hedef HTML'i indirip tüm <script> bloklarını tarayacak ve içinde challenge geçen yapıları ayıklayarak doğrudan bir dosyaya yazacak.
+// scripts/dump-challenge-context.ts
+import * as fs from 'fs';
+import * as path from 'path';
+
+/**
+ * 575KB'lık HTML içindeki samanlıkta iğne arama simülasyonu.
+ * Bu scripti lokalde, canlıdan aldığın HTML içeriğiyle çalıştır.
+ */
+export function analyzeChallengeHTML(htmlContent: string) {
+  console.log("[ANALİZ] HTML analiz ediliyor... Boyut:", (htmlContent.length / 1024).toFixed(2), "KB");
+
+  // 1. Tüm script bloklarını ayıkla
+  const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gm;
+  let match;
+  const scriptBlocks: string[] = [];
+
+  while ((match = scriptRegex.exec(htmlContent)) !== null) {
+    if (match[1] && match[1].trim() !== "") {
+      scriptBlocks.push(match[1].trim());
+    }
+  }
+
+  console.log(`[ANALİZ] Toplam ${scriptBlocks.length} adet script bloğu bulundu.`);
+
+  // 2. İçinde kritik anahtar kelimeler geçen blokları filtrele
+  const keywords = ["challenge_context", "challenge", "apc", "sharedData", "additionalData"];
+  const matches: string[] = [];
+
+  scriptBlocks.forEach((code, index) => {
+    const foundKeywords = keywords.filter(key => code.includes(key));
+    if (foundKeywords.length > 0) {
+      matches.push(`--- SCRIPT BLOCK #${index} (Bulunanlar: ${foundKeywords.join(", ")}) ---\n${code}\n`);
+    }
+  });
+
+  // 3. Sonuçları loglara basmak yerine lokal bir dosyaya yaz
+  const outputPath = path.join(__dirname, "../challenge_dump.js");
+  fs.writeFileSync(outputPath, matches.join("\n"));
+  
+  console.log(`[BAŞARILI] Analiz tamamlandı. Kritik kod blokları şuraya yazıldı: ${outputPath}`);
+  console.log("[İPUCU] Şimdi bu dosyayı açıp 'challenge_context' kelimesinin nasıl atandığını (örneğin bir objenin alt kırılımı mı, escape edilmiş mi) rahatça inceleyebilirsin.");
+}
+
+Adım 2: Regex Yerine "Resilient" (Esnek) Ayrıştırıcıya Geçiş
+HTML içindeki veriyi bulduğunda, muhtemelen regex'inin ne kadar kırılgan olduğunu göreceksin. Sadece tırnak işaretlerinin tipinin değişmesi bile regex'i patlatır. Onun yerine daha dinamik bir yaklaşıma geçmeliyiz.
+Eğer veri window._sharedData veya benzeri bir global objenin içindeyse, onu regex ile doğrudan JSON string'i olarak yakalamak yerine şu şekilde parse et:
+/**
+ * HTML içindeki olası JSON tanımlamalarını daha esnek şekilde yakalar
+ */
+export function parseChallengeContextResilient(html: string): any {
+  // Eski katı regex yerine, daha esnek ve tırnak varyasyonlarını destekleyen regex
+  const flexibleRegex = /"challenge_context"\s*:\s*"((?:[^"\\]|\\.)*)"|'challenge_context'\s*:\s*'((?:[^'\\]|\\.)*)'/;
+  const match = html.match(flexibleRegex);
+  
+  if (match) {
+    const rawContext = match[1] || match[2];
+    try {
+      // Unescape işlemlerini güvenli hale getir
+      const unescaped = rawContext.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      return JSON.parse(unescaped);
+    } catch (e) {
+      console.warn("[PARSER] Regex eşleşti ama JSON parse edilemedi, alternatif yöntem deneniyor.");
+    }
+  }
+
+  // Alternatif: window._sharedData veya ek veriler üzerinden aramayı dene
+  // Eğer analiz dosyasında yapıyı görürsen buraya o yapıyı çözecek esnek parser'ı ekleyeceğiz.
+  return null;
+}
+
+> Durum Değerlendirmesi: Instagram'ın bu "sessiz hata" (silent failure) senaryosu, API istemcinin en zayıf halkası. challenge_context bulunamadığında fallback olarak sadece { apc } göndermek, Instagram'a "ben bir botum ve ne yaptığımı bilmiyorum" demektir. Context yoksa akışı orada kesip hata fırlatmak, körü körüne yanlış istek atıp IP'yi kirletmekten her zaman daha iyidir.
+> 
+Lokalinde o HTML'i indirip yukarıdaki dumper scriptiyle taratmak ve tam olarak hangi script bloğunun içinde, ne formatta saklandığını görmek bir sonraki adımımız olmalı.
+HTML dosyasının içeriğine erişimin var mı, yoksa canlı akıştan tek seferlik bir istek atıp dönen HTML'i lokal bir dosyaya kaydetmek için bir yardımcı kod hazırlayalım mı?

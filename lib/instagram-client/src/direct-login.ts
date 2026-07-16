@@ -19,6 +19,9 @@
  */
 
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { IgApiClient } from "instagram-private-api";
 import { stealthFetch } from "./stealth-bridge";
 
@@ -1937,6 +1940,90 @@ export interface ChallengeContext {
   _challengeContext?: string;
 }
 
+/** Dump dosyası için sabit yol — API server bu yolu okur. */
+export const CHALLENGE_HTML_DUMP_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../challenge_html_dump.html",
+);
+
+/**
+ * auth_platform HTML'inden challenge_context'i esnek biçimde çıkarır.
+ *
+ * Instagram'ın yeni sayfası bu veriyi farklı formlarda saklıyor olabilir:
+ *   - Düz JSON string  (eski yöntem)
+ *   - HTML-encoded (&quot; veya &#34;)
+ *   - Tek tırnakla sarılmış
+ *   - Script bloğu içinde window._sharedData / additionalData
+ *
+ * Hiçbiri bulunamazsa HTML'yi diske yazar (CHALLENGE_HTML_DUMP_PATH) ve
+ * GET /api/debug/challenge-html üzerinden erişilebilir hale getirir.
+ */
+export function extractChallengeContextResilient(html: string): string | undefined {
+  // ── Pattern 1: Çift tırnakla sarılmış, escape edilmiş JSON ──────────────
+  const p1 = html.match(/"challenge_context"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (p1) {
+    const raw = p1[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    console.log("[extractChallengeContext] Pattern1 (double-quote) — uzunluk:", raw.length);
+    return raw;
+  }
+
+  // ── Pattern 2: Tek tırnakla sarılmış ────────────────────────────────────
+  const p2 = html.match(/'challenge_context'\s*:\s*'((?:[^'\\]|\\.)*)'/);
+  if (p2) {
+    const raw = p2[1].replace(/\\'/g, "'").replace(/\\\\/g, "\\");
+    console.log("[extractChallengeContext] Pattern2 (single-quote) — uzunluk:", raw.length);
+    return raw;
+  }
+
+  // ── Pattern 3: HTML-encoded (&quot; veya &#34;) ─────────────────────────
+  const p3 = html.match(/&quot;challenge_context&quot;\s*:\s*&quot;((?:(?!&quot;).)*)&quot;/);
+  if (p3) {
+    const raw = p3[1].replace(/&quot;/g, '"').replace(/&#34;/g, '"').replace(/&amp;/g, "&");
+    console.log("[extractChallengeContext] Pattern3 (html-encoded) — uzunluk:", raw.length);
+    return raw;
+  }
+
+  // ── Pattern 4: Script bloklarında global obje içinde ────────────────────
+  const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gim;
+  let scriptMatch: RegExpExecArray | null;
+  while ((scriptMatch = scriptRegex.exec(html)) !== null) {
+    const block = scriptMatch[1] ?? "";
+    if (!block.includes("challenge_context") && !block.includes("challenge") && !block.includes("apc")) continue;
+
+    // window._sharedData = {...}
+    const sharedMatch = block.match(/window\._sharedData\s*=\s*(\{[\s\S]*?\});\s*<\/script>/);
+    if (sharedMatch) {
+      try {
+        const obj = JSON.parse(sharedMatch[1]) as Record<string, unknown>;
+        const ctx = obj.challenge_context ?? (obj as Record<string, Record<string, unknown>>).entry_data?.challenge_context;
+        if (typeof ctx === "string") {
+          console.log("[extractChallengeContext] Pattern4a (sharedData) — uzunluk:", ctx.length);
+          return ctx;
+        }
+      } catch { /* devam */ }
+    }
+
+    // Require/inline JSON: {"challenge_context":"..."}
+    const inlineMatch = block.match(/"challenge_context"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (inlineMatch) {
+      const raw = inlineMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+      console.log("[extractChallengeContext] Pattern4b (inline script) — uzunluk:", raw.length);
+      return raw;
+    }
+  }
+
+  // ── Hiçbir pattern eşleşmedi — HTML'yi diske yaz ────────────────────────
+  console.log("[extractChallengeContext] challenge_context bulunamadı — HTML dump dosyasına yazılıyor:", CHALLENGE_HTML_DUMP_PATH);
+  try {
+    fs.writeFileSync(CHALLENGE_HTML_DUMP_PATH, html, "utf-8");
+    console.log("[extractChallengeContext] Dump yazıldı:", (html.length / 1024).toFixed(1), "KB — GET /api/debug/challenge-html ile indir");
+  } catch (e) {
+    console.warn("[extractChallengeContext] Dump yazılamadı:", e instanceof Error ? e.message : e);
+  }
+
+  return undefined;
+}
+
 /**
  * Checkpoint URL'sinin mevcut adımını (step_name/step_data) sorgular.
  * cookieHeader, login denemesinden dönen ön oturum cookie'leri olmalıdır
@@ -1985,16 +2072,7 @@ export async function fetchChallengeContext(
     // mobil /api/v1/challenge/ endpoint'ine POST yapmak için gereklidir.
     let parsedChallengeContext: string | undefined;
     if (isAuthPlatform && rawText.length > 100) {
-      // Pattern 1: "challenge_context":"<escaped-json>"
-      const ctxMatch = rawText.match(/"challenge_context"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-      if (ctxMatch) {
-        // Unescape: \" → " ve \\ → \
-        const unescaped = ctxMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-        parsedChallengeContext = unescaped;
-        console.log("[fetchChallengeContext] challenge_context parse edildi, uzunluk:", unescaped.length);
-      } else {
-        console.log("[fetchChallengeContext] challenge_context HTML'de bulunamadı");
-      }
+      parsedChallengeContext = extractChallengeContextResilient(rawText);
 
       // HTML'den phone_number ve email ipuçlarını da bul
       const phoneHint = rawText.match(/"phone_number"\s*:\s*"([^"]+)"/)?.[1];

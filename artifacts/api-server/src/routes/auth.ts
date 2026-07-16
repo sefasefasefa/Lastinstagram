@@ -335,6 +335,32 @@ router.post("/auth/logout", (req, res): void => {
   });
 });
 
+/**
+ * GET /api/debug/challenge-html
+ * Auth-platform HTML dump'ını indir (yalnızca geliştirme ortamı).
+ * challenge_context parse edilemeyen giriş denemelerinde otomatik yakalanır.
+ */
+router.get("/debug/challenge-html", async (_req, res): Promise<void> => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(403).json({ error: "Yalnızca geliştirme ortamında kullanılabilir." });
+    return;
+  }
+  const { CHALLENGE_HTML_DUMP_PATH } = await import("@workspace/instagram-client");
+  const { existsSync, readFileSync, statSync } = await import("node:fs");
+  if (!existsSync(CHALLENGE_HTML_DUMP_PATH)) {
+    res.status(404).json({
+      error: "Dump dosyası henüz yok.",
+      hint: "Önce uygulamadan bir Instagram girişi dene — challenge_context bulunamadığında HTML otomatik kaydedilir.",
+    });
+    return;
+  }
+  const stat = statSync(CHALLENGE_HTML_DUMP_PATH);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="challenge_html_dump.html"');
+  res.setHeader("X-Dump-Size-KB", (stat.size / 1024).toFixed(1));
+  res.send(readFileSync(CHALLENGE_HTML_DUMP_PATH, "utf-8"));
+});
+
 router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
   const [user] = await db
     .select()
