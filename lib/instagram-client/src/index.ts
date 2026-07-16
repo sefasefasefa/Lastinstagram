@@ -421,7 +421,9 @@ export class InstagramClient {
 
       // ── Yardımcı: başarılı login sonucundan oturumu kur ─────────────────
       const applySession = async (r: DirectLoginResult): Promise<void> => {
-        if (r.sessionCookies) {
+        // sessionCookies yalnızca geçerli sessionid içeriyorsa uygula;
+        // boş obje (sessionid: undefined) "oturum kuruldu" izlenimi yaratmamalı.
+        if (r.sessionCookies?.sessionid) {
           this.session = r.sessionCookies;
           await this.restoreFullSession(r.sessionCookies);
         } else if (r.sessionId) {
@@ -537,6 +539,17 @@ export class InstagramClient {
       // ── Oturumu kur ────────────────────────────────────────────────────
       // Kritik cookie'ler: sessionid, csrftoken, ds_user_id, mid, ig_did, rur
       await applySession(result);
+
+      // Guard: applySession sonrası sessionid yoksa oturum kurulmamış demektir.
+      // Bu durum genellikle Instagram'ın Set-Cookie göndermediği anlarda olur
+      // (ağ katmanı stripping, redirect loop vb.). Phantom login'i önle.
+      if (!this.session?.sessionid) {
+        console.error("[instagram-client] applySession sonrası sessionid YOK — login başarısız sayılıyor.",
+          "sessionCookies:", JSON.stringify(result.sessionCookies),
+          "sessionId:", result.sessionId,
+        );
+        throw new Error("Instagram giriş başarısız: oturum cookie'si alınamadı. Lütfen tekrar deneyin.");
+      }
 
       // ── Oturumu doğrula ────────────────────────────────────────────────
       // IgApiClient.account.currentUser() yerine verifySession() kullanıyoruz:

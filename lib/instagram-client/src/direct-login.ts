@@ -438,12 +438,22 @@ function getSetCookies(res: Response): string[] {
   // Stealth bridge (BridgeResponseWrapper) cookie'leri response objesinin kendi
   // getSetCookie() metodunda tutar — headers nesnesi değil, çünkü Set-Cookie
   // başlıkları bridge tarafından ayrı bir dizi olarak iletilir.
-  // Native fetch ise cookie'leri headers.getSetCookie() üzerinden verir.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fromResponse = ((res as any).getSetCookie?.() as string[] | undefined);
   if (fromResponse && fromResponse.length > 0) return fromResponse;
+
+  // Native fetch (undici, Node ≥18.14): headers.getSetCookie() her Set-Cookie
+  // başlığını ayrı dizi elemanı olarak döndürür.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (res.headers as any).getSetCookie?.() ?? [];
+  const fromHeaders = (res.headers as any).getSetCookie?.() as string[] | undefined;
+  if (fromHeaders && fromHeaders.length > 0) return fromHeaders;
+
+  // Son çare: bazı ağ katmanları/proxy'ler birden fazla Set-Cookie başlığını
+  // virgülle birleştirerek tek string olarak döndürür; .get() bunu yakalar.
+  // Cookie name=value çiftlerinden önce gelen virgüllere göre böl.
+  const raw = res.headers.get("set-cookie");
+  if (!raw) return [];
+  return raw.split(/,(?=\s*[a-zA-Z0-9_!#$%&'*+\-.^_`|~]+=)/);
 }
 
 function extractSessionId(cookies: string[]): string | undefined {
@@ -2567,6 +2577,13 @@ async function loginViaMobile(
   }
 
   const setCookies = getSetCookies(res);
+  // Tanı: cookie başlıklarının neden boş gelebileceğini anlamak için detaylı log.
+  console.log("[loginViaMobile] HTTP status:", res.status,
+    "| setCookies count:", setCookies.length,
+    "| raw set-cookie header:", (res.headers.get("set-cookie") ?? "(YOK)").slice(0, 120),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    "| getSetCookie available:", !!(res.headers as any).getSetCookie,
+  );
   let data: Record<string, unknown> = {};
   try { data = (await res.json()) as Record<string, unknown>; } catch {}
 
