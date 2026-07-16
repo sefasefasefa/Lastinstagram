@@ -177,8 +177,14 @@ export default function LoginPage() {
     selectCheckpointMethod.mutate(
       { data: { choice: checkpointChoice } },
       {
-        onSuccess: () => {
-          setCheckpointStep("verify-code")
+        onSuccess: (data) => {
+          // stepName:"login_completed" → Instagram challenge'ı bypass etti,
+          // sunucu tarafında oturum kuruldu. /auth/me sorgusunu yenile.
+          if (data?.stepName === "login_completed") {
+            queryClient.invalidateQueries()
+          } else {
+            setCheckpointStep("verify-code")
+          }
         },
         onError: (err: unknown) => {
           const msg =

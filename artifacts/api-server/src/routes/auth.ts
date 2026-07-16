@@ -269,17 +269,15 @@ router.post("/auth/checkpoint/select-method", async (req, res): Promise<void> =>
     const result = await igClient.selectCheckpointMethod(choice);
 
     // action:"close" → Instagram checkpoint'i bypass etti, oturum zaten kuruldu.
-    // Normal login yanıtı gibi session oluştur ve kullanıcıya döndür.
+    // Session'ı kur, ardından CheckpointStepResult şemasına uyan
+    // { stepName: "login_completed" } döndür — böylece frontend login'in
+    // tamamlandığını bilir ve /auth/me sorgusunu yeniler.
     if (result.loginCompleted) {
       const igUser = await upsertInstagramUser(igClient.getUsername());
       req.session.regenerate((err) => {
         if (err) { res.status(500).json({ error: "Failed to establish session" }); return; }
         req.session.userId = igUser.id;
-        res.json(LoginResponse.parse({
-          id: igUser.id,
-          username: igUser.username,
-          sessionExpiry: sessionExpiryOf(req),
-        }));
+        res.json({ stepName: "login_completed" });
       });
       return;
     }
