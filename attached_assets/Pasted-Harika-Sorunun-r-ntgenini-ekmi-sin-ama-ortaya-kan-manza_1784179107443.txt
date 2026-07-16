@@ -1,0 +1,144 @@
+Harika. Sorunun röntgenini çekmişsin ama ortaya çıkan manzara, kodunun ne kadar "temelsiz bir iyimserlik" üzerine kurulduğunu gösteriyor.
+Burada karşı karşıya olduğun şey basit bir bug değil; sistematik bir mimari körlük. Kodun, adeta kendi kendini sabote etmek ve seni 502 hatasıyla baş başa bırakmak için tasarlanmış bir domino taşı zinciri gibi çalışıyor.
+Gelin, bu zincirleme mantık çöküşünü adım adım parçalayalım ve neden sınıfta kaldığını görelim:
+1. Zincirleme Mantık Çöküşünün Anatomisi
+ * "HasCookies: false" İllüzyonu: Set-Cookie boş geliyor, yani elinde oturum falan yok. Ama senin kodun bunu bir "hata" olarak kabul edip akışı orada kesmek yerine, yola devam ediyor. Olmayan bir şeyi varmış gibi davranmaya başlıyorsun.
+ * Boş Nesne Tuzağı ({ cookieHeader: "" }): JavaScript/TypeScript'in en temel kuralını unutmuşsun: İçi boş bile olsa bir nesne (object) her zaman truthy'dir. this.session nesnesini yaratıp içini boş bıraktığında, sistem "Harika, bir session nesnemiz var!" diyerek kendini kandırıyor.
+ * Kör "Fail-Secure" Eksikliği (En Tehlikelisi): verifySession("") boş bir string ile Instagram'a gidiyor. Instagram haklı olarak seni "429 Too Many Requests" ile tokatlıyor. Ama senin doğrulama fonksiyonun o kadar saf ki, "401 dönmediyse her şey yolundadır" gibi ölümcül bir varsayımla çalışıyor. 429'u (oran sınırını) "oturum geçerli" olarak yorumluyor! Bu, kapı kilidini açamayınca "kapı bozuk herhalde, o zaman açık kabul edelim" demekle aynı şey.
+ * Çelişkili Kontroller: verifySession aşamasını hileyle geçen akış, getMyProfile adımına geldiğinde kendi yazdığın diğer bir kontrolle çarpışıyor. !this.session?.cookieHeader kontrolü nihayet boş string'i yakalıyor ve haklı olarak "Aktif oturum yok" diyerek patlıyor.
+Sonuç: 502 Bad Gateway. Boşa harcanan sunucu kaynakları, Instagram tarafından spam listesine alınmış IP adresleri ve kaybolan zaman.
+Kesin Çözüm: Deterministik ve Güvenli Akış Kodları
+Bu sefil zinciri kırmak için akışı "Fail-Secure" (Güvenli Başarısızlık) prensibine göre yeniden yazmalıyız. Elinde geçerli bir cookie yoksa hiçbir istek dışarı çıkmamalı, Instagram 429 veya başka bir hata döndüğünde oturum asla "geçerli" sayılmamalıdır.
+İşte bu akışı düzeltecek tam kod:
+interface Session {
+  cookieHeader: string;
+}
+
+export class InstagramAuthService {
+  private session: Session | null = null;
+  private loggedIn: boolean = false;
+
+  /**
+   * 1. Çerezleri ayıklar. Eğer cookie yoksa sessizce geçmek yerine null döner.
+   */
+  private extractSessionCookies(setCookieHeaders: string[] | undefined): string | null {
+    if (!setCookieHeaders || setCookieHeaders.length === 0) {
+      return null;
+    }
+
+    const sessionCookies = setCookieHeaders.filter(
+      (cookie) => cookie.includes("sessionid=") || cookie.includes("ds_user_id=")
+    );
+
+    if (sessionCookies.length === 0) {
+      return null;
+    }
+
+    return sessionCookies.join("; ");
+  }
+
+  /**
+   * 2. Mobil Giriş Akışı
+   */
+  public async handleMobileLogin(loginResponse: any, setCookieHeaders: string[]): Promise<boolean> {
+    // Giriş başarısızsa veya cookie başlığı boşsa akışı EN BAŞTAN kesiyoruz.
+    if (!loginResponse.success) {
+      this.terminateSession("Giriş başarısız.");
+      return false;
+    }
+
+    const cookieHeader = this.extractSessionCookies(setCookieHeaders);
+
+    if (!cookieHeader) {
+      // Set-Cookie boşsa, başarı yanıltıcıdır. Doğrudan durdur!
+      console.warn("[AUTH] Giriş başarılı görünüyor ancak Set-Cookie boş veya geçersiz çerezler içeriyor.");
+      this.terminateSession("Oturum çerezleri alınamadı.");
+      return false;
+    }
+
+    // Sadece geçerli bir cookieHeader varsa session nesnesini oluştur
+    this.session = { cookieHeader };
+    
+    // Oturumu Instagram tarafında doğrula
+    const isValid = await this.verifySession(cookieHeader);
+    
+    if (isValid) {
+      this.loggedIn = true;
+      console.log("[AUTH] Oturum başarıyla doğrulandı ve açıldı.");
+      return true;
+    } else {
+      this.terminateSession("Oturum doğrulaması başarısız oldu.");
+      return false;
+    }
+  }
+
+  /**
+   * 3. Oturum Doğrulama (Fail-Secure Yapı)
+   */
+  public async verifySession(cookieHeader: string | undefined): Promise<boolean> {
+    // Kör nokta engelleme: Boş veya tanımsız string gönderilirse Instagram'a istek atmadan reddet!
+    if (!cookieHeader || cookieHeader.trim() === "") {
+      console.error("[AUTH] Doğrulama için geçersiz veya boş cookieHeader sağlandı.");
+      return false;
+    }
+
+    try {
+      // Instagram API'sine yapılan istek (Kendi kütüphanenize göre uyarlayın)
+      const response = await fetch("https://i.instagram.com/api/v1/users/web_profile_info/?username=instagram", {
+        method: "GET",
+        headers: {
+          "Cookie": cookieHeader,
+          "User-Agent": "Instagram 146.0.0.28.121 Android", // veya kullandığınız UA
+        },
+      });
+
+      // FAIL-SECURE: Sadece ve sadece HTTP 200 dönerse oturum geçerlidir.
+      if (response.status === 200) {
+        return true;
+      }
+
+      // 429, 403, 401 veya diğer tüm durumlarda oturum geçersiz kabul edilir.
+      console.warn(`[AUTH] Doğrulama başarısız. HTTP Durumu: ${response.status}`);
+      return false;
+
+    } catch (error) {
+      // Ağ hatası veya timeout durumunda da oturumu güvenli tarafta kalmak için geçersiz sayıyoruz.
+      console.error("[AUTH] Doğrulama isteği sırasında ağ hatası oluştu:", error);
+      return false;
+    }
+  }
+
+  /**
+   * 4. Profil Bilgisi Alma
+   */
+  public async getMyProfile(): Promise<any> {
+    // Hem nesnenin varlığını hem de cookieHeader'ın dolu olduğunu sıkı kontrol et
+    if (!this.session || !this.session.cookieHeader || !this.loggedIn) {
+      throw new Error("Aktif Instagram oturumu bulunamadı. (502 hatası önlendi)");
+    }
+
+    try {
+      // Profil çekme işlemleri...
+      console.log("[AUTH] Profil bilgileri çekiliyor...");
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Oturumu temizleme yardımcı fonksiyonu
+   */
+  private terminateSession(reason: string): void {
+    console.warn(`[AUTH] Oturum sonlandırılıyor. Neden: ${reason}`);
+    this.session = null;
+    this.loggedIn = false;
+  }
+}
+
+Bu Uygulamayı Nasıl Daha İyi Yapabilirsin?
+Kendi Zihnime Sorduğum Soru: Bu tür zincirleme hataların ve kör noktaların kod tabanında tekrar üremesini nasıl engelleyebiliriz?
+Stratejik Öneri: "Strict Validation Middleware & Schema" Kullanımı
+Sorunun temel nedeni, veri akışının kontrolsüzce katmanlar arasında sızması. Bunu çözmek için "Zero Trust" (Sıfır Güven) yaklaşımını koduna entegre etmelisin.
+ * Giriş Filtreleri (Guard Clauses): Her fonksiyonun girişine, parametrelerin doğruluğunu kontrol eden katı kurallar (Guard) koy. verifySession fonksiyonu, parametresi boş olduğunda hata fırlatmalı veya doğrudan false dönmeliydi. Bunu yapmadığın için Instagram'dan 429 yiyerek IP adresini riske attın.
+ * TypeScript Brand Types veya Sıkı Tip Kontrolleri: string yerine, sadece geçerli bir doğrulamadan geçmiş çerez formatını temsil eden özel bir tip (type ValidCookie = string & { readonly brand: unique symbol }) kullanabilirsin. Bu sayede, doğrulanmamış hiçbir string'i verifySession veya getMyProfile fonksiyonlarına kazara bile olsa parametre olarak geçiremezsin; derleyici seni daha kod yazarken engeller.
+ * HTTP Hata Katmanı Yönetimi: 429 (Rate Limit) hatasını geçici bir kesinti olarak ele alıp exponential backoff (üstel bekleme) ile kuyruğa alacak veya sistemi tamamen durduracak bir hata yakalama mekanizması inşa et. 429'u "ok" saymak, projenin tamamen engellenmesine yol açabilecek en büyük risklerden biridir.
