@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQueryClient, useMutation } from "@tanstack/react-query"
 import {
   useLogin,
   useVerifyTwoFactor,
@@ -11,7 +11,7 @@ import {
 } from "@workspace/api-client-react"
 import { Button, Card, Input, Label } from "../components/ui/core"
 import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert"
-import { ShieldAlert } from "lucide-react"
+import { ShieldAlert, KeyRound, Cookie } from "lucide-react"
 
 type TwoFactorMethod = VerifyTwoFactorRequestMethod
 
@@ -48,11 +48,32 @@ export default function LoginPage() {
   const verifyTwoFactor = useVerifyTwoFactor()
   const selectCheckpointMethod = useSelectCheckpointMethod()
   const verifyCheckpoint = useVerifyCheckpoint()
+  const [loginMode, setLoginMode] = useState<"password" | "cookie">("password")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [sessionCookie, setSessionCookie] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isCaptcha, setIsCaptcha] = useState(false)
   const [captchaType, setCaptchaType] = useState<string | null>(null)
+
+  const cookieLogin = useMutation({
+    mutationFn: async (cookie: string) => {
+      const res = await fetch("/api/auth/login-with-cookie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionCookie: cookie }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw Object.assign(new Error(data.error ?? "Cookie ile giriş başarısız."), { data })
+      return data
+    },
+    onSuccess: () => { queryClient.invalidateQueries() },
+    onError: (err: unknown) => {
+      const msg = (err as { data?: { error?: string } })?.data?.error
+        ?? (err instanceof Error ? err.message : "Cookie ile giriş başarısız.")
+      setError(msg)
+    },
+  })
 
   // İki adımlı doğrulama gerektiğinde /auth/login yerine bu adıma geçilir.
   const [twoFactorRequired, setTwoFactorRequired] = useState(false)
@@ -411,57 +432,129 @@ export default function LoginPage() {
             </Button>
           </form>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Instagram Kullanıcı Adı</Label>
-              <Input
-                id="username"
-                autoComplete="username"
-                placeholder="kullaniciadi"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Şifre</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+          <div className="space-y-4">
+            {/* Tab switcher */}
+            <div className="flex rounded-lg border border-border overflow-hidden text-sm">
+              <button
+                type="button"
+                onClick={() => { setLoginMode("password"); setError(null) }}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors ${
+                  loginMode === "password"
+                    ? "bg-muted text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                Şifre ile Giriş
+              </button>
+              <button
+                type="button"
+                onClick={() => { setLoginMode("cookie"); setError(null) }}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors ${
+                  loginMode === "cookie"
+                    ? "bg-muted text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Cookie className="w-3.5 h-3.5" />
+                Cookie ile Giriş
+              </button>
             </div>
 
-            {error && isCaptcha && (
-              <Alert variant="destructive" className="border-amber-500/50 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-500">
-                <ShieldAlert className="h-4 w-4" />
-                <AlertTitle>Güvenlik Doğrulaması Gerekiyor</AlertTitle>
-                <AlertDescription>
-                  {error}
-                  {captchaType && (
-                    <span className="block mt-1 text-xs opacity-80">Tespit türü: {captchaType}</span>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
-            {error && !isCaptcha && (
-              <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5">
-                <p className="text-sm text-destructive leading-snug">{error}</p>
-              </div>
-            )}
+            {loginMode === "password" ? (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Instagram Kullanıcı Adı</Label>
+                  <Input
+                    id="username"
+                    autoComplete="username"
+                    placeholder="kullaniciadi"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Şifre</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
 
-            <Button
-              type="submit"
-              className="w-full bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
-              disabled={login.isPending}
-            >
-              {login.isPending ? "Giriş yapılıyor..." : "Giriş Yap"}
-            </Button>
-          </form>
+                {error && isCaptcha && (
+                  <Alert variant="destructive" className="border-amber-500/50 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-500">
+                    <ShieldAlert className="h-4 w-4" />
+                    <AlertTitle>Güvenlik Doğrulaması Gerekiyor</AlertTitle>
+                    <AlertDescription>
+                      {error}
+                      {captchaType && (
+                        <span className="block mt-1 text-xs opacity-80">Tespit türü: {captchaType}</span>
+                      )}
+                      <span className="block mt-2 text-xs font-medium">
+                        İpucu: Sunucu IP'si Instagram tarafından engelleniyorsa "Cookie ile Giriş" sekmesini deneyin.
+                      </span>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {error && !isCaptcha && (
+                  <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5">
+                    <p className="text-sm text-destructive leading-snug">{error}</p>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
+                  disabled={login.isPending}
+                >
+                  {login.isPending ? "Giriş yapılıyor..." : "Giriş Yap"}
+                </Button>
+              </form>
+            ) : (
+              <form
+                onSubmit={(e) => { e.preventDefault(); setError(null); cookieLogin.mutate(sessionCookie) }}
+                className="space-y-4"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="session-cookie">Instagram Session Cookie</Label>
+                  <textarea
+                    id="session-cookie"
+                    className="flex min-h-[80px] w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none font-mono"
+                    placeholder="sessionid=AQD..."
+                    value={sessionCookie}
+                    onChange={(e) => setSessionCookie(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Instagram'a kendi cihazından giriş yap → tarayıcı geliştirici araçlarını aç (F12) →
+                    Application → Cookies → instagram.com → <strong>sessionid</strong> değerini kopyala.
+                    Tüm cookie satırını (<code className="text-xs">sessionid=...</code>) veya sadece değeri yapıştırabilirsin.
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5">
+                    <p className="text-sm text-destructive leading-snug">{error}</p>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
+                  disabled={cookieLogin.isPending}
+                >
+                  {cookieLogin.isPending ? "Doğrulanıyor..." : "Cookie ile Giriş Yap"}
+                </Button>
+              </form>
+            )}
+          </div>
         )}
 
 

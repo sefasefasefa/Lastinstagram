@@ -39,22 +39,19 @@ PRESETS = {
             "window__tree_index": [0, 0],
         },
     },
-    # OUTLOOK MOBILE REG
+    # INSTAGRAM LOGIN (mobile API)
     "B7D8911C-5CC8-A9A3-35B0-554ACEE604DA": {
-        "siteurl": "https://iframe.arkoselabs.com",
+        "siteurl": "https://www.instagram.com",
         "sitekey": "B7D8911C-5CC8-A9A3-35B0-554ACEE604DA",
         "apiurl": "https://client-api.arkoselabs.com",
-        "capi_mode": "inline",
-        "style_theme": "sisu_light",
-        "requires_blob": True,
+        "capi_mode": "lightbox",
+        "style_theme": "default",
+        "requires_blob": False,
         "data": {
-            "window__ancestor_origins": [
-                "https://iframe.arkoselabs.com",
-                "https://signup.live.com"
-            ],
+            "window__ancestor_origins": ["https://www.instagram.com"],
             "client_config__sitedata_location_href": "https://iframe.arkoselabs.com/B7D8911C-5CC8-A9A3-35B0-554ACEE604DA/index.html",
-            "window__tree_structure": "[[[]],[],[[]]]",
-            "window__tree_index": [2, 0],
+            "window__tree_structure": "[[]]",
+            "window__tree_index": [0],
         },
     },
     # ZILCH SIGN UP

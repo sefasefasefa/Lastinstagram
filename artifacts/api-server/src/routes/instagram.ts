@@ -37,6 +37,20 @@ export function initClientWithCredentials(
 }
 
 /**
+ * Session cookie (sessionid değeri) ile global client'ı başlatır.
+ * Cookie login akışında auth.ts tarafından kullanılır.
+ */
+export function initClientWithCookie(sessionCookieValue: string): InstagramClient {
+  client = new InstagramClient({
+    instagramUsername: "",
+    instagramSessionCookie: sessionCookieValue,
+    proxyUrl: process.env.PROXY_URL,
+    useProxy: process.env.USE_PROXY === "true",
+  });
+  return client;
+}
+
+/**
  * Bekleyen bir 2FA akışını (login() sonrası InstagramTwoFactorRequiredError)
  * tamamlamak için auth.ts'in kullandığı, en son oluşturulan istemci örneği.
  */

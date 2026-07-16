@@ -3,6 +3,7 @@ import ctypes
 import json
 import os
 import platform
+import traceback
 import random
 import time
 from queue import Queue
@@ -632,7 +633,7 @@ if __name__ == "__main__":
         except json.JSONDecodeError:
             return jsonify({'error': 'Invalid JSON data provided'}), 400
         except Exception:
-            #print(traceback.format_exc())
+            print(traceback.format_exc())
             return jsonify({'error': 'Internal server error'}), 500
 
     Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("FUNCAPTCHA_SERVER_PORT", 8003))), daemon=True).start()

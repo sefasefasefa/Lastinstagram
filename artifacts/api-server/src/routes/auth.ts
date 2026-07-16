@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { LoginBody, LoginResponse, GetMeResponse } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
-import { initClientWithCredentials, getActiveClient } from "./instagram";
+import { initClientWithCredentials, initClientWithCookie, getActiveClient, resetClient } from "./instagram";
 import { logger } from "../lib/logger";
 import {
   InstagramTwoFactorRequiredError,
@@ -179,6 +179,53 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       deviceProfile: parsed.data.deviceProfile,
     }));
   });
+});
+
+/**
+ * Session cookie ile giriş — kullanıcı kendi tarayıcısından/telefonundan
+ * kopyaladığı Instagram sessionid değerini yapıştırır. Sunucu ortamında
+ * şifre girişi Arkose / Instagram tarafından engellense bile çalışır.
+ */
+router.post("/auth/login-with-cookie", async (req, res): Promise<void> => {
+  const raw: unknown = req.body?.sessionCookie;
+  if (!raw || typeof raw !== "string" || !raw.trim()) {
+    res.status(400).json({ error: "sessionCookie alanı gerekli." });
+    return;
+  }
+  // "sessionid=XXX" formatını da kabul et
+  const cookie = raw.trim();
+  const value = cookie.startsWith("sessionid=") ? cookie.split("=").slice(1).join("=") : cookie;
+
+  try {
+    // Global client'ı cookie ile başlat, oturumu doğrula, profili al
+    const cookieClient = initClientWithCookie(value);
+    await cookieClient.login();
+
+    const profile = await cookieClient.getMyProfile();
+    const igUsername = profile.username;
+    if (!igUsername) {
+      resetClient();
+      res.status(502).json({ error: "Session cookie geçerli görünüyor ama profil alınamadı." });
+      return;
+    }
+
+    // Yerel kullanıcı kaydını bul veya oluştur, oturum aç
+    const igUser = await upsertInstagramUser(igUsername);
+    req.session.regenerate((err) => {
+      if (err) { res.status(500).json({ error: "Oturum oluşturulamadı." }); return; }
+      req.session.userId = igUser.id;
+      res.json(LoginResponse.parse({
+        id: igUser.id,
+        username: igUser.username,
+        sessionExpiry: sessionExpiryOf(req),
+        deviceProfile: null,
+      }));
+    });
+  } catch (err) {
+    logger.warn({ err }, "Session cookie login failed");
+    const msg = err instanceof Error ? err.message : "Cookie ile giriş başarısız.";
+    res.status(502).json({ error: `Cookie ile giriş başarısız: ${msg}` });
+  }
 });
 
 /**
