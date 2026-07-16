@@ -38,7 +38,18 @@ Default login: **admin / admin123** (enter your Instagram credentials on the log
 
 - `SESSION_SECRET` — set as a Replit secret (auto-injected)
 - `DATABASE_URL` — not set; app uses embedded PGlite automatically
-- `USE_STEALTH_REQUESTS` — set to `false` on Replit (Python bridge disabled)
+- `STEALTH_REQUESTS_PYTHON` / `FUNCAPTCHA_PYTHON` — set to `/home/runner/workspace/.venv/bin/python3` (shared env var); points API server at the virtualenv with all Python deps installed
+
+## Python Virtual Environment
+
+Python deps (cryptography, pycryptodome, curl_cffi, flask, colorama, numpy, stealth-requests) are installed in `.venv/`. The env vars above ensure Node spawns the venv Python for the stealth bridge and funcaptcha solver.
+
+To reinstall after a fresh import:
+```bash
+python3 -m venv .venv
+.venv/bin/pip install cryptography pycryptodome curl_cffi flask colorama numpy
+.venv/bin/pip install -e lib/stealth-requests/
+```
 
 ## Project Structure
 

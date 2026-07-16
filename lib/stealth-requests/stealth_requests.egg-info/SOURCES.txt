@@ -1,0 +1,12 @@
+LICENSE
+README.md
+pyproject.toml
+stealth_requests/__init__.py
+stealth_requests/response.py
+stealth_requests/session.py
+stealth_requests/user_agents.json
+stealth_requests.egg-info/PKG-INFO
+stealth_requests.egg-info/SOURCES.txt
+stealth_requests.egg-info/dependency_links.txt
+stealth_requests.egg-info/requires.txt
+stealth_requests.egg-info/top_level.txt

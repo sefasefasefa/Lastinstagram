@@ -41,7 +41,8 @@ export function startFuncaptchaServer(): void {
 
   console.log("[funcaptcha-server] Starting solver at", scriptPath);
 
-  solverProcess = spawn("python3", [scriptPath], {
+  const pythonCmd = process.env.FUNCAPTCHA_PYTHON ?? process.env.STEALTH_REQUESTS_PYTHON ?? "python3";
+  solverProcess = spawn(pythonCmd, [scriptPath], {
     cwd: solverDir,
     stdio: ["ignore", "pipe", "pipe"],
     detached: false,

@@ -22,3 +22,9 @@ timeoutMs = 20000
 [nix]
 channel = "stable-25_05"
 packages = ["cargo", "gmp", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
+
+[userenv]
+
+[userenv.shared]
+FUNCAPTCHA_PYTHON = "/home/runner/workspace/.venv/bin/python3"
+STEALTH_REQUESTS_PYTHON = "/home/runner/workspace/.venv/bin/python3"
