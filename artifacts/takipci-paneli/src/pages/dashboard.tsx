@@ -213,57 +213,6 @@ export default function DashboardPage() {
           />
         </section>
 
-        {/* Instagram Bağlantı Kartı — yalnızca bağlı değilken göster */}
-        {!myProfileLoading && !myProfile && (
-          <section>
-            <Card className="p-6 border-amber-500/30 bg-amber-500/5">
-              <div className="flex flex-col sm:flex-row gap-6">
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Link2 className="w-5 h-5 text-amber-400" />
-                    <h2 className="font-semibold text-base">Instagram Hesabını Bağla</h2>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Sunucu IP'si Instagram tarafından kısıtlandığı için şifre ile giriş yapılamıyor.
-                    Tarayıcından <code className="bg-muted px-1 rounded text-xs">sessionid</code> çerezini kopyala ve aşağıya yapıştır.
-                  </p>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p className="font-medium text-foreground/70">Nasıl bulunur?</p>
-                    <ol className="list-decimal list-inside space-y-1">
-                      <li>Tarayıcında Instagram'a giriş yap</li>
-                      <li>F12 → Application → Cookies → instagram.com</li>
-                      <li><code className="bg-muted px-1 rounded">sessionid</code> satırının değerini kopyala</li>
-                    </ol>
-                  </div>
-                  <a
-                    href="https://www.instagram.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Instagram'ı aç
-                  </a>
-                </div>
-                <div className="sm:w-72 space-y-3 flex flex-col justify-center">
-                  <Input
-                    placeholder="sessionid değerini yapıştır…"
-                    value={sessionCookie}
-                    onChange={e => setSessionCookie(e.target.value)}
-                    className="font-mono text-xs"
-                  />
-                  <Button
-                    className="w-full"
-                    disabled={!sessionCookie.trim() || connectWithCookie.isPending}
-                    onClick={() => connectWithCookie.mutate(sessionCookie.trim())}
-                  >
-                    {connectWithCookie.isPending ? "Bağlanıyor…" : "Bağlan"}
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          </section>
-        )}
 
         {/* Kendi Instagram Hesabım */}
         {myProfile && (
