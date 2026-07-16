@@ -180,9 +180,33 @@ Frontend build çıktısı `artifacts/takipci-paneli/dist/public` klasöründe s
 Bu proje Windows'ta sorunsuz çalışacak şekilde ayarlanmıştır:
 
 - `pnpm install`, Windows için doğru native bağımlılıkları (esbuild, Vite/rollup, Tailwind derleyicisi) otomatik indirir — ekstra bir kurulum veya derleyici (Visual Studio Build Tools vb.) gerekmez.
-- Ortam değişkeni gerektiren script'ler (`VITE_ADMIN_ENABLED=true` gibi) `cross-env` ile yazılmıştır, böylece hem PowerShell/cmd hem de bash'te aynı şekilde çalışır.
+- Ortam değişkeni gerektiren script'ler (`cross-env` ile yazılmıştır) hem PowerShell/cmd hem de bash'te aynı şekilde çalışır.
 - `scripts/db-restore.ps1`, `db-restore.sh`'nin PowerShell karşılığıdır — aynı işi yapar.
 - Uzun dosya yolu hatası alırsanız (nadiren, Windows'un eski sürümlerinde görülür), projeyi `C:\` köküne yakın kısa bir klasöre klonlamanız yeterlidir (örn. `C:\dev\takipci-paneli`).
+
+### Python kurulumu (Instagram girişi + funcaptcha için)
+
+Instagram şifre girişi ve funcaptcha solver Python 3.10+ gerektirir. Aşağıdaki adımları **bir kez** çalıştırmanız yeterlidir:
+
+**1. Python kur**
+[python.org](https://python.org) üzerinden Python 3.10 veya üzerini indirin. Kurulum sırasında **"Add Python to PATH"** seçeneğini işaretleyin.
+
+**2. Kurulumu doğrula**
+```powershell
+py --version   # Python 3.10.x veya üzeri çıkmalı
+```
+
+**3. Sanal ortamı kur (tek seferlik)**
+```powershell
+.\scripts\setup-python.ps1
+```
+
+Bu script `.venv` klasörünü oluşturur ve tüm Python bağımlılıklarını (curl_cffi, flask, vb.) kurar. Artık API sunucusu başladığında stealth bridge ve funcaptcha solver otomatik olarak `.venv` içindeki Python'ı kullanır.
+
+> **Not:** `py` komutu API sunucusu tarafından bulunamazsa (nadir durum), `.env` dosyasına şunu ekleyin:
+> ```
+> STEALTH_REQUESTS_PYTHON=.venv\Scripts\python.exe
+> ```
 
 ## Sık karşılaşılan sorunlar
 

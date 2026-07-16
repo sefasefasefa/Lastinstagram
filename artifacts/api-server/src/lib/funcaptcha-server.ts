@@ -17,6 +17,21 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Windows: "py" launcher is the most reliable; fallback to "python". Linux/macOS: "python3". */
+function defaultPythonCmd(): string {
+  return process.platform === "win32" ? "py" : "python3";
+}
+
+/**
+ * Returns the Replit-specific npm global modules path if we're running inside
+ * Replit (detected by REPL_ID env var), otherwise returns undefined so the
+ * system default NODE_PATH is used instead.
+ */
+function replitNpmGlobals(): string | undefined {
+  if (!process.env.REPL_ID) return undefined;
+  return path.resolve(process.cwd(), ".config", "npm", "node_global", "node_modules");
+}
+
 function findSolverScript(): string {
   const candidates = [
     // Bundled: artifacts/api-server/dist -> lib/funcaptcha-solver
@@ -41,15 +56,16 @@ export function startFuncaptchaServer(): void {
 
   console.log("[funcaptcha-server] Starting solver at", scriptPath);
 
-  const pythonCmd = process.env.FUNCAPTCHA_PYTHON ?? process.env.STEALTH_REQUESTS_PYTHON ?? "python3";
+  const pythonCmd = process.env.FUNCAPTCHA_PYTHON ?? process.env.STEALTH_REQUESTS_PYTHON ?? defaultPythonCmd();
   solverProcess = spawn(pythonCmd, [scriptPath], {
     cwd: solverDir,
     stdio: ["ignore", "pipe", "pipe"],
     detached: false,
     env: {
       ...process.env,
-      // jsdom is installed at .config/npm/node_global/node_modules
-      NODE_PATH: path.resolve(process.cwd(), ".config", "npm", "node_global", "node_modules"),
+      // jsdom lookup path — Replit stores npm globals in a non-standard location.
+      // On Windows / plain Linux VPS the standard npm prefix is used instead.
+      NODE_PATH: replitNpmGlobals() ?? process.env.NODE_PATH ?? "",
     },
   });
 
@@ -79,7 +95,9 @@ export function startFuncaptchaServer(): void {
 
 export function stopFuncaptchaServer(): void {
   if (solverProcess) {
-    solverProcess.kill("SIGTERM");
+    // Windows does not support SIGTERM on spawned processes; kill() without
+    // a signal sends SIGTERM on Unix and terminates the process on Windows.
+    solverProcess.kill();
     solverProcess = null;
   }
 }
@@ -87,4 +105,6 @@ export function stopFuncaptchaServer(): void {
 // Clean up on process exit
 process.on("exit", stopFuncaptchaServer);
 process.on("SIGINT", () => { stopFuncaptchaServer(); process.exit(0); });
+// SIGTERM is supported on Linux/macOS; on Windows it is not sent by the OS
+// but Node.js still accepts it programmatically, so keep the handler.
 process.on("SIGTERM", () => { stopFuncaptchaServer(); process.exit(0); });

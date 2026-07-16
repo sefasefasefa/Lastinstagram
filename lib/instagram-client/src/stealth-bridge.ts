@@ -34,7 +34,9 @@ function findBridgeScript(): string {
 }
 
 const BRIDGE_SCRIPT = findBridgeScript();
-const PYTHON_CMD = process.env.STEALTH_REQUESTS_PYTHON ?? "python3";
+// Windows: "py" launcher is most reliable (installed with Python by default).
+// Linux/macOS: "python3". Override via STEALTH_REQUESTS_PYTHON env var.
+const PYTHON_CMD = process.env.STEALTH_REQUESTS_PYTHON ?? (process.platform === "win32" ? "py" : "python3");
 
 function bridgeScriptExists(): boolean {
   try {
