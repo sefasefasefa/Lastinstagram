@@ -1,10 +1,12 @@
 import { defineConfig } from "drizzle-kit";
 import path from "path";
 
-const dbPath = path.join(__dirname, "./data.db");
+// Use forward slashes for the schema glob — drizzle-kit's glob engine does
+// not accept Windows backslashes even on win32.
+const dbPath = path.join(__dirname, "data.db");
 
 export default defineConfig({
-  schema: path.join(__dirname, "./src/schema/index.ts"),
+  schema: "./src/schema/index.ts",
   dialect: "sqlite",
   dbCredentials: {
     url: dbPath,
