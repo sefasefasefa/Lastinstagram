@@ -1,41 +1,36 @@
 /**
  * Funcaptcha (Arkose Labs) solver client.
  *
- * Calls the local funcaptcha solver HTTP server (lib/funcaptcha-solver/server.py)
+ * Calls the local FuncapSolver HTTP server (lib/funcaptcha-solver/app.py)
  * which is started alongside the API server. When Instagram returns a captcha
  * challenge during login, this client obtains a bypass token that can be
  * submitted in the retry request.
  *
  * The solver runs on port 8003 (configurable via FUNCAPTCHA_SERVER_PORT).
  * If the server is unavailable, all functions return null/false gracefully.
+ *
+ * API: POST /solve → { solved, token, variant, suppressed }
  */
 
 const FUNCAPTCHA_PORT = process.env["FUNCAPTCHA_SERVER_PORT"] ?? "8003";
 const FUNCAPTCHA_BASE = `http://127.0.0.1:${FUNCAPTCHA_PORT}`;
 
-interface CreateTaskResponse {
-  success: boolean;
-  task_id?: string;
-  err?: string;
-}
+// Instagram's Arkose FunCaptcha site key
+const INSTAGRAM_SITEKEY = "B7D8911C-5CC8-A9A3-35B0-554ACEE604DA";
 
-interface GetTaskResponse {
-  type: string;
-  status: "processing" | "completed";
-  task_id: string;
-  captcha?: {
-    success: boolean;
-    token?: string;
-    err?: string;
-    procces_time?: number;
-  };
+interface SolveResponse {
+  solved: boolean;
+  token?: string;
+  variant?: string;
+  suppressed?: boolean;
+  error?: string;
 }
 
 /**
  * Attempts to solve an Arkose FunCaptcha challenge using the local solver server.
  *
  * @param preset  Solver preset name. Use "instagram_login" for Instagram.
- * @param options Optional blob, proxy, chrome version, and timeoutMs.
+ * @param options Optional blob, proxy, and timeoutMs.
  * @returns       The solved arkose token string, or null if solving failed.
  */
 export async function solveFuncaptcha(
@@ -44,60 +39,47 @@ export async function solveFuncaptcha(
     blob?: string;
     proxy?: string;
     chromeVersion?: string;
-    /** Poll timeout in ms. Default 60 000. */
+    /** Request timeout in ms. Default 90 000. */
     timeoutMs?: number;
   } = {},
 ): Promise<string | null> {
+  // Map named preset to sitekey
+  const sitekey =
+    preset === "instagram_login" ? INSTAGRAM_SITEKEY : preset;
+
   try {
-    // Step 1 — create task
-    const createRes = await fetch(`${FUNCAPTCHA_BASE}/funcaptcha/createTask`, {
+    const body: Record<string, unknown> = {
+      private_key: sitekey,
+      niggamode: true, // proxyless — no proxy required
+    };
+    if (options.blob) body["blob"] = options.blob;
+    if (options.proxy) body["og_proxy"] = options.proxy;
+
+    const res = await fetch(`${FUNCAPTCHA_BASE}/solve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        preset,
-        chrome_version: options.chromeVersion ?? "129",
-        ...(options.proxy ? { proxy: options.proxy } : {}),
-        ...(options.blob ? { blob: options.blob } : {}),
-      }),
-      signal: AbortSignal.timeout(5000),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 90_000),
     });
 
-    const created = (await createRes.json()) as CreateTaskResponse;
-    if (!created.success || !created.task_id) {
-      console.warn("[funcaptcha] createTask failed:", created.err);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.warn(`[funcaptcha] Solver HTTP ${res.status}:`, text.slice(0, 200));
       return null;
     }
 
-    const taskId = created.task_id;
+    const result = (await res.json()) as SolveResponse;
 
-    // Step 2 — poll until completed or timeout
-    const deadline = Date.now() + (options.timeoutMs ?? 60_000);
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 1500));
-
-      const getRes = await fetch(`${FUNCAPTCHA_BASE}/funcaptcha/getTask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task_id: taskId }),
-        signal: AbortSignal.timeout(5000),
-      });
-
-      const task = (await getRes.json()) as GetTaskResponse;
-
-      if (task.status === "completed") {
-        if (task.captcha?.success && task.captcha.token) {
-          console.log(
-            "[funcaptcha] Çözüldü! Token:",
-            task.captcha.token.slice(0, 30) + "...",
-          );
-          return task.captcha.token;
-        }
-        console.warn("[funcaptcha] Solve failed:", task.captcha?.err);
-        return null;
-      }
+    if (result.solved && result.token) {
+      console.log(
+        "[funcaptcha] Çözüldü! Token:",
+        result.token.slice(0, 30) + "...",
+        result.suppressed ? "(suppressed/instapass)" : `variant=${result.variant}`,
+      );
+      return result.token;
     }
 
-    console.warn("[funcaptcha] Timed out waiting for solve");
+    console.warn("[funcaptcha] Solve failed:", result.error ?? "no token");
     return null;
   } catch (err) {
     // Solver server not running or request failed — not an error for the caller
@@ -122,7 +104,7 @@ export async function solveFuncaptchaWithProxies(
   proxyList: string[],
   concurrency = 3,
 ): Promise<string | null> {
-  if (proxyList.length === 0) return null;
+  if (proxyList.length === 0) return solveFuncaptcha(preset);
 
   // Proxy'leri concurrency boyutlu gruplar halinde sıraya al
   const chunks: string[][] = [];
@@ -158,11 +140,11 @@ export async function solveFuncaptchaWithProxies(
  */
 export async function isFuncaptchaAvailable(): Promise<boolean> {
   try {
-    // A POST with a known-bad preset returns 200 with success:false — server is up
-    const res = await fetch(`${FUNCAPTCHA_BASE}/funcaptcha/createTask`, {
+    // Send a request with a bogus key — server is up if we get any JSON back
+    const res = await fetch(`${FUNCAPTCHA_BASE}/solve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ preset: "_ping_" }),
+      body: JSON.stringify({ private_key: "_ping_", niggamode: true }),
       signal: AbortSignal.timeout(2000),
     });
     return res.status < 500;

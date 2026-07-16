@@ -20,10 +20,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function findSolverScript(): string {
   const candidates = [
     // Bundled: artifacts/api-server/dist -> lib/funcaptcha-solver
-    path.resolve(__dirname, "..", "..", "..", "lib", "funcaptcha-solver", "server.py"),
+    path.resolve(__dirname, "..", "..", "..", "lib", "funcaptcha-solver", "app.py"),
     // Source: artifacts/api-server/src/lib -> lib/funcaptcha-solver
-    path.resolve(__dirname, "..", "..", "..", "..", "lib", "funcaptcha-solver", "server.py"),
-    path.resolve(process.cwd(), "lib", "funcaptcha-solver", "server.py"),
+    path.resolve(__dirname, "..", "..", "..", "..", "lib", "funcaptcha-solver", "app.py"),
+    path.resolve(process.cwd(), "lib", "funcaptcha-solver", "app.py"),
   ];
   return candidates.find((p) => fs.existsSync(p)) ?? candidates[0];
 }
@@ -33,7 +33,7 @@ let solverProcess: ChildProcess | null = null;
 export function startFuncaptchaServer(): void {
   const scriptPath = findSolverScript();
   if (!fs.existsSync(scriptPath)) {
-    console.warn("[funcaptcha-server] server.py not found at", scriptPath, "— skipping");
+    console.warn("[funcaptcha-server] app.py not found at", scriptPath, "— skipping");
     return;
   }
 
