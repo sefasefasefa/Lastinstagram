@@ -464,10 +464,7 @@ export default function LoginPage() {
           </form>
         )}
 
-        <p className="mt-5 text-center text-xs text-muted-foreground leading-relaxed">
-          Giriş bilgileriniz yalnızca bu cihazda kullanılır
-          ve Instagram API'sine doğrudan iletilir.
-        </p>
+
       </Card>
     </div>
   )
