@@ -79,6 +79,37 @@ STEALTH_REQUESTS_PYTHON=.venv\Scripts\python.exe
 
 The optional Python funcaptcha solver (`lib/funcaptcha-solver/app.py`) requires a `.venv` with `curl_cffi` installed. It starts automatically but the app works fine without it — Instagram login falls back to the stealth bridge.
 
+## Tarayıcı Eklentisi (Browser Extension)
+
+Kaynak: `artifacts/browser-extension/`
+
+### Build
+
+```bash
+pnpm --filter @workspace/browser-extension run build
+```
+
+Çıktılar:
+- `artifacts/browser-extension/dist/takipci-paneli-chrome.zip` — Chrome / Edge
+- `artifacts/browser-extension/dist/takipci-paneli-firefox.zip` — Firefox
+
+### Chrome / Edge'e kurulum
+
+1. `chrome://extensions/` → "Geliştirici modu" aç
+2. "Paketlenmemiş öğe yükle" → `artifacts/browser-extension/dist/chrome/` klasörünü seç
+
+### Firefox'a kurulum
+
+1. `about:debugging` → Bu Firefox → Geçici Eklenti Yükle
+2. `artifacts/browser-extension/dist/firefox/manifest.json` dosyasını seç
+
+### Nasıl çalışır
+
+1. Instagram'a giriş yapılmış bir sekmede eklenti simgesine tıkla
+2. Panel URL, kullanıcı adı ve şifresini gir → "Kaydet"
+3. "Oturumu Panele Gönder" butonuna tıkla
+4. Eklenti: `sessionid` cookie'sini okur → Panel admin girişi yapar → `/api/instagram/session-cookie` endpoint'ine gönderir
+
 ## User preferences
 
 (none yet)
