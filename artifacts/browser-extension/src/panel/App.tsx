@@ -7,7 +7,6 @@ import { getCurrentUser, hasSession, type IgUser } from '@/lib/ig-api';
 import DashboardPage from '@/pages/dashboard';
 import NotFound from '@/pages/not-found';
 
-// ─── Instagram logosu ────────────────────────────────────────────────────────
 function IgLogo() {
   return (
     <svg className="w-16 h-16" viewBox="0 0 32 32" fill="none">
@@ -29,39 +28,56 @@ function IgLogo() {
 }
 
 // ─── Bağlantı sayfası ────────────────────────────────────────────────────────
-// Instagram sessionid cookie'sini bekler; bulunca arka planda doğrular.
+const MAX_API_RETRIES = 15; // ~45 saniye
+
 function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
   const [phase, setPhase] = useState<'checking' | 'waiting' | 'connecting' | 'error'>('checking');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const apiRetries = useRef(0);
 
-  const tryConnect = useCallback(async (): Promise<boolean> => {
+  const tryConnect = useCallback(async () => {
     const has = await hasSession();
     if (!has) {
+      // Oturum yok — kullanıcıdan giriş yapmasını iste
+      apiRetries.current = 0;
       setPhase('waiting');
-      return false;
+      return;
     }
 
+    // Cookie var — API'yi dene
     setPhase('connecting');
-    const user = await getCurrentUser();
-    if (!user) {
-      setPhase('error');
-      setErrorMsg("Oturum cookie'si var ama profil bilgisi alınamadı. Bir süre bekleyip tekrar dene.");
-      return false;
-    }
+    apiRetries.current += 1;
 
-    onConnected(user);
-    return true;
+    try {
+      const user = await getCurrentUser();
+      if (user) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        onConnected(user);
+        return;
+      }
+      // null döndü (beklenmedik)
+      if (apiRetries.current >= MAX_API_RETRIES) {
+        setPhase('error');
+        setErrorMsg('Profil bilgisi alınamadı (null). Instagram sekmesinin yüklü olduğundan emin ol.');
+      }
+      // else: poll devam eder
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (apiRetries.current >= MAX_API_RETRIES) {
+        setPhase('error');
+        setErrorMsg(`Hata (${apiRetries.current} deneme): ${msg}`);
+      }
+      // else: sessizce tekrar dene — tab henüz yüklenmiyor olabilir
+    }
   }, [onConnected]);
 
-  // İlk yüklemede dene
-  useEffect(() => {
-    void tryConnect();
-  }, [tryConnect]);
+  // Başlangıç kontrolü
+  useEffect(() => { void tryConnect(); }, [tryConnect]);
 
-  // Bekleme aşamasında her 3 saniyede dene
+  // Her 3 sn'de bir dene (waiting veya connecting aşamalarında)
   useEffect(() => {
-    if (phase !== 'waiting') {
+    if (phase === 'error') {
       if (pollRef.current) clearInterval(pollRef.current);
       return;
     }
@@ -69,8 +85,14 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [phase, tryConnect]);
 
-  const openInstagram = () =>
-    chrome.tabs.create({ url: 'https://www.instagram.com/' });
+  const openInstagram = () => chrome.tabs.create({ url: 'https://www.instagram.com/' });
+
+  const retry = () => {
+    apiRetries.current = 0;
+    setErrorMsg(null);
+    setPhase('checking');
+    void tryConnect();
+  };
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
@@ -81,59 +103,58 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
           <div>
             <h1 className="text-xl font-semibold tracking-tight">Takipçi Paneli</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {phase === 'checking' && 'Instagram oturumu kontrol ediliyor…'}
-              {phase === 'connecting' && 'Profil bilgileri alınıyor…'}
+              {phase === 'checking' && 'Oturum kontrol ediliyor…'}
+              {phase === 'connecting' && `Bağlanıyor… (${apiRetries.current}/${MAX_API_RETRIES})`}
               {phase === 'waiting' && 'Instagram\'a giriş yapmanızı bekliyorum'}
-              {phase === 'error' && 'Bağlantı hatası'}
+              {phase === 'error' && 'Bağlantı başarısız'}
             </p>
           </div>
         </div>
 
         {(phase === 'checking' || phase === 'connecting') && (
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-2">
             <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            {phase === 'connecting' && (
+              <p className="text-xs text-muted-foreground">
+                Instagram sekmesi açık olmalı — açık değilse aşağıdan aç
+              </p>
+            )}
           </div>
         )}
 
+        {(phase === 'waiting' || phase === 'connecting') && (
+          <button
+            onClick={openInstagram}
+            className="w-full rounded-xl py-3 text-sm font-semibold bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
+          >
+            Instagram'ı Aç →
+          </button>
+        )}
+
         {phase === 'waiting' && (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-border bg-card p-5 text-left space-y-4">
-              {[
-                'Aşağıdaki butona tıklayın',
-                'Instagram hesabınıza normal şekilde giriş yapın',
-                'Bu sekmeye dönün — sistem otomatik devreye girer',
-              ].map((text, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
-                    {i + 1}
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{text}</p>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={openInstagram}
-              className="w-full rounded-xl py-3 text-sm font-semibold bg-gradient-to-r from-[#d6249f] via-[#fd5949] to-[#fdf497] text-white hover:opacity-90 transition-opacity"
-            >
-              Instagram'da Giriş Yap →
-            </button>
-            <p className="text-xs text-muted-foreground">
-              Zaten giriş yaptıysanız birkaç saniye bekleyin
-            </p>
+          <div className="rounded-xl border border-border bg-card p-4 text-left space-y-3">
+            {['Instagram\'a giriş yap', 'Bu sekmeye dön — otomatik devreye girer'].map((text, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
+                <p className="text-sm text-muted-foreground">{text}</p>
+              </div>
+            ))}
           </div>
         )}
 
         {phase === 'error' && (
           <div className="space-y-3">
             <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-left">
-              <p className="text-sm text-destructive">{errorMsg}</p>
+              <p className="text-xs text-destructive font-mono break-all">{errorMsg}</p>
             </div>
-            <button
-              onClick={() => { setPhase('checking'); setErrorMsg(null); void tryConnect(); }}
-              className="text-sm text-primary underline underline-offset-2"
-            >
-              Tekrar dene
-            </button>
+            <div className="flex gap-2">
+              <button onClick={retry} className="flex-1 text-sm py-2 rounded-lg border border-border hover:bg-muted transition-colors">
+                Tekrar dene
+              </button>
+              <button onClick={openInstagram} className="flex-1 text-sm py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity">
+                Instagram'ı Aç
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -141,24 +162,21 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
   );
 }
 
-// ─── Uygulama ────────────────────────────────────────────────────────────────
+// ─── Ana uygulama ─────────────────────────────────────────────────────────────
 export default function App() {
-  // undefined = yükleniyor, null = giriş yapılmamış, IgUser = giriş yapılmış
   const [user, setUser] = useState<IgUser | null | undefined>(undefined);
 
-  // Başlangıçta oturum kontrolü
   useEffect(() => {
-    getCurrentUser().then((u) => setUser(u ?? null));
+    getCurrentUser()
+      .then((u) => setUser(u ?? null))
+      .catch(() => setUser(null));
   }, []);
 
-  // Cookie silinirse otomatik çıkış
   useEffect(() => {
-    const check = async () => {
+    const id = setInterval(async () => {
       const has = await hasSession();
       if (!has) setUser(null);
-    };
-    // Her 30 saniyede cookie varlığını doğrula
-    const id = setInterval(check, 30_000);
+    }, 30_000);
     return () => clearInterval(id);
   }, []);
 
