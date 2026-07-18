@@ -20,7 +20,7 @@ export function App() {
   }
 
   function openInstagram() {
-    chrome.tabs.create({ url: "https://www.instagram.com/accounts/login/" });
+    chrome.tabs.create({ url: "https://www.instagram.com/" });
     window.close();
   }
 
