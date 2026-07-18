@@ -23,6 +23,15 @@ for (const browser of ["chrome", "edge", "firefox"]) {
   // Copy all shared build output
   copyDir(sharedDir, outDir);
 
+  // Strip crossorigin attributes from all HTML files.
+  // Chrome/Firefox treat chrome-extension:// and moz-extension:// resources as
+  // cross-origin when the attribute is present, which silently drops stylesheets.
+  for (const file of fs.readdirSync(outDir).filter(f => f.endsWith('.html'))) {
+    const htmlPath = path.join(outDir, file);
+    const fixed = fs.readFileSync(htmlPath, 'utf-8').replace(/ crossorigin(?:="[^"]*")?/g, '');
+    fs.writeFileSync(htmlPath, fixed);
+  }
+
   // Write the correct manifest
   const manifest = fs.readFileSync(
     path.join(__dirname, "manifests", `${browser}.json`),
