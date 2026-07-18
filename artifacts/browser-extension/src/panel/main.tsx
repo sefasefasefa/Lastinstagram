@@ -1,4 +1,4 @@
-import '@/index.css';
+import './styles.css';
 import { createRoot } from 'react-dom/client';
 import { setBaseUrl } from '@workspace/api-client-react';
 import App from './App';

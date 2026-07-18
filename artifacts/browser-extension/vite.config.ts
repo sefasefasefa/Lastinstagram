@@ -8,6 +8,7 @@ const PANEL_SRC = path.resolve(import.meta.dirname, "../takipci-paneli/src");
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  base: './',
   resolve: {
     alias: {
       // Point @ to the panel's src so extension pages can import pages/components directly
