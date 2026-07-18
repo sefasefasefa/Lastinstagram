@@ -1,3 +1,4 @@
+import '@/index.css';
 import { createRoot } from 'react-dom/client';
 import { setBaseUrl } from '@workspace/api-client-react';
 import App from './App';
@@ -19,8 +20,5 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
 };
 
 setBaseUrl(PANEL_URL);
-
-// Dynamically import the panel CSS so Vite resolves it from the right root
-import('@/index.css');
 
 createRoot(document.getElementById('root')!).render(<App />);

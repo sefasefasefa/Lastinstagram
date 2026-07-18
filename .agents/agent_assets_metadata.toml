@@ -17,7 +17,7 @@ title = "Chrome Eklentisi"
 id = "xfCRxXlAIxGbFcHPgd4ah"
 uri = "file://artifacts/browser-extension/dist/takipci-paneli-firefox.zip"
 type = "unspecified"
-title = "Firefox Eklentisi (düzeltildi)"
+title = "Firefox Eklentisi"
 
 [[outputs]]
 id = "vdh5kCnXoGi3ATDYjHCVE"
