@@ -56,8 +56,11 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      // "none" + secure:true is required so browser-extension pages
+      // (chrome-extension://) can send the session cookie cross-origin.
+      // Replit always serves via HTTPS, so secure:true is safe everywhere.
+      secure: true,
+      sameSite: "none",
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
   }),

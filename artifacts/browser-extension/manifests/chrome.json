@@ -2,14 +2,13 @@
   "manifest_version": 3,
   "name": "Takipçi Paneli",
   "version": "1.0.0",
-  "description": "Instagram oturumunu Takipçi Paneli'ne otomatik gönderir.",
+  "description": "Instagram takip & otomasyon paneli — tam sayfa arayüz.",
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
     "128": "icon128.png"
   },
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
@@ -21,6 +20,6 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["cookies", "storage"],
+  "permissions": ["cookies", "storage", "tabs", "windows"],
   "host_permissions": ["*://*.instagram.com/*", "<all_urls>"]
 }
