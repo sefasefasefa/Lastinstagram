@@ -1,272 +1,128 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
-interface Settings {
-  panelUrl: string;
-  username: string;
-  password: string;
-}
-
-type IgStatus =
-  | { kind: "checking" }
-  | { kind: "found"; cookieValue: string }
-  | { kind: "missing" };
-
-type SendStatus =
-  | { kind: "idle" }
-  | { kind: "loading"; step: string }
-  | { kind: "success"; message: string }
-  | { kind: "error"; message: string };
-
-const DEFAULT_SETTINGS: Settings = {
-  panelUrl: "",
-  username: "admin",
-  password: "",
-};
+type IgStatus = "checking" | "found" | "missing";
 
 export function App() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [settingsDirty, setSettingsDirty] = useState(false);
-  const [saveFlash, setSaveFlash] = useState(false);
-  const [igStatus, setIgStatus] = useState<IgStatus>({ kind: "checking" });
-  const [sendStatus, setSendStatus] = useState<SendStatus>({ kind: "idle" });
+  const [apiUrl, setApiUrl] = useState("");
+  const [igStatus, setIgStatus] = useState<IgStatus>("checking");
+  const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
-  // Load saved settings on mount
   useEffect(() => {
-    chrome.storage.local.get(
-      ["panelUrl", "username", "password"],
-      (result) => {
-        setSettings({
-          panelUrl: result["panelUrl"] ?? "",
-          username: result["username"] ?? "admin",
-          password: result["password"] ?? "",
-        });
+    // Load stored API URL
+    chrome.storage.local.get(["apiUrl"], (result) => {
+      setApiUrl((result["apiUrl"] as string | undefined) ?? "");
+    });
+
+    // Check Instagram session
+    chrome.cookies.get(
+      { url: "https://www.instagram.com", name: "sessionid" },
+      (cookie) => {
+        setIgStatus(cookie?.value ? "found" : "missing");
       }
     );
   }, []);
 
-  const checkIgSession = useCallback(async () => {
-    setIgStatus({ kind: "checking" });
-    try {
-      const cookie = await chrome.cookies.get({
-        url: "https://www.instagram.com",
-        name: "sessionid",
-      });
-      if (cookie?.value) {
-        setIgStatus({ kind: "found", cookieValue: cookie.value });
-      } else {
-        setIgStatus({ kind: "missing" });
-      }
-    } catch {
-      setIgStatus({ kind: "missing" });
-    }
-  }, []);
-
-  useEffect(() => {
-    checkIgSession();
-  }, [checkIgSession]);
-
-  function updateSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
-    setSettings((s) => ({ ...s, [key]: value }));
-    setSettingsDirty(true);
+  function handleUrlChange(val: string) {
+    setApiUrl(val);
+    setDirty(true);
+    setSaved(false);
   }
 
-  function saveSettings() {
-    chrome.storage.local.set(settings, () => {
-      setSettingsDirty(false);
-      setSaveFlash(true);
-      setTimeout(() => setSaveFlash(false), 2000);
+  function saveUrl() {
+    const clean = apiUrl.replace(/\/+$/, "");
+    chrome.storage.local.set({ apiUrl: clean }, () => {
+      setApiUrl(clean);
+      setDirty(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     });
   }
 
-  async function sendToPanel() {
-    if (igStatus.kind !== "found") return;
-    const sessionCookie = igStatus.cookieValue;
-    const baseUrl = settings.panelUrl.replace(/\/+$/, "");
-
-    setSendStatus({ kind: "loading", step: "Panel'e bağlanıyor…" });
-
-    try {
-      // Step 1: Login to panel as admin
-      const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          username: settings.username,
-          password: settings.password,
-        }),
-      });
-
-      if (!loginRes.ok) {
-        let msg = "Panel girişi başarısız";
-        try {
-          const body = await loginRes.json();
-          msg = body.error ?? body.message ?? msg;
-        } catch {}
-        setSendStatus({ kind: "error", message: msg });
-        return;
-      }
-
-      // Step 2: Push Instagram session cookie
-      setSendStatus({ kind: "loading", step: "Instagram oturumu gönderiliyor…" });
-
-      const sessionRes = await fetch(`${baseUrl}/api/instagram/session-cookie`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ sessionCookie }),
-      });
-
-      if (!sessionRes.ok) {
-        let msg = "Instagram oturumu gönderilemedi";
-        try {
-          const body = await sessionRes.json();
-          msg = body.error ?? body.message ?? msg;
-        } catch {}
-        setSendStatus({ kind: "error", message: msg });
-        return;
-      }
-
-      const data = await sessionRes.json();
-      setSendStatus({
-        kind: "success",
-        message: data.message ?? "Instagram oturumu panele başarıyla gönderildi!",
-      });
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Bağlantı hatası — Panel URL'sini kontrol edin.";
-      setSendStatus({ kind: "error", message: msg });
-    }
+  function openPanel() {
+    chrome.tabs.create({ url: chrome.runtime.getURL("panel.html") });
+    window.close();
   }
 
-  const canSend =
-    igStatus.kind === "found" &&
-    settings.panelUrl.trim() !== "" &&
-    settings.username.trim() !== "" &&
-    settings.password.trim() !== "" &&
-    sendStatus.kind !== "loading";
+  function openInstagram() {
+    chrome.tabs.create({ url: "https://www.instagram.com/accounts/login/" });
+    window.close();
+  }
+
+  const igColor =
+    igStatus === "found" ? "#22c55e" : igStatus === "checking" ? "#eab308" : "#ef4444";
+  const igLabel =
+    igStatus === "found"
+      ? "Instagram oturumu aktif ✓"
+      : igStatus === "checking"
+      ? "Kontrol ediliyor…"
+      : "Giriş yapılmamış";
 
   return (
     <div style={s.root}>
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={s.header}>
-        <span style={s.logo}>🎯</span>
-        <div>
-          <div style={s.headerTitle}>Takipçi Paneli</div>
-          <div style={s.headerSub}>Tarayıcı Eklentisi</div>
-        </div>
+        <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+          <defs>
+            <radialGradient id="ig" cx="30%" cy="107%" r="150%">
+              <stop offset="0%" stopColor="#fdf497" />
+              <stop offset="45%" stopColor="#fd5949" />
+              <stop offset="60%" stopColor="#d6249f" />
+              <stop offset="90%" stopColor="#285AEB" />
+            </radialGradient>
+          </defs>
+          <rect width="32" height="32" rx="8" fill="url(#ig)" />
+          <rect x="9" y="9" width="14" height="14" rx="4.5" stroke="white" strokeWidth="2" fill="none" />
+          <circle cx="16" cy="16" r="3.5" stroke="white" strokeWidth="2" />
+          <circle cx="23" cy="9" r="1.2" fill="white" />
+        </svg>
+        <span style={s.headerTitle}>Takipçi Paneli</span>
       </div>
 
-      {/* ── Instagram Status ── */}
-      <section style={s.section}>
-        <div style={s.sectionLabel}>Instagram Durumu</div>
-        <div style={s.row}>
-          <span
-            style={{
-              ...s.dot,
-              background:
-                igStatus.kind === "found"
-                  ? "#22c55e"
-                  : igStatus.kind === "checking"
-                  ? "#eab308"
-                  : "#ef4444",
-            }}
-          />
-          <span style={s.statusText}>
-            {igStatus.kind === "checking"
-              ? "Kontrol ediliyor…"
-              : igStatus.kind === "found"
-              ? "Aktif oturum bulundu ✓"
-              : "Oturum bulunamadı — önce Instagram'a giriş yapın"}
-          </span>
-          <button onClick={checkIgSession} style={s.iconBtn} title="Yenile">
-            ↻
-          </button>
-        </div>
-        {igStatus.kind === "missing" && (
-          <a
-            href="https://www.instagram.com"
-            target="_blank"
-            rel="noreferrer"
-            style={s.link}
-          >
-            Instagram'a git →
-          </a>
-        )}
-      </section>
+      {/* Instagram status */}
+      <div style={s.row}>
+        <span style={{ ...s.dot, background: igColor }} />
+        <span style={s.statusText}>{igLabel}</span>
+      </div>
 
-      {/* ── Panel Settings ── */}
-      <section style={s.section}>
-        <div style={s.sectionLabel}>Panel Bağlantısı</div>
-
-        <label style={s.label}>Panel URL</label>
-        <input
-          style={s.input}
-          type="url"
-          placeholder="https://xxxx.replit.dev"
-          value={settings.panelUrl}
-          onChange={(e) => updateSetting("panelUrl", e.target.value)}
-          spellCheck={false}
-        />
-
-        <label style={s.label}>Kullanıcı Adı</label>
-        <input
-          style={s.input}
-          type="text"
-          placeholder="admin"
-          value={settings.username}
-          onChange={(e) => updateSetting("username", e.target.value)}
-          autoComplete="off"
-        />
-
-        <label style={s.label}>Şifre</label>
-        <input
-          style={s.input}
-          type="password"
-          placeholder="••••••••"
-          value={settings.password}
-          onChange={(e) => updateSetting("password", e.target.value)}
-          autoComplete="current-password"
-        />
-
-        <button
-          onClick={saveSettings}
-          style={{
-            ...s.saveBtn,
-            ...(saveFlash ? s.saveBtnFlash : {}),
-          }}
-        >
-          {saveFlash ? "✓ Kaydedildi" : settingsDirty ? "Kaydet *" : "Kaydedildi"}
+      {igStatus === "missing" && (
+        <button onClick={openInstagram} style={s.linkBtn}>
+          Instagram'da Giriş Yap →
         </button>
-      </section>
+      )}
 
-      {/* ── Send Button ── */}
+      <div style={s.divider} />
+
+      {/* API URL */}
+      <div style={s.label}>API Sunucu URL</div>
+      <input
+        style={s.input}
+        type="url"
+        placeholder="https://xxxx.replit.dev"
+        value={apiUrl}
+        onChange={(e) => handleUrlChange(e.target.value)}
+        spellCheck={false}
+      />
+      <div style={s.hint}>Panelin çalıştığı Replit URL'si</div>
+
       <button
-        onClick={sendToPanel}
-        disabled={!canSend}
-        style={{ ...s.sendBtn, opacity: canSend ? 1 : 0.45 }}
+        onClick={saveUrl}
+        disabled={!dirty}
+        style={{
+          ...s.saveBtn,
+          ...(saved ? s.saveBtnOk : {}),
+          opacity: dirty || saved ? 1 : 0.45,
+        }}
       >
-        {sendStatus.kind === "loading"
-          ? sendStatus.step
-          : "Oturumu Panele Gönder"}
+        {saved ? "✓ Kaydedildi" : "Kaydet"}
       </button>
 
-      {/* ── Result ── */}
-      {sendStatus.kind === "success" && (
-        <div style={{ ...s.alert, ...s.alertSuccess }}>{sendStatus.message}</div>
-      )}
-      {sendStatus.kind === "error" && (
-        <div style={{ ...s.alert, ...s.alertError }}>{sendStatus.message}</div>
-      )}
+      <div style={s.divider} />
 
-      {sendStatus.kind !== "idle" && sendStatus.kind !== "loading" && (
-        <button
-          onClick={() => setSendStatus({ kind: "idle" })}
-          style={s.resetBtn}
-        >
-          Temizle
-        </button>
-      )}
+      {/* Open panel */}
+      <button onClick={openPanel} style={s.openBtn}>
+        Paneli Aç →
+      </button>
     </div>
   );
 }
@@ -275,47 +131,27 @@ export function App() {
 
 const s: Record<string, React.CSSProperties> = {
   root: {
-    width: 340,
-    minHeight: 400,
+    width: 300,
     background: "#0f0f0f",
-    color: "#f5f5f5",
+    color: "#f0f0f0",
     fontFamily: "'Segoe UI', system-ui, sans-serif",
     fontSize: 13,
-    padding: 0,
+    padding: "14px 16px",
     boxSizing: "border-box",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
   },
   header: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
-    padding: "14px 16px 12px",
-    background: "linear-gradient(135deg, #1a1a1a 0%, #111 100%)",
-    borderBottom: "1px solid #222",
-  },
-  logo: {
-    fontSize: 24,
+    gap: 8,
+    marginBottom: 2,
   },
   headerTitle: {
     fontWeight: 700,
     fontSize: 15,
-    letterSpacing: "-0.3px",
-  },
-  headerSub: {
-    color: "#666",
-    fontSize: 11,
-    marginTop: 1,
-  },
-  section: {
-    padding: "12px 16px",
-    borderBottom: "1px solid #1e1e1e",
-  },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: 600,
-    textTransform: "uppercase",
-    letterSpacing: "0.8px",
-    color: "#555",
-    marginBottom: 8,
+    letterSpacing: "-0.2px",
   },
   row: {
     display: "flex",
@@ -329,33 +165,31 @@ const s: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   statusText: {
-    flex: 1,
     color: "#ccc",
     fontSize: 12,
   },
-  iconBtn: {
+  linkBtn: {
     background: "none",
     border: "none",
-    color: "#555",
-    fontSize: 15,
-    cursor: "pointer",
-    padding: "2px 4px",
-    borderRadius: 4,
-    lineHeight: 1,
-  },
-  link: {
-    display: "inline-block",
-    marginTop: 6,
     color: "#c13584",
     fontSize: 12,
-    textDecoration: "none",
+    cursor: "pointer",
+    padding: 0,
+    textAlign: "left",
+    textDecoration: "underline",
+  },
+  divider: {
+    height: 1,
+    background: "#1e1e1e",
+    margin: "2px 0",
   },
   label: {
-    display: "block",
-    color: "#666",
     fontSize: 11,
-    marginBottom: 3,
-    marginTop: 8,
+    fontWeight: 600,
+    color: "#555",
+    textTransform: "uppercase",
+    letterSpacing: "0.6px",
+    marginBottom: -4,
   },
   input: {
     display: "block",
@@ -369,8 +203,12 @@ const s: Record<string, React.CSSProperties> = {
     boxSizing: "border-box",
     outline: "none",
   },
+  hint: {
+    fontSize: 10,
+    color: "#444",
+    marginTop: -4,
+  },
   saveBtn: {
-    marginTop: 10,
     background: "#1e1e1e",
     border: "1px solid #333",
     borderRadius: 6,
@@ -378,17 +216,15 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 12,
     padding: "6px 14px",
     cursor: "pointer",
+    alignSelf: "flex-start",
     transition: "all 0.15s",
   },
-  saveBtnFlash: {
+  saveBtnOk: {
     borderColor: "#22c55e",
     color: "#22c55e",
   },
-  sendBtn: {
-    display: "block",
-    width: "calc(100% - 32px)",
-    margin: "12px 16px 0",
-    background: "linear-gradient(135deg, #c13584, #e1306c, #fd1d1d)",
+  openBtn: {
+    background: "linear-gradient(135deg, #c13584, #e1306c, #fd5949)",
     border: "none",
     borderRadius: 8,
     color: "#fff",
@@ -396,34 +232,7 @@ const s: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     padding: "11px 0",
     cursor: "pointer",
+    width: "100%",
     transition: "opacity 0.15s",
-  },
-  alert: {
-    margin: "10px 16px 0",
-    padding: "9px 12px",
-    borderRadius: 7,
-    fontSize: 12,
-    lineHeight: 1.5,
-  },
-  alertSuccess: {
-    background: "#0d2d1a",
-    border: "1px solid #166534",
-    color: "#86efac",
-  },
-  alertError: {
-    background: "#2d0d0d",
-    border: "1px solid #991b1b",
-    color: "#fca5a5",
-  },
-  resetBtn: {
-    display: "block",
-    margin: "6px 16px 12px auto",
-    background: "none",
-    border: "none",
-    color: "#444",
-    fontSize: 11,
-    cursor: "pointer",
-    textDecoration: "underline",
-    padding: 0,
   },
 };

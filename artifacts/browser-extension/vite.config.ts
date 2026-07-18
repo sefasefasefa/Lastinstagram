@@ -4,15 +4,15 @@ import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 import { defineConfig } from "vite";
 
-const PANEL_SRC = path.resolve(import.meta.dirname, "../takipci-paneli/src");
+const EXT_SRC = path.resolve(import.meta.dirname, "src");
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: './',
   resolve: {
     alias: {
-      // Point @ to the panel's src so extension pages can import pages/components directly
-      "@": PANEL_SRC,
+      // @ resolves to the extension's own src directory
+      "@": EXT_SRC,
       "@assets": path.resolve(import.meta.dirname, "../../attached_assets"),
     },
     dedupe: ["react", "react-dom"],
@@ -22,10 +22,10 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        // Full-page panel (replaces the old popup as the primary UI)
+        // Full-page panel (primary UI)
         panel: resolve(import.meta.dirname, "panel.html"),
-        // Keep popup build so the file exists (manifest no longer references it)
-        popup: resolve(import.meta.dirname, "src/popup/index.html"),
+        // Popup shown when the toolbar icon is clicked
+        popup: resolve(import.meta.dirname, "popup.html"),
         background: resolve(import.meta.dirname, "src/background.ts"),
       },
       output: {

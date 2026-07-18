@@ -1,5 +1,3 @@
-/* Single CSS entry for the extension panel.
-   @source must be in the same compilation as @import 'tailwindcss'
-   (which lives inside index.css), so we bundle them here together. */
-@source "../../../takipci-paneli/src";
-@import "../../../takipci-paneli/src/index.css";
+/* Single CSS entry for the extension panel. */
+@source "..";
+@import "../index.css";
