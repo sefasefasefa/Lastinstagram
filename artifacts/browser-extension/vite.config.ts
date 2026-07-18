@@ -26,7 +26,10 @@ export default defineConfig({
         panel: resolve(import.meta.dirname, "panel.html"),
         // Popup shown when the toolbar icon is clicked
         popup: resolve(import.meta.dirname, "popup.html"),
+        // Background service worker
         background: resolve(import.meta.dirname, "src/background.ts"),
+        // Content script — instagram.com sekmelerinde çalışır, API proxy görevi görür
+        "content-script": resolve(import.meta.dirname, "src/content-script.ts"),
       },
       output: {
         entryFileNames: "[name].js",

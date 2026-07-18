@@ -21,7 +21,14 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["cookies", "storage", "tabs", "windows"],
+  "content_scripts": [
+    {
+      "matches": ["*://*.instagram.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["cookies", "storage", "tabs", "windows", "scripting"],
   "host_permissions": ["*://*.instagram.com/*", "<all_urls>"],
   "browser_specific_settings": {
     "gecko": {
