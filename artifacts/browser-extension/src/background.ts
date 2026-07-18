@@ -106,6 +106,51 @@ chrome.cookies.onChanged.addListener((changeInfo) => {
   });
 });
 
+// ─── Oturum canlı tutma (keepalive) ──────────────────────────────────────────
+// Her 20 dakikada bir Instagram'a hafif bir API isteği atılır.
+// Bu, sunucu tarafında oturum süresini sıfırlar ve cookie'lerin geçerliliğini korur.
+
+const KEEPALIVE_ALARM = 'ig-keepalive';
+const KEEPALIVE_MINUTES = 20;
+
+// Service worker başladığında alarm kur (kaybolmuşsa yeniden oluşturur)
+chrome.alarms.get(KEEPALIVE_ALARM, (existing) => {
+  if (!existing) {
+    chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: KEEPALIVE_MINUTES });
+  }
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: KEEPALIVE_MINUTES });
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== KEEPALIVE_ALARM) return;
+
+  // Aktif oturum yoksa atla
+  chrome.cookies.get(
+    { url: 'https://www.instagram.com', name: 'sessionid' },
+    (cookie) => {
+      if (!cookie?.value) return;
+
+      // Açık bir Instagram sekmesi varsa üzerinden istek yap
+      chrome.tabs.query({ url: '*://*.instagram.com/*' }, (tabs) => {
+        const tab = tabs.find((t) => t.id != null && t.status === 'complete');
+        if (!tab?.id) return;
+
+        chrome.tabs.sendMessage(
+          tab.id,
+          { type: 'IG_FETCH', endpoint: '/api/v1/accounts/current_user/', method: 'GET' },
+          () => {
+            // Yanıt önemli değil — sadece oturumu canlı tutmak için atılıyor
+            void chrome.runtime.lastError;
+          },
+        );
+      });
+    },
+  );
+});
+
 // ─── Toolbar tıklaması ────────────────────────────────────────────────────────
 chrome.action.onClicked.addListener(() => {
   const panelUrl = chrome.runtime.getURL('panel.html');

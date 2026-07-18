@@ -28,7 +28,7 @@
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["cookies", "storage", "tabs", "windows", "scripting"],
+  "permissions": ["cookies", "storage", "tabs", "windows", "scripting", "alarms"],
   "host_permissions": ["*://*.instagram.com/*", "<all_urls>"],
   "browser_specific_settings": {
     "gecko": {
