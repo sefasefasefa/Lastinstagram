@@ -17,15 +17,9 @@
     "default_title": "Takipçi Paneli"
   },
   "background": {
-    "scripts": ["background.js"],
+    "service_worker": "background.js",
     "type": "module"
   },
   "permissions": ["cookies", "storage", "tabs", "windows"],
-  "host_permissions": ["*://*.instagram.com/*", "<all_urls>"],
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "takipci-paneli@extension",
-      "strict_min_version": "128.0"
-    }
-  }
+  "host_permissions": ["*://*.instagram.com/*", "<all_urls>"]
 }

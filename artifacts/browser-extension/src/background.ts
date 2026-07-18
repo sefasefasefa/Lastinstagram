@@ -3,12 +3,14 @@
 chrome.action.onClicked.addListener(() => {
   const panelUrl = chrome.runtime.getURL('panel.html');
 
-  // If a panel tab is already open, focus it instead of opening a duplicate.
-  chrome.tabs.query({ url: panelUrl }, (existing) => {
-    if (existing.length > 0 && existing[0].id != null) {
-      chrome.tabs.update(existing[0].id, { active: true });
-      if (existing[0].windowId != null) {
-        chrome.windows.update(existing[0].windowId, { focused: true });
+  // Query ALL tabs and filter by URL so this works on Firefox (moz-extension://)
+  // and Chrome/Edge (chrome-extension://) — the URL scheme differs per browser.
+  chrome.tabs.query({}, (allTabs) => {
+    const existing = allTabs.find((t) => t.url === panelUrl);
+    if (existing?.id != null) {
+      chrome.tabs.update(existing.id, { active: true });
+      if (existing.windowId != null) {
+        chrome.windows.update(existing.windowId, { focused: true });
       }
     } else {
       chrome.tabs.create({ url: panelUrl });

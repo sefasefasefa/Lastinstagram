@@ -11,10 +11,16 @@ title = "Takipçi Paneli - Proje Kodu (mevcut hali)"
 id = "HBuJ40gZ-xc0c22zw5-YT"
 uri = "file://artifacts/browser-extension/dist/takipci-paneli-chrome.zip"
 type = "unspecified"
-title = "Takipçi Paneli — Chrome Eklentisi"
+title = "Chrome Eklentisi"
 
 [[outputs]]
 id = "xfCRxXlAIxGbFcHPgd4ah"
 uri = "file://artifacts/browser-extension/dist/takipci-paneli-firefox.zip"
 type = "unspecified"
-title = "Takipçi Paneli — Firefox Eklentisi"
+title = "Firefox Eklentisi"
+
+[[outputs]]
+id = "vdh5kCnXoGi3ATDYjHCVE"
+uri = "file://artifacts/browser-extension/dist/takipci-paneli-edge.zip"
+type = "unspecified"
+title = "Edge Eklentisi"

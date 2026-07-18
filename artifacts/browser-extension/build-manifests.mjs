@@ -1,8 +1,8 @@
 /**
  * Post-Vite build step.
- * 1. Copies dist/shared/ → dist/chrome/ and dist/firefox/
+ * 1. Copies dist/shared/ → dist/chrome/, dist/edge/, dist/firefox/
  * 2. Writes the correct manifest.json into each directory
- * 3. Creates zip archives: dist/takipci-paneli-chrome.zip and dist/takipci-paneli-firefox.zip
+ * 3. Creates zip archives for all three browsers
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -13,10 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, "dist");
 const sharedDir = path.join(distDir, "shared");
 
-// Copy public assets (icons) that Vite puts in dist/shared/
-// (they're already there from the Vite public/ copy)
-
-for (const browser of ["chrome", "firefox"]) {
+for (const browser of ["chrome", "edge", "firefox"]) {
   const outDir = path.join(distDir, browser);
 
   // Clean and recreate
