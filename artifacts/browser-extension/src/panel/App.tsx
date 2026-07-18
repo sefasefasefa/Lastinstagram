@@ -70,7 +70,7 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
   }, [phase, tryConnect]);
 
   const openInstagram = () =>
-    chrome.tabs.create({ url: 'https://www.instagram.com/accounts/login/' });
+    chrome.tabs.create({ url: 'https://www.instagram.com/' });
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
