@@ -31,7 +31,7 @@ for (const browser of ["chrome", "edge", "firefox"]) {
   fs.writeFileSync(path.join(outDir, "manifest.json"), manifest);
 
   // Create zip
-  const zipName = `takipci-paneli-${browser}.zip`;
+  const zipName = browser === "edge" ? "paneledge.zip" : `takipci-paneli-${browser}.zip`;
   const zipPath = path.join(distDir, zipName);
   if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
   execSync(`cd "${outDir}" && zip -r "${zipPath}" .`, { stdio: "inherit" });

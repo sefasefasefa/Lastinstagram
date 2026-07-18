@@ -24,3 +24,9 @@ id = "vdh5kCnXoGi3ATDYjHCVE"
 uri = "file://artifacts/browser-extension/dist/takipci-paneli-edge.zip"
 type = "unspecified"
 title = "Edge Eklentisi"
+
+[[outputs]]
+id = "cfpfSIbMCZWa7BOvuF2kU"
+uri = "file://artifacts/browser-extension/dist/paneledge.zip"
+type = "unspecified"
+title = "Edge Eklentisi (paneledge)"
