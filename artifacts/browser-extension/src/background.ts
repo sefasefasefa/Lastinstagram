@@ -1,26 +1,47 @@
-// ─── Instagram API proxy ──────────────────────────────────────────────────────
-// Content script (instagram.com'da çalışan) üzerinden istek yapılır.
-// Böylece browser'ın gerçek cookie'leri otomatik eklenir.
-
+// ─── Instagram tab bulma ──────────────────────────────────────────────────────
 async function getInstagramTabId(): Promise<number> {
+  // Herhangi bir instagram.com sekmesi — login sayfası da dahil (cookie henüz orada set edilmiş olabilir)
   const tabs = await chrome.tabs.query({ url: '*://*.instagram.com/*' });
-  const tab = tabs.find((t) => t.id != null && !t.url?.includes('accounts/login'));
-  if (tab?.id != null) return tab.id;
+  const ready = tabs.find((t) => t.id != null && t.status === 'complete');
+  if (ready?.id != null) return ready.id;
 
-  // Açık sekme yok — arka planda bir tane aç, yüklenince kullan
+  // Yüklenme devam eden sekme
+  const loading = tabs.find((t) => t.id != null);
+  if (loading?.id != null) {
+    // Yüklenip bitmesini bekle
+    await new Promise<void>((resolve) => {
+      const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
+        if (id !== loading.id || info.status !== 'complete') return;
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      // 5 sn timeout
+      setTimeout(resolve, 5000);
+    });
+    return loading.id!;
+  }
+
+  // Hiç Instagram sekmesi yok — arka planda aç
   return new Promise((resolve, reject) => {
-    chrome.tabs.create({ url: 'https://www.instagram.com/', active: false }, (newTab) => {
-      if (!newTab.id) return reject(new Error('Sekme açılamadı'));
-      const tabId = newTab.id;
+    chrome.tabs.create({ url: 'https://www.instagram.com/', active: false }, (tab) => {
+      if (!tab.id) return reject(new Error('Sekme açılamadı'));
+      const tabId = tab.id;
       const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
         if (id !== tabId || info.status !== 'complete') return;
         chrome.tabs.onUpdated.removeListener(listener);
         resolve(tabId);
       };
       chrome.tabs.onUpdated.addListener(listener);
+      setTimeout(() => reject(new Error('Sekme zaman aşımı')), 15000);
     });
   });
 }
+
+// ─── Instagram API proxy ──────────────────────────────────────────────────────
+// executeScript ile doğrudan Instagram sekmesi içinde çalıştırılır.
+// Bu sayede sayfanın gerçek cookie'leri ile fetch yapılır — timing veya
+// sendMessage sorunları olmaz.
 
 async function igFetch(
   endpoint: string,
@@ -30,41 +51,57 @@ async function igFetch(
 ) {
   const tabId = await getInstagramTabId();
 
-  return new Promise<unknown>((resolve, reject) => {
-    chrome.tabs.sendMessage(
-      tabId,
-      { type: 'IG_FETCH', endpoint, params, method, body },
-      (res: { ok: boolean; data?: unknown; error?: string } | undefined) => {
-        if (chrome.runtime.lastError) {
-          // Content script henüz enjekte edilmemiş olabilir — programatik inject et
-          chrome.scripting
-            .executeScript({
-              target: { tabId },
-              files: ['content-script.js'],
-            })
-            .then(() => {
-              chrome.tabs.sendMessage(
-                tabId,
-                { type: 'IG_FETCH', endpoint, params, method, body },
-                (res2: { ok: boolean; data?: unknown; error?: string } | undefined) => {
-                  if (chrome.runtime.lastError) {
-                    reject(new Error(chrome.runtime.lastError.message));
-                  } else if (res2?.ok) {
-                    resolve(res2.data);
-                  } else {
-                    reject(new Error(res2?.error ?? 'Bilinmeyen hata'));
-                  }
-                },
-              );
-            })
-            .catch(reject);
-          return;
-        }
-        if (res?.ok) resolve(res.data);
-        else reject(new Error(res?.error ?? 'Bilinmeyen hata'));
-      },
-    );
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    // Bu fonksiyon doğrudan Instagram sekmesinin içinde çalışır
+    func: async (
+      ep: string,
+      ps: Record<string, string> | undefined,
+      meth: string,
+      bd: Record<string, string> | null,
+    ) => {
+      const csrf =
+        document.cookie
+          .split(';')
+          .find((c) => c.trim().startsWith('csrftoken='))
+          ?.split('=')[1] ?? '';
+
+      let url = `https://www.instagram.com${ep}`;
+      if (ps && Object.keys(ps).length > 0) {
+        url += '?' + new URLSearchParams(ps).toString();
+      }
+
+      const headers: Record<string, string> = {
+        'X-CSRFToken': csrf,
+        'X-IG-App-ID': '936619743392459',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': '*/*',
+        'Referer': 'https://www.instagram.com/',
+      };
+
+      if (bd) headers['Content-Type'] = 'application/x-www-form-urlencoded';
+
+      const res = await fetch(url, {
+        method: meth,
+        credentials: 'include',
+        headers,
+        body: bd ? new URLSearchParams(bd).toString() : undefined,
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} — ${text.slice(0, 200)}`);
+      }
+
+      return res.json() as unknown;
+    },
+    args: [endpoint, params ?? null, method, body ?? null],
   });
+
+  const r = results[0];
+  if (!r) throw new Error('executeScript sonuç dönmedi');
+  if ('error' in r && r.error) throw new Error(String((r.error as Error).message ?? r.error));
+  return r.result;
 }
 
 // ─── Mesaj dinleyici (panel → background) ─────────────────────────────────────
@@ -83,6 +120,56 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
+// ─── Oturum canlı tutma (keepalive) ──────────────────────────────────────────
+const KEEPALIVE_ALARM = 'ig-keepalive';
+
+chrome.alarms.get(KEEPALIVE_ALARM, (existing) => {
+  if (!existing) chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 20 });
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 20 });
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== KEEPALIVE_ALARM) return;
+
+  chrome.cookies.get(
+    { url: 'https://www.instagram.com', name: 'sessionid' },
+    (cookie) => {
+      if (!cookie?.value) return;
+
+      // Sadece zaten açık olan sekme varsa keepalive yap — yeni sekme açma
+      chrome.tabs.query({ url: '*://*.instagram.com/*' }, (tabs) => {
+        const tab = tabs.find((t) => t.id != null && t.status === 'complete');
+        if (!tab?.id) return;
+
+        chrome.scripting
+          .executeScript({
+            target: { tabId: tab.id },
+            func: async () => {
+              const csrf =
+                document.cookie
+                  .split(';')
+                  .find((c) => c.trim().startsWith('csrftoken='))
+                  ?.split('=')[1] ?? '';
+              await fetch('https://www.instagram.com/api/v1/accounts/current_user/', {
+                credentials: 'include',
+                headers: {
+                  'X-CSRFToken': csrf,
+                  'X-IG-App-ID': '936619743392459',
+                  'X-Requested-With': 'XMLHttpRequest',
+                },
+              });
+            },
+            args: [],
+          })
+          .catch(() => {}); // sessizce geç
+      });
+    },
+  );
+});
+
 // ─── Instagram oturumu izleyici ───────────────────────────────────────────────
 chrome.cookies.onChanged.addListener((changeInfo) => {
   const { cookie, removed } = changeInfo;
@@ -97,58 +184,11 @@ chrome.cookies.onChanged.addListener((changeInfo) => {
     const existing = allTabs.find((t) => t.url === panelUrl);
     if (existing?.id != null) {
       chrome.tabs.update(existing.id, { active: true });
-      if (existing.windowId != null) {
-        chrome.windows.update(existing.windowId, { focused: true });
-      }
+      if (existing.windowId != null) chrome.windows.update(existing.windowId, { focused: true });
     } else {
       chrome.tabs.create({ url: panelUrl });
     }
   });
-});
-
-// ─── Oturum canlı tutma (keepalive) ──────────────────────────────────────────
-// Her 20 dakikada bir Instagram'a hafif bir API isteği atılır.
-// Bu, sunucu tarafında oturum süresini sıfırlar ve cookie'lerin geçerliliğini korur.
-
-const KEEPALIVE_ALARM = 'ig-keepalive';
-const KEEPALIVE_MINUTES = 20;
-
-// Service worker başladığında alarm kur (kaybolmuşsa yeniden oluşturur)
-chrome.alarms.get(KEEPALIVE_ALARM, (existing) => {
-  if (!existing) {
-    chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: KEEPALIVE_MINUTES });
-  }
-});
-
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: KEEPALIVE_MINUTES });
-});
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== KEEPALIVE_ALARM) return;
-
-  // Aktif oturum yoksa atla
-  chrome.cookies.get(
-    { url: 'https://www.instagram.com', name: 'sessionid' },
-    (cookie) => {
-      if (!cookie?.value) return;
-
-      // Açık bir Instagram sekmesi varsa üzerinden istek yap
-      chrome.tabs.query({ url: '*://*.instagram.com/*' }, (tabs) => {
-        const tab = tabs.find((t) => t.id != null && t.status === 'complete');
-        if (!tab?.id) return;
-
-        chrome.tabs.sendMessage(
-          tab.id,
-          { type: 'IG_FETCH', endpoint: '/api/v1/accounts/current_user/', method: 'GET' },
-          () => {
-            // Yanıt önemli değil — sadece oturumu canlı tutmak için atılıyor
-            void chrome.runtime.lastError;
-          },
-        );
-      });
-    },
-  );
 });
 
 // ─── Toolbar tıklaması ────────────────────────────────────────────────────────
@@ -158,9 +198,7 @@ chrome.action.onClicked.addListener(() => {
     const existing = allTabs.find((t) => t.url === panelUrl);
     if (existing?.id != null) {
       chrome.tabs.update(existing.id, { active: true });
-      if (existing.windowId != null) {
-        chrome.windows.update(existing.windowId, { focused: true });
-      }
+      if (existing.windowId != null) chrome.windows.update(existing.windowId, { focused: true });
     } else {
       chrome.tabs.create({ url: panelUrl });
     }
