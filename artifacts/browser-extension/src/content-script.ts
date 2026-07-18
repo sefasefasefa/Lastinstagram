@@ -52,10 +52,8 @@ async function igFetch(
 
 // ─── 1) Kullanıcı verisini çek ve background'a gönder ────────────────────────
 async function pushUserData() {
-  // Sadece oturumlu sayfada çalış
-  const hasCookie = document.cookie.includes('sessionid=');
-  if (!hasCookie) return;
-
+  // sessionid HttpOnly olduğu için document.cookie'de görünmez.
+  // Her zaman isteği dene — giriş yapılmamışsa API 401 döner, sessizce geçilir.
   try {
     const data = (await igFetch('/api/v1/accounts/current_user/?edit=true')) as {
       user?: unknown;
