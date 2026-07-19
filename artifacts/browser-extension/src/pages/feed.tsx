@@ -185,9 +185,11 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
             disabled={loadingIds.has(s.id)}
             onClick={() => {
               if (loadingIds.has(s.id)) return;
-              const storyId = s.id;
-              const current = liked[storyId] ?? false;
-              const next = !current;
+              const storyId  = s.id;
+              const ownerId  = s.ownerId;
+              const takenAt  = s.takenAt;
+              const current  = liked[storyId] ?? false;
+              const next     = !current;
 
               setLiked((prev) => ({ ...prev, [storyId]: next }));
               setLoadingIds((p) => new Set(p).add(storyId));
@@ -198,7 +200,7 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
 
               likeQueue.current = likeQueue.current.then(async () => {
                 try {
-                  if (next) await likeStory(storyId);
+                  if (next) await likeStory(storyId, { ownerId, takenAt });
                   else await unlikeStory(storyId);
                 } catch (e) {
                   setLiked((prev) => ({ ...prev, [storyId]: current }));

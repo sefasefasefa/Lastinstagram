@@ -1,0 +1,94 @@
+1. Web (PC / Browser) API İstekleri
+Tarayıcı üzerinden (Chrome Extension içinde fetch veya background.js kullanarak) istek atacaksan, kullanıcının mevcut oturumundaki cookie ve X-Csrftoken bilgilerini tarayıcı otomatik olarak ekler. Senin sadece doğru adrese doğru payloadu göndermen gerekir.
+
+A. Story Beğenme (Like) API
+Method: POST
+
+URL: [https://www.instagram.com/api/v1/stories/web_create_story_like/](https://www.instagram.com/api/v1/stories/web_create_story_like/)
+
+Headers (Zorunlu):
+
+Content-Type: application/x-www-form-urlencoded
+
+X-Csrftoken: [Mevcut_Session_Token] (Cookie içinden veya window._sharedData üzerinden alınır)
+
+Payload (Body):
+
+Plaintext
+media_id=[STORY_MEDIA_ID]
+(Not: media_id hikayenin benzersiz ID'sidir, örn: 3214567890123456789_123456)
+
+B. Story İzleme (Görüntüleme / Seen) API
+Instagram web sürümünde bir hikayeyi izlediğinde sunucuya "gördüm" sinyali göndermek için bu uç noktayı tetikler:
+
+Method: POST
+
+URL: [https://www.instagram.com/api/v1/stories/seen/](https://www.instagram.com/api/v1/stories/seen/)
+
+Headers (Zorunlu):
+
+Content-Type: application/x-www-form-urlencoded
+
+X-Csrftoken: [Mevcut_Session_Token]
+
+Payload (Body):
+
+Plaintext
+container_module=stories&live_vods_skipped=&seen_reels%5B[HIKAYE_SAHIBI_USER_ID]%5D=[STORY_MEDIA_ID]_[STORY_TAKEN_AT_TIMESTAMP]&nuxes_skipped=&nuxes_seen=&reel_media_skipped=
+2. Mobil (App / Private) API İstekleri
+Mobil API'ları doğrudan tarayıcı eklentisinden taklit etmek neredeyse imkansızdır. Çünkü Instagram mobil uygulaması, isteğin cihazdan gelip gelmediğini doğrulamak için User-Agent kontrolünün yanında özel imzalama (App-Version, X-IG-Connection-Type vb.) başlıkları ister. Eğer eklenti yerine Python/Node.js ile bir backend botu yazıyorsan bu uç noktaları kullanabilirsin.
+
+A. Story Beğenme (Like) API
+Method: POST
+
+URL: [https://i.instagram.com/api/v1/stories/create_story_like/](https://i.instagram.com/api/v1/stories/create_story_like/)
+
+Headers (Mobil spesifik):
+
+User-Agent: Instagram 310.0.0.34.114 Android (29/10; 480dpi; ...)
+
+X-IG-Capabilities: 3brTvw==
+
+Authorization: Bearer [Oturum_Tokeni]
+
+Payload (JSON):
+
+JSON
+{
+  "media_id": "[STORY_MEDIA_ID]",
+  "_uuid": "[CIHAZ_UUID]",
+  "_uid": "[KULLANICI_USER_ID]"
+}
+B. Story İzleme (Seen) API
+Method: POST
+
+URL: [https://i.instagram.com/api/v1/stories/seen/](https://i.instagram.com/api/v1/stories/seen/)
+
+Payload (JSON):
+
+JSON
+{
+  "reels": {
+    "[HIKAYE_SAHIBI_USER_ID]": [
+      "[STORY_MEDIA_ID]_[STORY_TAKEN_AT_TIMESTAMP]"
+    ]
+  },
+  "container_module": "self_story",
+  "_uuid": "[CIHAZ_UUID]",
+  "live_vods_skipped": {},
+  "nuxes_skipped": {},
+  "nuxes_seen": {},
+  "reel_media_skipped": {}
+}
+⚠️ Chrome Eklentin İçin Kritik Strateji
+Madem bir Chrome eklentisi (Extension) yazıyorsun, Mobil API'ları tamamen unut. Tarayıcı içinden mobil API'larına istek atmaya çalışırsan Instagram bunu anında şüpheli işlem (Spam/Bot) olarak işaretler ve hesabı doğrulamaya düşürür ya da kapatır.
+
+Senin durumunda en temiz ve hesabı riske atmayan yöntem Web API (Yöntem 1) üzerinden gitmektir.
+
+Eklentinde DOM'a tıklatmak yerine arka planda isteği tetiklemek istiyorsan yapman gereken akış:
+
+Açık olan Instagram tab sayfasındaki çerezlerden (Cookies) csrftoken değerini al.
+
+İzlenen hikayenin media_id bilgisini DOM'dan ya da sayfa kaynağındaki window.__additionalDataLoaded objesinden çek.
+
+Eklentinin background.js (Service Worker) dosyasından yukarıda verdiğim 1-A uç noktasına fetch ile istek at.
