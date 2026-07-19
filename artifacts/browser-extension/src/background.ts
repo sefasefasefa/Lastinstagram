@@ -50,23 +50,71 @@ async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unkno
       type AnyObj = Record<string, unknown>;
       const win = window as AnyObj & { require?: (m: string) => AnyObj };
 
-      // ── Token okuma (Meta/Instagram modül sistemi) ──────────────────────────
+      // ── Token okuma ─────────────────────────────────────────────────────────
       let fbDtsg = '', lsd = '', userId = '';
+
+      // Yöntem 1: window.require() — eski layout'larda hâlâ çalışabilir
       try { fbDtsg = (win.require?.('DTSGInitData') as AnyObj | undefined)?.['token'] as string ?? ''; } catch { /* ignore */ }
-      try { lsd = (win.require?.('LSD') as AnyObj | undefined)?.['token'] as string ?? ''; } catch { /* ignore */ }
+      try { lsd   = (win.require?.('LSD')           as AnyObj | undefined)?.['token'] as string ?? ''; } catch { /* ignore */ }
       try {
         const u = win.require?.('CurrentUserInitialData') as AnyObj | undefined;
         userId = String(u?.['USER_ID'] ?? u?.['userId'] ?? '');
       } catch { /* ignore */ }
 
-      // Fallback: window globals taraması
+      // Yöntem 2: __bbox (Meta'nın bootloader bootstrap dizisi)
+      // Format: [["ModuleName", [], {token:"..."}, ...], ...]
+      if (!fbDtsg || !lsd) {
+        try {
+          const bbox = (win as AnyObj & { __bbox?: { require?: unknown[][] } })['__bbox'];
+          for (const item of (bbox?.['require'] ?? []) as unknown[][]) {
+            if (!Array.isArray(item)) continue;
+            const name = item[0];
+            const payload = (item[3] as AnyObj[] | undefined)?.[0] as AnyObj | undefined;
+            if (name === 'DTSGInitData' && payload?.['token']) fbDtsg = payload['token'] as string;
+            if (name === 'LSD'          && payload?.['token']) lsd    = payload['token'] as string;
+            if (name === 'CurrentUserInitialData' && !userId) {
+              userId = String(payload?.['USER_ID'] ?? payload?.['userId'] ?? '');
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Yöntem 3: inline <script> tag'larında regex ile tarama
+      // Instagram, tokenları bootloader veri bloklarında gömer:
+      // "DTSGInitData",[],{"token":"XXXX",...}
+      if (!fbDtsg || !lsd || !userId) {
+        const scripts = Array.from(document.querySelectorAll('script'));
+        for (const s of scripts) {
+          const t = s.textContent ?? '';
+          if (!t) continue;
+          if (!fbDtsg) {
+            const m = t.match(/"DTSGInitData"\s*,\s*\[\s*\]\s*,\s*\{\s*"token"\s*:\s*"([^"]+)"/);
+            if (m) fbDtsg = m[1];
+          }
+          if (!lsd) {
+            const m = t.match(/"LSD"\s*,\s*\[\s*\]\s*,\s*\{\s*"token"\s*:\s*"([^"]+)"/);
+            if (m) lsd = m[1];
+          }
+          if (!userId || userId === '0') {
+            const m = t.match(/"USER_ID"\s*:\s*"(\d+)"/);
+            if (m) userId = m[1];
+          }
+          if (!userId || userId === '0') {
+            const m = t.match(/"viewer_id"\s*:\s*"(\d+)"/);
+            if (m) userId = m[1];
+          }
+          if (fbDtsg && lsd && userId && userId !== '0') break;
+        }
+      }
+
+      // Yöntem 4: window globals taraması (son çare)
       if (!fbDtsg) {
         for (const k of Object.keys(win)) {
           try {
-            const v = (win[k] as AnyObj);
+            const v = win[k] as AnyObj;
             if (v && typeof v === 'object') {
-              if (typeof v['fb_dtsg'] === 'string') { fbDtsg = v['fb_dtsg'] as string; break; }
-              if (typeof v['dtsg'] === 'string') { fbDtsg = v['dtsg'] as string; break; }
+              if (typeof v['fb_dtsg'] === 'string' && v['fb_dtsg']) { fbDtsg = v['fb_dtsg'] as string; break; }
+              if (typeof v['dtsg']    === 'string' && v['dtsg'])    { fbDtsg = v['dtsg']    as string; break; }
             }
           } catch { /* ignore */ }
         }
@@ -75,7 +123,9 @@ async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unkno
         for (const k of Object.keys(win)) {
           try {
             const v = win[k] as AnyObj;
-            if (v && typeof v === 'object' && typeof v['lsd'] === 'string') { lsd = v['lsd'] as string; break; }
+            if (v && typeof v === 'object' && typeof v['lsd'] === 'string' && v['lsd']) {
+              lsd = v['lsd'] as string; break;
+            }
           } catch { /* ignore */ }
         }
       }
@@ -124,7 +174,8 @@ async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unkno
           // Sahte bir userID ile sorgula, viewer.user.pk'yı oku
           const r = await gqlPost('26785645987802781',
             { userID: '1', '__relay_internal__pv__PolarisAIGMAccountLabelEnabledrelayprovider': false });
-          userId = String((r['data'] as AnyObj)?.['viewer']?.['user']?.['pk'] ?? '');
+          const vu = (r['data'] as AnyObj)?.['viewer']?.['user'] as AnyObj | undefined;
+          userId = String(vu?.['pk'] ?? vu?.['fbid_v2'] ?? '');
         } catch { /* ignore */ }
       }
 
@@ -138,7 +189,9 @@ async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unkno
           { userID: userId, '__relay_internal__pv__PolarisAIGMAccountLabelEnabledrelayprovider': false },
           userId);
         const userDict = (r['data'] as AnyObj)?.['xig_user_by_igid_v2']?.['user_dict'] as AnyObj | undefined;
-        if (userDict?.['pk']) return { ok: true, user: userDict };
+        // pk veya fbid_v2 — hangisi varsa normalize et
+        const pkVal = (userDict?.['pk'] ?? userDict?.['fbid_v2']) as string | undefined;
+        if (pkVal) return { ok: true, user: { ...userDict, pk: pkVal } };
         return { ok: false, errors: ['user_dict boş — ' + JSON.stringify(r['data']).slice(0, 120)] };
       } catch (e) {
         return { ok: false, errors: ['GraphQL hatası: ' + (e as Error).message] };
@@ -229,6 +282,16 @@ async function igFetchViaTab(
   return data['data'];
 }
 
+// ─── Sekmenin hâlâ açık olup olmadığını doğrula ──────────────────────────────
+async function isTabAlive(tabId: number): Promise<boolean> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return tab != null && tab.status === 'complete';
+  } catch {
+    return false;
+  }
+}
+
 // ─── Tüm IG API istekleri için ortak giriş noktası ────────────────────────────
 async function igFetch(
   endpoint: string,
@@ -236,16 +299,41 @@ async function igFetch(
   method = 'GET',
   body?: Record<string, string>,
 ): Promise<unknown> {
-  const tabId = await getInstagramTabId();
+  const isTabError = (e: unknown) =>
+    e instanceof Error && (
+      e.message.includes('No tab with id') ||
+      e.message.includes('Cannot access') ||
+      e.message.includes('No frame with id') ||
+      e.message.includes('tab') && e.message.includes('closed')
+    );
 
-  if (endpoint === '/api/v1/accounts/current_user/?edit=true' && method === 'GET') {
-    return getCurrentUserViaTab(tabId);
+  // Sekme al ve gerekirse bir kez taze sekmeyle tekrar dene
+  let tabId = await getInstagramTabId();
+
+  const run = async (tid: number): Promise<unknown> => {
+    if (endpoint === '/api/v1/accounts/current_user/?edit=true' && method === 'GET') {
+      return getCurrentUserViaTab(tid);
+    }
+    let url = endpoint.startsWith('http') ? endpoint : `https://www.instagram.com${endpoint}`;
+    if (params && Object.keys(params).length > 0) url += '?' + new URLSearchParams(params).toString();
+    const bodyStr = body ? new URLSearchParams(body).toString() : null;
+    return igFetchViaTab(tid, url, method, bodyStr);
+  };
+
+  try {
+    // Kullanmadan önce sekmenin hâlâ yaşıyor olduğunu doğrula
+    if (!(await isTabAlive(tabId))) {
+      tabId = await getInstagramTabId();
+    }
+    return await run(tabId);
+  } catch (e) {
+    if (isTabError(e)) {
+      // Sekme kapanmış — taze bir sekme al ve bir kez daha dene
+      tabId = await getInstagramTabId();
+      return run(tabId);
+    }
+    throw e;
   }
-
-  let url = endpoint.startsWith('http') ? endpoint : `https://www.instagram.com${endpoint}`;
-  if (params && Object.keys(params).length > 0) url += '?' + new URLSearchParams(params).toString();
-  const bodyStr = body ? new URLSearchParams(body).toString() : null;
-  return igFetchViaTab(tabId, url, method, bodyStr);
 }
 
 // ─── Mesaj dinleyiciler ───────────────────────────────────────────────────────

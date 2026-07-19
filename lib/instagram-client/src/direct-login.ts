@@ -49,7 +49,7 @@ const IG_APP_ID = "1217981644879628";
  * sürüm çıkışlarında değişebilir ancak eski değerler de kabul edilir.
  */
 const BLOKS_VERSION_ID =
-  "e2004ef1a4f9800e4ab26af7c5bec76dc99c7cf8c6b1f60c3c1bb7b26c58dfca";
+  "5627162f1eec2e00060c8554ba3d5d1931f91be0c89685075a165663278dbd0f";
 
 /**
  * Instagram login akışındaki doğrudan HTTP istekleri için Stealth-Requests

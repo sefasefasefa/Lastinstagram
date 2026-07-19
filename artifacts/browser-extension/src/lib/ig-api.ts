@@ -1,5 +1,6 @@
 export interface IgUser {
   pk: string;
+  fbid_v2?: string;   // Instagram bazı endpoint'lerde pk yerine fbid_v2 döndürür
   username: string;
   full_name: string;
   profile_pic_url: string;
@@ -9,6 +10,18 @@ export interface IgUser {
   biography?: string;
   is_verified?: boolean;
   is_private?: boolean;
+}
+
+/** Instagram'ın pk veya fbid_v2 alanından kullanıcı ID'sini güvenle döndürür. */
+export function resolveUserId(user: IgUser): string {
+  return user.pk || user.fbid_v2 || '';
+}
+
+/** Ham API yanıtını IgUser'a normalize eder — pk eksikse fbid_v2'den doldurur. */
+export function normalizeIgUser(raw: Record<string, unknown>): IgUser | null {
+  const pk = String(raw['pk'] ?? raw['fbid_v2'] ?? '');
+  if (!pk) return null;
+  return { ...(raw as unknown as IgUser), pk };
 }
 
 export interface IgListUser {

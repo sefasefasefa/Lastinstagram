@@ -3,7 +3,7 @@ import { Route, Switch, Redirect } from 'wouter';
 import { useHashLocation } from 'wouter/use-hash-location';
 import { Router as WouterRouter } from 'wouter';
 import { Toaster } from 'sonner';
-import { igApi, getCachedUser, clearCachedUser, hasSession, type IgUser } from '@/lib/ig-api';
+import { igApi, getCachedUser, clearCachedUser, hasSession, normalizeIgUser, type IgUser } from '@/lib/ig-api';
 import DashboardPage from '@/pages/dashboard';
 import NotFound from '@/pages/not-found';
 
@@ -37,8 +37,12 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
     setErrorMsg('');
     try {
       const raw = await igApi<unknown>('/api/v1/accounts/current_user/?edit=true');
-      const user = (raw as Record<string, unknown>)?.['user'] as IgUser | undefined;
-      if (user?.pk) {
+      // Instagram bazı durumlarda user nesnesini doğrudan, bazı durumlarda {user:{...}} içinde döndürür.
+      // Ayrıca pk yerine fbid_v2 kullanabilir — normalizeIgUser her iki durumu da karşılar.
+      const rawObj = raw as Record<string, unknown>;
+      const rawUser = (rawObj?.['user'] ?? rawObj) as Record<string, unknown>;
+      const user = normalizeIgUser(rawUser);
+      if (user) {
         chrome.storage.local.set({ igUser: user, igUserTs: Date.now() });
         onConnected(user);
         return;
