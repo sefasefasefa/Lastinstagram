@@ -1,5 +1,33 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Component, type ReactNode } from 'react';
 import { toast } from 'sonner';
+
+// ─── Hata sınırı — render crash olursa siyah ekran yerine mesaj göster ────────
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center bg-background text-foreground">
+          <svg className="w-10 h-10 text-destructive/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="12" cy="12" r="10" /><path d="M12 8v4m0 4h.01" />
+          </svg>
+          <p className="text-sm font-medium">Bir hata oluştu</p>
+          <p className="text-xs text-muted-foreground break-all">
+            {(this.state.error as Error).message}
+          </p>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="text-xs text-primary hover:underline mt-1"
+          >
+            Tekrar dene
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import {
   getFollowing,
   getUserPosts,
@@ -246,7 +274,8 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
   const [posts, setPosts] = useState<IgPost[]>([]);
   const [reels, setReels] = useState<IgReel[]>([]);
 
-  const [loadingStories, setLoadingStories] = useState(false);
+  // Skeleton'ı hemen göster — stories yüklenmeden önce boş görünmesin
+  const [loadingStories, setLoadingStories] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [loadingReels, setLoadingReels] = useState(false);
 
@@ -315,7 +344,7 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
   ];
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background text-foreground">
       {/* Başlık */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
         <button
@@ -478,7 +507,11 @@ export default function FeedPage({ user }: { user: IgUser }) {
 
   // Kullanıcı içerik görünümü
   if (selected) {
-    return <UserContentView user={selected} onBack={() => setSelected(null)} />;
+    return (
+      <ErrorBoundary key={selected.pk}>
+        <UserContentView user={selected} onBack={() => setSelected(null)} />
+      </ErrorBoundary>
+    );
   }
 
   return (
