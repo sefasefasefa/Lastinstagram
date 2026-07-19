@@ -66,9 +66,9 @@ async function igFetchDirect(
     target: { tabId },
     func: async (
       ep: string,
-      prm: Record<string, string> | undefined,
+      prm: Record<string, string> | null,
       meth: string,
-      bd: Record<string, string> | undefined,
+      bd: Record<string, string> | null,
       csrfToken: string,
     ) => {
       let url = ep.startsWith('http') ? ep : `https://www.instagram.com${ep}`;
@@ -93,7 +93,7 @@ async function igFetchDirect(
       }
       return res.json() as Promise<unknown>;
     },
-    args: [endpoint, params, method, body, csrf],
+    args: [endpoint, params ?? null, method, body ?? null, csrf],
   });
 
   const result = results[0];
