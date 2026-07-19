@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Route, Switch, Redirect } from 'wouter';
 import { useHashLocation } from 'wouter/use-hash-location';
 import { Router as WouterRouter } from 'wouter';
 import { Toaster } from 'sonner';
-import { getCachedUser, clearCachedUser, hasSession, type IgUser } from '@/lib/ig-api';
+import { igApi, getCachedUser, clearCachedUser, hasSession, type IgUser } from '@/lib/ig-api';
 import DashboardPage from '@/pages/dashboard';
 import NotFound from '@/pages/not-found';
 
@@ -29,64 +29,38 @@ function IgLogo() {
 
 // ─── Bağlantı sayfası ─────────────────────────────────────────────────────────
 function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
-  const [phase, setPhase] = useState<'checking' | 'waiting' | 'connecting'>('checking');
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [phase, setPhase] = useState<'checking' | 'no-session' | 'fetching' | 'error'>('checking');
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const attemptRef = useRef(0);
-
-  const tryConnect = useCallback(async () => {
-    const has = await hasSession();
-    if (!has) {
-      setPhase('waiting');
-      return;
-    }
-
-    setPhase('connecting');
-
-    // Storage'da hazır veri var mı?
-    const cached = await getCachedUser();
-    if (cached) {
-      if (pollRef.current) clearInterval(pollRef.current);
-      onConnected(cached);
-      return;
-    }
-
-    // 3 denemeden sonra (≈6 sn) content script'i beklemek yerine
-    // aktif olarak background→content script üzerinden veri çek
-    attemptRef.current += 1;
-    if (attemptRef.current >= 3) {
-      attemptRef.current = 0; // sıfırla, tekrar deneyecek
-      try {
-        const { igApi } = await import('@/lib/ig-api');
-        const data = await igApi<{ user?: import('@/lib/ig-api').IgUser }>(
-          '/api/v1/accounts/current_user/?edit=true',
-        );
-        const user = (data as Record<string, unknown>)?.['user'] as import('@/lib/ig-api').IgUser | undefined;
-        if (user?.pk) {
-          if (pollRef.current) clearInterval(pollRef.current);
-          onConnected(user);
-          return;
-        }
-      } catch (_) {
-        // background/content-script hazır değil, bir sonraki döngüde tekrar denenecek
+  const doFetch = useCallback(async () => {
+    setPhase('fetching');
+    setErrorMsg('');
+    try {
+      const raw = await igApi<unknown>('/api/v1/accounts/current_user/?edit=true');
+      const user = (raw as Record<string, unknown>)?.['user'] as IgUser | undefined;
+      if (user?.pk) {
+        chrome.storage.local.set({ igUser: user, igUserTs: Date.now() });
+        onConnected(user);
+        return;
       }
+      throw new Error('Kullanıcı verisi boş döndü — yanıt: ' + JSON.stringify(raw).slice(0, 120));
+    } catch (err) {
+      setPhase('error');
+      setErrorMsg(err instanceof Error ? err.message : String(err));
     }
   }, [onConnected]);
 
-  // İlk kontrol
-  useEffect(() => { void tryConnect(); }, [tryConnect]);
-
-  // Her 2 sn'de bir storage'ı kontrol et
   useEffect(() => {
-    pollRef.current = setInterval(() => void tryConnect(), 2000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [tryConnect]);
+    hasSession().then((has) => {
+      if (!has) { setPhase('no-session'); return; }
+      void doFetch();
+    });
+  }, [doFetch]);
 
-  // Background'dan anlık push mesajı gelirse hemen bağlan
+  // Cookie izle — login olunca otomatik dene
   useEffect(() => {
     const handler = (msg: { type: string; user?: IgUser }) => {
       if (msg.type === 'IG_USER_UPDATED' && msg.user) {
-        if (pollRef.current) clearInterval(pollRef.current);
         onConnected(msg.user);
       }
     };
@@ -106,32 +80,31 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
             <h1 className="text-xl font-semibold tracking-tight">Takipçi Paneli</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {phase === 'checking' && 'Oturum kontrol ediliyor…'}
-              {phase === 'connecting' && 'Instagram verisi bekleniyor…'}
-              {phase === 'waiting' && 'Instagram\'a giriş yapmanızı bekliyorum'}
+              {phase === 'fetching' && 'Instagram verisi alınıyor…'}
+              {phase === 'no-session' && 'Instagram\'a giriş yapmanızı bekliyorum'}
+              {phase === 'error' && 'Bağlantı hatası'}
             </p>
           </div>
         </div>
 
-        {(phase === 'checking' || phase === 'connecting') && (
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            {phase === 'connecting' && (
-              <div className="rounded-xl border border-border bg-card p-4 text-left space-y-2 w-full">
-                <p className="text-xs text-muted-foreground">
-                  ✅ Instagram oturumu tespit edildi
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  ⏳ instagram.com sekmesinden veri bekleniyor…
-                </p>
-                <p className="text-xs text-muted-foreground font-medium text-foreground mt-1">
-                  instagram.com açık değilse aşağıdan açın:
-                </p>
-              </div>
-            )}
+        {(phase === 'checking' || phase === 'fetching') && (
+          <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin mx-auto" />
+        )}
+
+        {phase === 'error' && (
+          <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-left space-y-3">
+            <p className="text-xs text-destructive font-medium">Hata detayı:</p>
+            <p className="text-xs text-muted-foreground break-all">{errorMsg}</p>
+            <button
+              onClick={doFetch}
+              className="w-full rounded-lg py-2 text-xs font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+            >
+              Tekrar Dene
+            </button>
           </div>
         )}
 
-        {phase === 'waiting' && (
+        {phase === 'no-session' && (
           <div className="rounded-xl border border-border bg-card p-5 text-left space-y-4">
             {[
               'Aşağıdaki butona tıklayın',
@@ -164,9 +137,7 @@ export default function App() {
   useEffect(() => {
     // Storage'da daha önce kaydedilmiş kullanıcı var mı?
     getCachedUser().then((u) => {
-      if (u) { setUser(u); return; }
-      // Yoksa ve session da yoksa → login sayfası
-      hasSession().then((has) => setUser(has ? null : null));
+      setUser(u ?? null);
     });
   }, []);
 
