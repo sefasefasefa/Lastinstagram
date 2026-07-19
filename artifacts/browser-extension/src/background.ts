@@ -257,60 +257,69 @@ async function igGqlMutationViaTab(
         __bbox?: { require?: unknown[][] };
       };
 
-      let fbDtsg = _preFbDtsg, lsd = _preLsd;
+      // *** KRİTİK DÜZELTME: Her zaman sayfadan TAZE token al.
+      // Cache stale olabilir → stale token → Instagram HTML döner → "Oturum süresi dolmuş"
+      let fbDtsg = '', lsd = '';
 
-      // Sayfadan yeniden çek (cachedTokens eksikse veya başarısız olursa)
+      // Yöntem 0: window.require()
+      try {
+        fbDtsg = (win.require?.('DTSGInitData') as AnyObj | undefined)?.['token'] as string ?? '';
+        lsd    = (win.require?.('LSD')           as AnyObj | undefined)?.['token'] as string ?? '';
+      } catch { /* ignore */ }
+
+      // Yöntem 1: __bbox bootloader
       if (!fbDtsg || !lsd) {
-        // Yöntem 0: window.require()
         try {
-          if (!fbDtsg) fbDtsg = (win.require?.('DTSGInitData') as AnyObj | undefined)?.['token'] as string ?? '';
-          if (!lsd)    lsd    = (win.require?.('LSD')           as AnyObj | undefined)?.['token'] as string ?? '';
-        } catch { /* ignore */ }
-
-        // Yöntem 1: __bbox bootloader
-        if (!fbDtsg || !lsd) {
-          try {
-            for (const item of ((win.__bbox?.require ?? []) as unknown[][])) {
-              if (!Array.isArray(item)) continue;
-              const name = item[0] as string;
-              const payload = (item[3] as AnyObj[] | undefined)?.[0] as AnyObj | undefined;
-              if (name === 'DTSGInitData' && payload?.['token']) fbDtsg = payload['token'] as string;
-              if (name === 'LSD'          && payload?.['token']) lsd    = payload['token'] as string;
-              if (fbDtsg && lsd) break;
-            }
-          } catch { /* ignore */ }
-        }
-
-        // Yöntem 2: inline <script> taraması
-        if (!fbDtsg || !lsd) {
-          for (const s of Array.from(document.querySelectorAll('script'))) {
-            const t = s.textContent ?? '';
-            if (!t) continue;
-            if (!fbDtsg) { const m = t.match(/"DTSGInitData"\s*,\s*\[\s*\]\s*,\s*\{\s*"token"\s*:\s*"([^"]+)"/); if (m) fbDtsg = m[1]; }
-            if (!lsd)    { const m = t.match(/"LSD"\s*,\s*\[\s*\]\s*,\s*\{\s*"token"\s*:\s*"([^"]+)"/);         if (m) lsd    = m[1]; }
+          for (const item of ((win.__bbox?.require ?? []) as unknown[][])) {
+            if (!Array.isArray(item)) continue;
+            const name = item[0] as string;
+            const payload = (item[3] as AnyObj[] | undefined)?.[0] as AnyObj | undefined;
+            if (name === 'DTSGInitData' && payload?.['token']) fbDtsg = payload['token'] as string;
+            if (name === 'LSD'          && payload?.['token']) lsd    = payload['token'] as string;
             if (fbDtsg && lsd) break;
           }
+        } catch { /* ignore */ }
+      }
+
+      // Yöntem 2: inline <script> taraması
+      if (!fbDtsg || !lsd) {
+        for (const s of Array.from(document.querySelectorAll('script'))) {
+          const t = s.textContent ?? '';
+          if (!t) continue;
+          if (!fbDtsg) { const m = t.match(/"DTSGInitData"\s*,\s*\[\s*\]\s*,\s*\{\s*"token"\s*:\s*"([^"]+)"/); if (m) fbDtsg = m[1]; }
+          if (!lsd)    { const m = t.match(/"LSD"\s*,\s*\[\s*\]\s*,\s*\{\s*"token"\s*:\s*"([^"]+)"/);         if (m) lsd    = m[1]; }
+          if (fbDtsg && lsd) break;
         }
       }
 
+      // Yöntem 3: önceden kaydedilmiş cache (sayfa henüz yüklenmediyse son çare)
+      if (!fbDtsg) fbDtsg = _preFbDtsg;
+      if (!lsd)    lsd    = _preLsd;
+
       if (!fbDtsg || !lsd) {
-        return { ok: false, error: `Token eksik — fb_dtsg:${!!fbDtsg} lsd:${!!lsd}` };
+        return { ok: false, error: `Token eksik — fb_dtsg:${!!fbDtsg} lsd:${!!lsd}. Instagram sekmesini açın.` };
       }
 
-      const csrf = _preCsrf ||
-        (document.cookie.split(';').find((c) => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? '');
+      // ds_user_id cookie = HAR'da doğrulandı: av = gerçek kullanıcı ID (not "0")
+      const dsUserId = (document.cookie.split(';').find((c) => c.trim().startsWith('ds_user_id='))?.split('=')[1]?.trim()) ?? '';
+      const actorId = dsUserId || _knownActorId || '0';
+
+      const csrf = (document.cookie.split(';').find((c) => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? '') || _preCsrf;
       const jazoest = '2' + String(Array.from(fbDtsg).reduce((s, c) => s + c.charCodeAt(0), 0));
 
-      const actorId = _knownActorId || '0';
       const vars = JSON.parse(variablesJson) as AnyObj;
       const inp = vars['input'] as AnyObj | undefined;
       if (inp && (!inp['actor_id'] || inp['actor_id'] === '__actor_id__')) {
         inp['actor_id'] = actorId;
       }
 
+      // HAR'dan alınan tam parametre seti (av = gerçek ID, dpr, __ccg, __comet_req)
       const body = new URLSearchParams({
         av: actorId,
         __d: 'www', __user: '0', __a: '1',
+        dpr: String(Math.round(window.devicePixelRatio || 1)),
+        __ccg: 'EXCELLENT',
+        __comet_req: '7',
         fb_dtsg: fbDtsg, jazoest, lsd,
         fb_api_caller_class: 'RelayModern',
         fb_api_req_friendly_name: _friendlyName,
@@ -335,8 +344,13 @@ async function igGqlMutationViaTab(
       });
 
       const text = await res.text();
-      if (!text || text.trimStart().startsWith('<'))
-        return { ok: false, error: `HTML yanıt (${res.status}): ${text.slice(0, 120)}` };
+      if (!text || text.trimStart().startsWith('<')) {
+        const lo = text.toLowerCase();
+        const isLogin = lo.includes('log in') || lo.includes('"login"') || lo.includes('login_required') || lo.includes('checkpoint');
+        return { ok: false, error: isLogin
+          ? 'Oturum süresi dolmuş — Instagram\'a yeniden giriş yapın'
+          : `HTML yanıt (${res.status}): ${text.slice(0, 80)}` };
+      }
       try {
         const d = JSON.parse(text) as AnyObj;
         if ((d['errors'] as unknown[] | undefined)?.length)

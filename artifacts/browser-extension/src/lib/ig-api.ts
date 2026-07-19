@@ -248,15 +248,15 @@ export async function getUserReels(
  * HAR: PolarisAPILikePostMutation  →  doc_id=27358573637160660
  */
 export async function likeMedia(mediaId: string): Promise<void> {
-  // Private API — oturum geçerliyse her zaman çalışır
-  const res = await igApi<{ status?: string }>(`/api/v1/media/${mediaId}/like/`, undefined, 'POST', {
-    media_id: mediaId,
-    d: '1',
-  });
-  // Instagram "ok" dışında bir status döndürürse beğeni sunucuya ulaşmamıştır
-  if (res?.status && res.status !== 'ok') {
-    throw new Error(`Beğeni reddedildi (status: ${res.status})`);
-  }
+  // HAR doğrulaması: Instagram web GQL kullanıyor, doc_id=27358573637160660
+  // Her çağrı için benzersiz client_mutation_id — aynı değer göndermek Instagram'ın
+  // deduplikasyon mekanizmasını tetikleyip beğeniyi sessizce reddedebilir.
+  const mutId = String((Date.now() % 9000) + 1000);
+  await igGql(
+    '27358573637160660',
+    { input: { media_id: mediaId, actor_id: '__actor_id__', client_mutation_id: mutId } },
+    'PolarisAPILikePostMutation',
+  );
 }
 
 /**
@@ -266,14 +266,15 @@ export async function likeMedia(mediaId: string): Promise<void> {
  * Başarısız olursa Private API'ye düşer.
  */
 export async function likeStory(mediaId: string): Promise<void> {
+  // HAR'dan doğrulandı: story like = usePolarisStoriesV4LikeMutationLikeMutation
+  // doc_id=26938887309082050, response: {"data":{"xig_send_story_like":{...}}}
   const pureId = mediaId.includes('_') ? mediaId.split('_')[0] : mediaId;
-  const res = await igApi<{ status?: string }>(`/api/v1/media/${pureId}/like/`, undefined, 'POST', {
-    media_id: pureId,
-    d: '1',
-  });
-  if (res?.status && res.status !== 'ok') {
-    throw new Error(`Hikaye beğenisi reddedildi (status: ${res.status})`);
-  }
+  const mutId = String((Date.now() % 9000) + 1000);
+  await igGql(
+    '26938887309082050',
+    { input: { actor_id: '__actor_id__', client_mutation_id: mutId, media_id: pureId } },
+    'usePolarisStoriesV4LikeMutationLikeMutation',
+  );
 }
 
 /**
