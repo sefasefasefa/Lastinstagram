@@ -218,7 +218,7 @@ export default function DashboardPage({ user, onLogout }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-background text-foreground">
+    <div className="flex flex-col h-full bg-background text-foreground">
       <ProfileHeader />
 
       {/* Sekmeler */}

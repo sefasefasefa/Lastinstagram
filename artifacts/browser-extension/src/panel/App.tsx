@@ -1,11 +1,47 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Route, Switch, Redirect } from 'wouter';
+import { Route, Switch, Redirect, Link, useRoute } from 'wouter';
 import { useHashLocation } from 'wouter/use-hash-location';
 import { Router as WouterRouter } from 'wouter';
 import { Toaster } from 'sonner';
 import { igApi, getCachedUser, clearCachedUser, hasSession, normalizeIgUser, type IgUser } from '@/lib/ig-api';
 import DashboardPage from '@/pages/dashboard';
+import FeedPage from '@/pages/feed';
 import NotFound from '@/pages/not-found';
+
+// ─── Alt navigasyon ───────────────────────────────────────────────────────────
+function BottomNav() {
+  const [isDashboard] = useRoute('/dashboard');
+  const [isFeed] = useRoute('/feed');
+
+  return (
+    <nav className="flex border-t border-border bg-background h-14 flex-shrink-0">
+      <Link
+        href="/dashboard"
+        className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs transition-colors ${isDashboard ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+      >
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+        <span>Takip</span>
+      </Link>
+      <Link
+        href="/feed"
+        className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs transition-colors ${isFeed ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+      >
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+        <span>Akış</span>
+      </Link>
+    </nav>
+  );
+}
 
 function IgLogo() {
   return (
@@ -185,18 +221,26 @@ export default function App() {
     );
   }
 
+  const logout = async () => { await clearCachedUser(); setUser(null); };
+
   return (
     <WouterRouter hook={useHashLocation}>
-      <Switch>
-        <Route path="/" component={() => <Redirect to="/dashboard" />} />
-        <Route path="/dashboard" component={() => (
-          <DashboardPage
-            user={user}
-            onLogout={async () => { await clearCachedUser(); setUser(null); }}
-          />
-        )} />
-        <Route component={NotFound} />
-      </Switch>
+      <div className="flex flex-col h-[100dvh]">
+        {/* Sayfa içeriği */}
+        <div className="flex-1 overflow-hidden min-h-0">
+          <Switch>
+            <Route path="/" component={() => <Redirect to="/dashboard" />} />
+            <Route path="/dashboard" component={() => (
+              <DashboardPage user={user} onLogout={logout} />
+            )} />
+            <Route path="/feed" component={() => <FeedPage user={user} />} />
+            <Route component={NotFound} />
+          </Switch>
+        </div>
+
+        {/* Alt navigasyon */}
+        <BottomNav />
+      </div>
       <Toaster />
     </WouterRouter>
   );

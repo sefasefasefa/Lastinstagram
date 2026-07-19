@@ -106,3 +106,128 @@ export async function getFollowing(userId: string, maxId?: string): Promise<IgPa
 export async function unfollowUser(userId: string): Promise<void> {
   await igApi(`/api/v1/friendships/${userId}/destroy/`, undefined, 'POST');
 }
+
+// ─── Feed tipleri ─────────────────────────────────────────────────────────────
+
+export interface IgPost {
+  id: string;
+  code?: string;
+  mediaType: number; // 1=photo 2=video 8=carousel
+  caption?: string;
+  likeCount: number;
+  commentCount?: number;
+  displayUrl?: string;
+  hasLiked: boolean;
+  takenAt?: number;
+}
+
+export interface IgStory {
+  id: string;
+  mediaType: number; // 1=photo 2=video
+  displayUrl?: string;
+  videoUrl?: string;
+  takenAt?: number;
+  ownerId?: string;
+  hasLiked?: boolean;
+}
+
+export interface IgReel {
+  id: string;
+  code?: string;
+  displayUrl?: string;
+  likeCount: number;
+  playCount?: number;
+  hasLiked: boolean;
+  caption?: string;
+  takenAt?: number;
+}
+
+// ─── Feed API fonksiyonları ───────────────────────────────────────────────────
+
+type AnyObj = Record<string, unknown>;
+
+function extractImageUrl(item: AnyObj): string | undefined {
+  const iv2 = item['image_versions2'] as AnyObj | undefined;
+  const candidates = iv2?.['candidates'] as AnyObj[] | undefined;
+  return candidates?.[0]?.['url'] as string | undefined;
+}
+
+export async function getUserPosts(
+  userId: string,
+  maxId?: string,
+): Promise<{ posts: IgPost[]; nextMaxId?: string }> {
+  const params: Record<string, string> = { count: '12' };
+  if (maxId) params.max_id = maxId;
+  const data = await igApi<AnyObj>(`/api/v1/feed/user/${userId}/`, params);
+  const items = (data['items'] as AnyObj[] | undefined) ?? [];
+  const posts: IgPost[] = items.map((item) => ({
+    id: String(item['pk'] ?? item['id'] ?? ''),
+    code: item['code'] as string | undefined,
+    mediaType: (item['media_type'] as number) ?? 1,
+    caption: (item['caption'] as AnyObj | undefined)?.['text'] as string | undefined,
+    likeCount: (item['like_count'] as number) ?? 0,
+    commentCount: item['comment_count'] as number | undefined,
+    displayUrl: extractImageUrl(item),
+    hasLiked: (item['has_liked'] as boolean) ?? false,
+    takenAt: item['taken_at'] as number | undefined,
+  }));
+  return { posts, nextMaxId: data['next_max_id'] as string | undefined };
+}
+
+export async function getUserStories(userId: string): Promise<IgStory[]> {
+  const data = await igApi<AnyObj>(`/api/v1/feed/reels_media/`, { reel_ids: userId });
+  const reels = data['reels'] as AnyObj | undefined;
+  const reel = reels?.[userId] as AnyObj | undefined;
+  const items = (reel?.['items'] as AnyObj[] | undefined) ?? [];
+  return items.map((item) => ({
+    id: String(item['pk'] ?? item['id'] ?? ''),
+    mediaType: (item['media_type'] as number) ?? 1,
+    displayUrl: extractImageUrl(item),
+    videoUrl: ((item['video_versions'] as AnyObj[] | undefined)?.[0]?.['url']) as string | undefined,
+    takenAt: item['taken_at'] as number | undefined,
+    ownerId: String((item['user'] as AnyObj | undefined)?.['pk'] ?? userId),
+    hasLiked: (item['has_liked'] as boolean) ?? false,
+  }));
+}
+
+export async function getUserReels(
+  userId: string,
+  maxId?: string,
+): Promise<{ reels: IgReel[]; nextMaxId?: string }> {
+  const body: Record<string, string> = {
+    target_user_id: userId,
+    page_size: '12',
+    include_feed_video: 'true',
+  };
+  if (maxId) body.max_id = maxId;
+  const data = await igApi<AnyObj>(`/api/v1/clips/user/`, undefined, 'POST', body);
+  const items = (data['items'] as AnyObj[] | undefined) ?? [];
+  const reels: IgReel[] = items.map((wrapper) => {
+    const media = ((wrapper['media'] as AnyObj | undefined) ?? wrapper) as AnyObj;
+    return {
+      id: String(media['pk'] ?? media['id'] ?? ''),
+      code: media['code'] as string | undefined,
+      displayUrl: extractImageUrl(media),
+      likeCount: (media['like_count'] as number) ?? 0,
+      playCount: media['play_count'] as number | undefined,
+      hasLiked: (media['has_liked'] as boolean) ?? false,
+      caption: ((media['caption'] as AnyObj | undefined)?.['text']) as string | undefined,
+      takenAt: media['taken_at'] as number | undefined,
+    };
+  });
+  const pagingInfo = data['paging_info'] as AnyObj | undefined;
+  return { reels, nextMaxId: pagingInfo?.['max_id'] as string | undefined };
+}
+
+export async function likeMedia(mediaId: string): Promise<void> {
+  await igApi(`/api/v1/media/${mediaId}/like/`, undefined, 'POST', {
+    media_id: mediaId,
+    d: '0',
+  });
+}
+
+export async function unlikeMedia(mediaId: string): Promise<void> {
+  await igApi(`/api/v1/media/${mediaId}/unlike/`, undefined, 'POST', {
+    media_id: mediaId,
+  });
+}
