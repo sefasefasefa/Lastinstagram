@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Instagram, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 
 type IgStatus = "checking" | "found" | "missing";
 
@@ -24,127 +25,55 @@ export function App() {
     window.close();
   }
 
-  const igColor =
-    igStatus === "found" ? "#22c55e" : igStatus === "checking" ? "#eab308" : "#ef4444";
-  const igLabel =
-    igStatus === "found"
-      ? "Instagram oturumu aktif ✓"
-      : igStatus === "checking"
-      ? "Kontrol ediliyor…"
-      : "Instagram'a giriş yapılmamış";
-
   return (
-    <div style={s.root}>
-      {/* Header */}
-      <div style={s.header}>
-        <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-          <defs>
-            <radialGradient id="ig" cx="30%" cy="107%" r="150%">
-              <stop offset="0%" stopColor="#fdf497" />
-              <stop offset="45%" stopColor="#fd5949" />
-              <stop offset="60%" stopColor="#d6249f" />
-              <stop offset="90%" stopColor="#285AEB" />
-            </radialGradient>
-          </defs>
-          <rect width="32" height="32" rx="8" fill="url(#ig)" />
-          <rect x="9" y="9" width="14" height="14" rx="4.5" stroke="white" strokeWidth="2" fill="none" />
-          <circle cx="16" cy="16" r="3.5" stroke="white" strokeWidth="2" />
-          <circle cx="23" cy="9" r="1.2" fill="white" />
-        </svg>
-        <span style={s.headerTitle}>Takipçi Paneli</span>
+    <div className="w-[280px] bg-background text-foreground font-sans p-5 flex flex-col gap-5 border border-border selection:bg-primary/30 relative overflow-hidden">
+      {/* Subtle background glow */}
+      <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="flex items-center gap-3 relative z-10">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-[0_0_15px_rgba(225,48,108,0.3)] flex-shrink-0">
+          <Instagram className="w-5 h-5 text-white" />
+        </div>
+        <div className="flex flex-col min-w-0">
+          <h1 className="text-sm font-extrabold tracking-tight truncate">Nexus Control</h1>
+          <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest truncate mt-0.5">Operator Node</p>
+        </div>
       </div>
 
-      {/* Instagram status */}
-      <div style={s.statusRow}>
-        <span style={{ ...s.dot, background: igColor }} />
-        <span style={s.statusText}>{igLabel}</span>
+      <div className="rounded-xl bg-card/60 backdrop-blur-xl border border-white/5 p-4 flex flex-col gap-4 shadow-inner relative z-10">
+        <div className="flex items-center gap-2.5">
+          {igStatus === "checking" && <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />}
+          {igStatus === "found" && <CheckCircle2 className="w-4 h-4 text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.4)]" />}
+          {igStatus === "missing" && <AlertCircle className="w-4 h-4 text-destructive drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]" />}
+          
+          <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+            {igStatus === "checking" ? "Verifying uplink..." : igStatus === "found" ? "Session Active" : "No Session Found"}
+          </span>
+        </div>
+        
+        {igStatus === "missing" && (
+          <button
+            onClick={openInstagram}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-bold uppercase tracking-wider transition-all text-white group"
+          >
+            Authenticate <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+          </button>
+        )}
+        {igStatus === "found" && (
+          <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+            Connection stable. System ready for engagement automation.
+          </p>
+        )}
       </div>
 
-      {igStatus === "missing" && (
-        <button onClick={openInstagram} style={s.igBtn}>
-          Instagram'da Giriş Yap →
-        </button>
-      )}
-
-      {igStatus === "found" && (
-        <p style={s.hint}>
-          Oturum algılandı. Panel otomatik açılır veya aşağıdan açabilirsin.
-        </p>
-      )}
-
-      <button onClick={openPanel} style={s.openBtn}>
-        Paneli Aç →
+      <button
+        onClick={openPanel}
+        className="relative w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-[13px] font-extrabold tracking-wide transition-all shadow-[0_0_15px_rgba(225,48,108,0.25)] hover:shadow-[0_0_25px_rgba(225,48,108,0.4)] active:scale-[0.98] group overflow-hidden z-10"
+      >
+        {/* Button inner glare */}
+        <div className="absolute top-0 inset-x-0 h-[1px] bg-white/30" />
+        Launch Terminal <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
       </button>
     </div>
   );
 }
-
-const s: Record<string, React.CSSProperties> = {
-  root: {
-    width: 260,
-    background: "#0f0f0f",
-    color: "#f0f0f0",
-    fontFamily: "'Segoe UI', system-ui, sans-serif",
-    fontSize: 13,
-    padding: "14px 16px",
-    boxSizing: "border-box",
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  },
-  headerTitle: {
-    fontWeight: 700,
-    fontSize: 15,
-    letterSpacing: "-0.2px",
-  },
-  statusRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 4,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: "50%",
-    flexShrink: 0,
-  },
-  statusText: {
-    color: "#ccc",
-    fontSize: 12,
-  },
-  hint: {
-    fontSize: 11,
-    color: "#555",
-    margin: 0,
-    lineHeight: 1.5,
-  },
-  igBtn: {
-    background: "none",
-    border: "1px solid #333",
-    borderRadius: 6,
-    color: "#c13584",
-    fontSize: 12,
-    cursor: "pointer",
-    padding: "6px 12px",
-    textAlign: "left",
-    width: "100%",
-  },
-  openBtn: {
-    background: "linear-gradient(135deg, #c13584, #e1306c, #fd5949)",
-    border: "none",
-    borderRadius: 8,
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: 600,
-    padding: "11px 0",
-    cursor: "pointer",
-    width: "100%",
-    marginTop: 2,
-  },
-};

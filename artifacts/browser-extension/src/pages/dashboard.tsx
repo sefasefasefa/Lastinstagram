@@ -7,6 +7,8 @@ import {
   type IgUser,
   type IgListUser,
 } from '@/lib/ig-api';
+import { motion } from 'framer-motion';
+import { Search, BadgeCheck, Lock, Loader2, UserMinus } from 'lucide-react';
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
 type Tab = 'followers' | 'following';
@@ -23,11 +25,11 @@ function fmt(n: number) {
   return String(n);
 }
 
-function Avatar({ src, username }: { src: string; username: string }) {
+function Avatar({ src, username, className = "w-11 h-11" }: { src: string; username: string; className?: string }) {
   const [err, setErr] = useState(false);
   if (err || !src) {
     return (
-      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+      <div className={`${className} rounded-xl bg-card border border-white/10 flex items-center justify-center text-foreground font-bold flex-shrink-0 shadow-inner`}>
         {username[0]?.toUpperCase()}
       </div>
     );
@@ -36,7 +38,7 @@ function Avatar({ src, username }: { src: string; username: string }) {
     <img
       src={src}
       alt={username}
-      className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+      className={`${className} rounded-xl object-cover ring-1 ring-white/10 flex-shrink-0 shadow-sm`}
       onError={() => setErr(true)}
     />
   );
@@ -73,41 +75,47 @@ function UserRow({
   if (done) return null;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors">
-      <Avatar src={u.profile_pic_url} username={u.username} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium truncate">{u.username}</span>
-          {u.is_verified && (
-            <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-            </svg>
-          )}
-          {u.is_private && (
-            <svg className="w-3 h-3 text-muted-foreground flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM9 8V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9z" />
-            </svg>
-          )}
-        </div>
-        {u.full_name && (
-          <p className="text-xs text-muted-foreground truncate">{u.full_name}</p>
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="flex items-center gap-4 px-5 py-3 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0 group"
+    >
+      <div className="relative">
+        <Avatar src={u.profile_pic_url} username={u.username} />
+        {u.is_private && (
+          <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border border-background">
+            <Lock className="w-3 h-3 text-muted-foreground" />
+          </div>
         )}
       </div>
+      
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className="text-sm font-semibold text-foreground truncate">{u.username}</span>
+          {u.is_verified && <BadgeCheck className="w-4 h-4 text-blue-400 flex-shrink-0" />}
+        </div>
+        {u.full_name && (
+          <p className="text-[11px] text-muted-foreground truncate font-medium">{u.full_name}</p>
+        )}
+      </div>
+
       {tab === 'following' && (
         <button
           onClick={handleUnfollow}
           disabled={unfollowing}
-          className="text-xs px-2.5 py-1 rounded-full border border-border hover:bg-destructive/10 hover:text-destructive hover:border-destructive/40 transition-colors flex-shrink-0 disabled:opacity-50"
+          className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-white/10 hover:bg-destructive/20 hover:text-destructive hover:border-destructive/30 transition-all flex-shrink-0 disabled:opacity-50 opacity-0 group-hover:opacity-100 focus:opacity-100"
         >
-          {unfollowing ? '…' : 'Bırak'}
+          {unfollowing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserMinus className="w-3.5 h-3.5" />}
+          {unfollowing ? 'İşleniyor' : 'Bırak'}
         </button>
       )}
-    </div>
+    </motion.div>
   );
 }
 
 // ─── Ana bileşen ─────────────────────────────────────────────────────────────
-export default function DashboardPage({ user, onLogout }: Props) {
+export default function DashboardPage({ user }: Props) {
   const [tab, setTab] = useState<Tab>('followers');
   const [users, setUsers] = useState<IgListUser[]>([]);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
@@ -134,7 +142,6 @@ export default function DashboardPage({ user, onLogout }: Props) {
     }
   }, []);
 
-  // Sekme değişince sıfırla
   useEffect(() => {
     setUsers([]);
     setCursor(undefined);
@@ -161,102 +168,65 @@ export default function DashboardPage({ user, onLogout }: Props) {
       )
     : users;
 
-  // ── Profil başlığı ──────────────────────────────────────────────────────────
-  const ProfileHeader = () => {
-    const [imgErr, setImgErr] = useState(false);
-    return (
-      <div className="flex items-center gap-4 px-4 py-4 border-b border-border">
-        {imgErr || !user.profile_pic_url ? (
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-            {user.username[0]?.toUpperCase()}
-          </div>
-        ) : (
-          <img
-            src={user.profile_pic_url}
-            alt={user.username}
-            className="w-14 h-14 rounded-full object-cover flex-shrink-0"
-            onError={() => setImgErr(true)}
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="font-semibold text-base truncate">{user.username}</p>
-            {user.is_verified && (
-              <svg className="w-4 h-4 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-              </svg>
-            )}
-          </div>
-          {user.full_name && (
-            <p className="text-sm text-muted-foreground truncate">{user.full_name}</p>
-          )}
-          <div className="flex gap-4 mt-1.5">
-            <span className="text-xs text-muted-foreground">
-              <strong className="text-foreground">{fmt(user.follower_count)}</strong> takipçi
-            </span>
-            <span className="text-xs text-muted-foreground">
-              <strong className="text-foreground">{fmt(user.following_count)}</strong> takip
-            </span>
-            <span className="text-xs text-muted-foreground">
-              <strong className="text-foreground">{fmt(user.media_count)}</strong> gönderi
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={onLogout}
-          title="Çıkış"
-          className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </button>
-      </div>
-    );
-  };
-
   return (
-    <div className="flex flex-col h-full bg-background text-foreground">
-      <ProfileHeader />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full text-foreground relative">
+      
+      {/* Profil İstatistikleri (Command Center Look) */}
+      <div className="grid grid-cols-3 px-5 py-6 border-b border-white/5 bg-card/40 relative overflow-hidden flex-shrink-0">
+        {/* Glow / gradient background element */}
+        <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-[80px] pointer-events-none" />
+        
+        <div className="flex flex-col items-center text-center relative z-10 border-r border-white/5">
+          <span className="text-2xl font-black text-foreground font-mono tracking-tight">{fmt(user.follower_count)}</span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1 font-bold">Takipçiler</span>
+        </div>
+        <div className="flex flex-col items-center text-center relative z-10 border-r border-white/5">
+          <span className="text-2xl font-black text-foreground font-mono tracking-tight">{fmt(user.following_count)}</span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1 font-bold">Takip Edilen</span>
+        </div>
+        <div className="flex flex-col items-center text-center relative z-10">
+          <span className="text-2xl font-black text-foreground font-mono tracking-tight">{fmt(user.media_count)}</span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1 font-bold">Gönderiler</span>
+        </div>
+      </div>
 
       {/* Sekmeler */}
-      <div className="flex border-b border-border">
+      <div className="flex px-5 pt-2 border-b border-white/5 bg-background flex-shrink-0 sticky top-0 z-10">
         {(['followers', 'following'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+            className={`relative flex-1 py-3 text-[11px] font-bold tracking-widest uppercase transition-colors flex items-center justify-center gap-2 ${
               tab === t
-                ? 'border-b-2 border-primary text-foreground'
+                ? 'text-primary'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {t === 'followers' ? 'Takipçiler' : 'Takip Edilenler'}
             {tab === t && users.length > 0 && (
-              <span className="ml-1.5 text-xs bg-primary/10 text-primary rounded-full px-1.5 py-0.5">
+              <span className="text-[9px] font-mono bg-primary/20 text-primary px-1.5 py-0.5 rounded-md">
                 {users.length}{hasMore ? '+' : ''}
               </span>
+            )}
+            {tab === t && (
+              <motion.div 
+                layoutId="dashboard-tab"
+                className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary shadow-[0_-2px_10px_rgba(225,48,108,0.6)]"
+              />
             )}
           </button>
         ))}
       </div>
 
       {/* Arama */}
-      <div className="px-4 py-2.5 border-b border-border">
-        <div className="relative">
-          <svg
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-          </svg>
+      <div className="p-4 bg-background border-b border-white/5 flex-shrink-0">
+        <div className="relative group">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Kullanıcı ara…"
-            className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/40 rounded-lg border border-transparent focus:border-border focus:outline-none"
+            className="w-full pl-10 pr-4 py-2.5 text-sm font-medium bg-card border border-white/10 rounded-xl focus:border-primary/50 focus:ring-1 focus:ring-primary/50 focus:outline-none transition-all placeholder:text-muted-foreground shadow-inner"
           />
         </div>
       </div>
@@ -264,51 +234,50 @@ export default function DashboardPage({ user, onLogout }: Props) {
       {/* Liste */}
       <div className="flex-1 overflow-y-auto">
         {loading && users.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-            <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            <p className="text-sm">Yükleniyor…</p>
+          <div className="flex flex-col items-center gap-4 py-20 text-muted-foreground">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <p className="text-xs font-mono uppercase tracking-widest">Ağ taranıyor...</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-            <svg className="w-10 h-10 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-            <p className="text-sm">{search ? 'Sonuç bulunamadı' : 'Henüz veri yok'}</p>
+          <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
+            <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-2">
+              <Search className="w-5 h-5 opacity-40" />
+            </div>
+            <p className="text-sm font-medium">{search ? 'Hedef bulunamadı' : 'Veri yok'}</p>
           </div>
         ) : (
-          <>
+          <div className="pb-6">
             {filtered.map((u) => (
               <UserRow key={u.pk} u={u} tab={tab} onUnfollow={tab === 'following' ? removeUser : undefined} />
             ))}
 
-            {/* Daha fazla yükle */}
             {hasMore && !search && (
-              <div className="py-4 flex justify-center">
+              <div className="py-6 flex justify-center">
                 <button
                   onClick={loadMore}
                   disabled={loading}
-                  className="text-sm text-primary hover:underline disabled:opacity-50 flex items-center gap-2"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-card border border-white/10 text-xs font-bold text-primary hover:bg-white/5 transition-all disabled:opacity-50"
                 >
                   {loading ? (
                     <>
-                      <div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                      Yükleniyor…
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Taranıyor...
                     </>
                   ) : (
-                    'Daha fazla yükle'
+                    'Daha Fazla Yükle'
                   )}
                 </button>
               </div>
             )}
 
             {!hasMore && users.length > 0 && (
-              <p className="text-center text-xs text-muted-foreground py-4">
-                Tüm {users.length} kullanıcı listelendi
+              <p className="text-center text-[10px] font-mono tracking-widest text-muted-foreground py-6 uppercase">
+                Tüm Veri Çekildi // {users.length} Kayıt
               </p>
             )}
-          </>
+          </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

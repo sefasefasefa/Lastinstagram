@@ -1,33 +1,5 @@
 import { useState, useEffect, useCallback, Component, type ReactNode } from 'react';
 import { toast } from 'sonner';
-
-// ─── Hata sınırı — render crash olursa siyah ekran yerine mesaj göster ────────
-class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
-  state = { error: null };
-  static getDerivedStateFromError(error: Error) { return { error }; }
-  render() {
-    if (this.state.error) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center bg-background text-foreground">
-          <svg className="w-10 h-10 text-destructive/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="12" cy="12" r="10" /><path d="M12 8v4m0 4h.01" />
-          </svg>
-          <p className="text-sm font-medium">Bir hata oluştu</p>
-          <p className="text-xs text-muted-foreground break-all">
-            {(this.state.error as Error).message}
-          </p>
-          <button
-            onClick={() => this.setState({ error: null })}
-            className="text-xs text-primary hover:underline mt-1"
-          >
-            Tekrar dene
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 import {
   getFollowing,
   getUserPosts,
@@ -43,29 +15,49 @@ import {
   type IgStory,
   type IgReel,
 } from '@/lib/ig-api';
+import { motion } from 'framer-motion';
+import { Search, ChevronLeft, Heart, Play, AlertCircle, Loader2, Image as ImageIcon, Film, Lock, BadgeCheck, ArrowRight } from 'lucide-react';
+import { useRef } from 'react';
+
+// ─── Hata sınırı ──────────────────────────────────────────────────────────────
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center bg-background text-foreground relative">
+          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-2 border border-destructive/20 shadow-[0_0_20px_rgba(255,0,0,0.1)]">
+            <AlertCircle className="w-8 h-8 text-destructive" />
+          </div>
+          <p className="text-base font-bold tracking-tight">Sistem Hatası</p>
+          <p className="text-[11px] font-mono text-muted-foreground break-all bg-card border border-white/5 p-3 rounded-lg w-full">
+            {(this.state.error as Error).message}
+          </p>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="px-4 py-2 mt-2 text-xs font-bold bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-all"
+          >
+            Terminali Sıfırla
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Yardımcılar ──────────────────────────────────────────────────────────────
-
-function Avatar({ src, username, size = 10 }: { src: string; username: string; size?: number }) {
+function Avatar({ src, username, className = "w-11 h-11" }: { src: string; username: string; className?: string }) {
   const [err, setErr] = useState(false);
-  const cls = `w-${size} h-${size} rounded-full object-cover flex-shrink-0`;
-  const fallbackCls = `w-${size} h-${size} rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold flex-shrink-0`;
   if (err || !src) {
     return (
-      <div className={fallbackCls} style={{ fontSize: size * 1.6 }}>
+      <div className={`${className} rounded-xl bg-card border border-white/10 flex items-center justify-center text-foreground font-bold flex-shrink-0 shadow-inner`}>
         {username[0]?.toUpperCase()}
       </div>
     );
   }
-  return <img src={src} alt={username} className={cls} onError={() => setErr(true)} />;
-}
-
-function HeartIcon({ filled, className }: { filled: boolean; className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-    </svg>
-  );
+  return <img src={src} alt={username} className={`${className} rounded-xl object-cover ring-1 ring-white/10 flex-shrink-0 shadow-sm`} onError={() => setErr(true)} />;
 }
 
 function fmt(n: number) {
@@ -75,7 +67,6 @@ function fmt(n: number) {
 }
 
 // ─── Beğeni butonu ────────────────────────────────────────────────────────────
-
 function LikeButton({
   mediaId,
   initialLiked,
@@ -102,7 +93,7 @@ function LikeButton({
       setCount((c) => c + (next ? 1 : -1));
       onToggle?.(next);
     } catch {
-      toast.error(next ? 'Beğenme başarısız' : 'Beğeni kaldırılamadı');
+      toast.error(next ? 'Etkileşim başarısız' : 'Geri alma başarısız');
     } finally {
       setLoading(false);
     }
@@ -112,31 +103,26 @@ function LikeButton({
     <button
       onClick={toggle}
       disabled={loading}
-      className={`flex items-center gap-1 text-xs transition-colors disabled:opacity-50 ${liked ? 'text-rose-500' : 'text-muted-foreground hover:text-rose-400'}`}
+      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg backdrop-blur-md transition-all active:scale-95 disabled:opacity-50 ${liked ? 'bg-primary/20 text-primary border border-primary/20' : 'bg-black/40 text-white border border-white/10 hover:bg-black/60'}`}
     >
-      <HeartIcon filled={liked} className="w-4 h-4" />
-      <span>{fmt(count)}</span>
+      <Heart className={`w-3.5 h-3.5 transition-transform ${liked ? 'fill-current scale-110' : ''}`} />
+      <span className="text-[10px] font-mono font-bold tracking-tight">{fmt(count)}</span>
     </button>
   );
 }
 
 // ─── Hikaye şeridi ────────────────────────────────────────────────────────────
-
 function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boolean }) {
-  // hasLiked API'den geliyor — stories değişince senkronize et
   const [liked, setLiked] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(stories.map((s) => [s.id, s.hasLiked])),
   );
-  // İşlem sürerken o butonu kilitle (eş zamanlı çift tıklamayı engelle)
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
-  // Instagram rate-limit koruması: beğenileri sıraya koy, aralarında 800ms bekle
   const likeQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     setLiked((prev) => {
       const next = { ...prev };
       for (const s of stories) {
-        // Henüz yerel değişiklik yoksa API değerini kullan
         if (!(s.id in next)) next[s.id] = s.hasLiked;
       }
       return next;
@@ -145,12 +131,9 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
 
   if (loading) {
     return (
-      <div className="flex gap-3 px-4 py-3 overflow-x-auto scrollbar-hide">
+      <div className="flex gap-4 px-5 py-5 overflow-x-auto scrollbar-hide border-b border-white/5 bg-card/20">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex-shrink-0 flex flex-col items-center gap-1.5">
-            <div className="w-16 h-16 rounded-2xl bg-muted animate-pulse" />
-            <div className="w-10 h-2 rounded bg-muted animate-pulse" />
-          </div>
+          <div key={i} className="flex-shrink-0 w-[72px] h-[72px] rounded-2xl border border-white/10 bg-white/5 animate-pulse" />
         ))}
       </div>
     );
@@ -158,34 +141,31 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
 
   if (stories.length === 0) {
     return (
-      <div className="px-4 py-3 text-xs text-muted-foreground">Aktif hikaye yok</div>
+      <div className="px-5 py-6 text-xs text-muted-foreground border-b border-white/5 bg-card/20 flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 opacity-50" />
+        <span>Aktif hikaye bağlantısı yok</span>
+      </div>
     );
   }
 
   return (
-    <div className="flex gap-3 px-4 py-3 overflow-x-auto">
+    <div className="flex gap-4 px-5 py-5 overflow-x-auto border-b border-white/5 bg-card/20 scrollbar-hide">
       {stories.map((s) => (
-        <div key={s.id} className="flex-shrink-0 flex flex-col items-center gap-1.5">
+        <div key={s.id} className="flex-shrink-0 relative group">
           <div className="relative">
             {s.displayUrl ? (
               <img
                 src={s.displayUrl}
-                className={`w-16 h-16 rounded-2xl object-cover ring-2 ring-offset-1 ring-offset-background ${liked[s.id] ? 'ring-rose-500' : 'ring-primary/60'}`}
+                className={`w-[72px] h-[72px] rounded-2xl object-cover ring-2 ring-offset-2 ring-offset-background transition-all ${liked[s.id] ? 'ring-primary shadow-[0_0_15px_rgba(225,48,108,0.4)]' : 'ring-white/10 hover:ring-white/30'}`}
               />
             ) : (
-              <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
-                <svg className="w-6 h-6 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="3" y="3" width="18" height="18" rx="3" />
-                  <circle cx="12" cy="10" r="3" />
-                  <path d="M3 20c0-3 3-5 9-5s9 2 9 5" />
-                </svg>
+              <div className="w-[72px] h-[72px] rounded-2xl bg-card border border-white/10 flex items-center justify-center">
+                <ImageIcon className="w-6 h-6 text-muted-foreground/30" />
               </div>
             )}
             {s.mediaType === 2 && (
-              <div className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-black/60 flex items-center justify-center">
-                <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5,3 19,12 5,21" />
-                </svg>
+              <div className="absolute top-1 right-1 w-5 h-5 rounded-md bg-black/60 backdrop-blur-md flex items-center justify-center border border-white/10">
+                <Film className="w-3 h-3 text-white" />
               </div>
             )}
           </div>
@@ -196,24 +176,22 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
               const storyId = s.id;
               const next = !liked[storyId];
               setLoadingIds((p) => new Set(p).add(storyId));
-              // Sıraya ekle — önceki bitmeden bir sonraki başlamasın
               likeQueue.current = likeQueue.current.then(async () => {
                 try {
                   if (next) await likeStory(storyId);
                   else await unlikeStory(storyId);
                   setLiked((prev) => ({ ...prev, [storyId]: next }));
                 } catch (e) {
-                  toast.error(`Hikaye beğeni hatası: ${e instanceof Error ? e.message : String(e)}`);
+                  toast.error(`Ağ hatası: ${e instanceof Error ? e.message : String(e)}`);
                 } finally {
                   setLoadingIds((p) => { const n = new Set(p); n.delete(storyId); return n; });
-                  // Instagram rate-limit koruması: beğeniler arası 800ms bekle
                   await new Promise<void>((r) => setTimeout(r, 800));
                 }
               });
             }}
-            className={`p-0.5 rounded-full transition-colors disabled:opacity-40 ${liked[s.id] ? 'text-rose-500' : 'text-muted-foreground hover:text-rose-400'}`}
+            className={`absolute -bottom-2 -right-2 p-2 rounded-xl border border-white/10 shadow-xl transition-all hover:scale-110 active:scale-95 disabled:opacity-50 z-10 ${liked[s.id] ? 'bg-primary text-white border-primary shadow-[0_0_10px_rgba(225,48,108,0.5)]' : 'bg-card text-muted-foreground hover:text-foreground hover:bg-white/10'}`}
           >
-            <HeartIcon filled={!!liked[s.id]} className="w-3.5 h-3.5" />
+            <Heart className={`w-3.5 h-3.5 ${liked[s.id] ? 'fill-current' : ''}`} />
           </button>
         </div>
       ))}
@@ -222,59 +200,59 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
 }
 
 // ─── Gönderi / Reel kartı ─────────────────────────────────────────────────────
-
 function MediaCard({ item, type }: { item: IgPost | IgReel; type: 'post' | 'reel' }) {
   const isVideo = 'playCount' in item || (item as IgPost).mediaType === 2;
 
   return (
-    <div className="relative rounded-xl overflow-hidden bg-muted aspect-square">
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="relative rounded-xl overflow-hidden bg-card border border-white/5 aspect-square group"
+    >
       {item.displayUrl ? (
-        <img src={item.displayUrl} className="w-full h-full object-cover" />
+        <img src={item.displayUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
       ) : (
-        <div className="w-full h-full flex items-center justify-center">
-          <svg className="w-8 h-8 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="3" y="3" width="18" height="18" rx="3" />
-            <circle cx="12" cy="10" r="3" />
-          </svg>
+        <div className="w-full h-full flex items-center justify-center bg-white/5">
+          <ImageIcon className="w-8 h-8 text-white/10" />
         </div>
       )}
 
-      {/* Video / Reel badge */}
       {(isVideo || type === 'reel') && (
-        <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/60 flex items-center justify-center">
-          <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="5,3 19,12 5,21" />
-          </svg>
+        <div className="absolute top-2 right-2 w-6 h-6 rounded-md bg-black/60 backdrop-blur-md flex items-center justify-center pointer-events-none border border-white/10 shadow-lg">
+          <Film className="w-3 h-3 text-white" />
         </div>
       )}
 
-      {/* Beğeni overlay */}
-      <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/70 to-transparent flex items-center">
-        <LikeButton
-          mediaId={item.id}
-          initialLiked={item.hasLiked}
-          initialCount={item.likeCount}
-        />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-100 flex items-end p-2 pointer-events-none" />
+      
+      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+        <div className="pointer-events-auto">
+          <LikeButton
+            mediaId={item.id}
+            initialLiked={item.hasLiked}
+            initialCount={item.likeCount}
+          />
+        </div>
         {type === 'reel' && (item as IgReel).playCount !== undefined && (
-          <span className="ml-auto text-xs text-white/70">{fmt((item as IgReel).playCount!)}</span>
+          <span className="text-[10px] font-mono font-bold tracking-tight text-white/90 flex items-center gap-1 drop-shadow-md">
+            <Play className="w-3 h-3 fill-current opacity-80" />
+            {fmt((item as IgReel).playCount!)}
+          </span>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 // ─── Kullanıcı içerik görünümü ────────────────────────────────────────────────
-
 type ContentTab = 'hikayeler' | 'gonderiler' | 'reels';
 
 function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => void }) {
   const [tab, setTab] = useState<ContentTab>('hikayeler');
-
   const [stories, setStories] = useState<IgStory[]>([]);
   const [posts, setPosts] = useState<IgPost[]>([]);
   const [reels, setReels] = useState<IgReel[]>([]);
 
-  // Skeleton'ı hemen göster — stories yüklenmeden önce boş görünmesin
   const [loadingStories, setLoadingStories] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [loadingReels, setLoadingReels] = useState(false);
@@ -294,7 +272,7 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
       setStories(s);
       setStoriesFetched(true);
     } catch {
-      toast.error('Hikayeler yüklenemedi');
+      toast.error('Bağlantı koptu (Hikayeler)');
     } finally {
       setLoadingStories(false);
     }
@@ -308,7 +286,7 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
       setPostsNextId(nextMaxId);
       setPostsFetched(true);
     } catch {
-      toast.error('Gönderiler yüklenemedi');
+      toast.error('Bağlantı koptu (Gönderiler)');
     } finally {
       setLoadingPosts(false);
     }
@@ -322,20 +300,15 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
       setReelsNextId(nextMaxId);
       setReelsFetched(true);
     } catch {
-      toast.error('Reels yüklenemedi');
+      toast.error('Bağlantı koptu (Reels)');
     } finally {
       setLoadingReels(false);
     }
   }, [user.pk]);
 
-  // İlk yükleme
   useEffect(() => { void loadStories(); }, [loadStories]);
-  useEffect(() => {
-    if (tab === 'gonderiler' && !postsFetched) void loadPosts();
-  }, [tab, postsFetched, loadPosts]);
-  useEffect(() => {
-    if (tab === 'reels' && !reelsFetched) void loadReels();
-  }, [tab, reelsFetched, loadReels]);
+  useEffect(() => { if (tab === 'gonderiler' && !postsFetched) void loadPosts(); }, [tab, postsFetched, loadPosts]);
+  useEffect(() => { if (tab === 'reels' && !reelsFetched) void loadReels(); }, [tab, reelsFetched, loadReels]);
 
   const tabs: { key: ContentTab; label: string }[] = [
     { key: 'hikayeler', label: 'Hikayeler' },
@@ -344,37 +317,44 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
   ];
 
   return (
-    <div className="flex flex-col h-full bg-background text-foreground">
-      {/* Başlık */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col h-full bg-background text-foreground">
+      {/* Header */}
+      <div className="flex items-center gap-4 px-5 py-4 bg-card/80 backdrop-blur-xl border-b border-white/5 flex-shrink-0 sticky top-0 z-20 shadow-md">
         <button
           onClick={onBack}
-          className="text-muted-foreground hover:text-foreground transition-colors"
+          className="p-2 -ml-2 text-muted-foreground hover:text-white hover:bg-white/5 rounded-xl transition-all"
         >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 12H5" /><path d="M12 19l-7-7 7-7" />
-          </svg>
+          <ChevronLeft className="w-5 h-5" />
         </button>
-        <Avatar src={user.profile_pic_url} username={user.username} size={8} />
-        <div className="min-w-0">
-          <p className="text-sm font-semibold truncate">{user.username}</p>
-          {user.full_name && <p className="text-xs text-muted-foreground truncate">{user.full_name}</p>}
+        <Avatar src={user.profile_pic_url} username={user.username} className="w-10 h-10" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <p className="text-sm font-extrabold truncate text-foreground tracking-tight">{user.username}</p>
+            {user.is_verified && <BadgeCheck className="w-4 h-4 text-blue-400 flex-shrink-0" />}
+          </div>
+          {user.full_name && <p className="text-[11px] font-medium text-muted-foreground truncate">{user.full_name}</p>}
         </div>
       </div>
 
       {/* Sekmeler */}
-      <div className="flex border-b border-border">
+      <div className="flex px-5 pt-2 border-b border-white/5 bg-background sticky top-[73px] z-10">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 text-xs font-medium transition-colors ${
+            className={`relative flex-1 py-3 text-[11px] font-bold tracking-widest uppercase transition-colors ${
               tab === t.key
-                ? 'border-b-2 border-primary text-foreground'
+                ? 'text-primary'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {t.label}
+            {tab === t.key && (
+              <motion.div 
+                layoutId="content-tab"
+                className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary shadow-[0_-2px_10px_rgba(225,48,108,0.6)]"
+              />
+            )}
           </button>
         ))}
       </div>
@@ -382,36 +362,34 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
       {/* İçerik */}
       <div className="flex-1 overflow-y-auto">
         {tab === 'hikayeler' && (
-          <div>
+          <div className="pb-6">
             <StoriesStrip stories={stories} loading={loadingStories} />
             {storiesFetched && stories.length > 0 && (
-              <p className="text-center text-xs text-muted-foreground py-2">
-                {stories.length} hikaye — beğenmek için ❤️ ikonuna dokun
+              <p className="text-center text-[10px] font-mono tracking-widest uppercase text-muted-foreground py-6">
+                Operator Engagement: {stories.length} Node(s)
               </p>
             )}
           </div>
         )}
 
         {tab === 'gonderiler' && (
-          <div className="p-3">
+          <div className="p-4">
             {loadingPosts && posts.length === 0 ? (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2.5">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="aspect-square rounded-xl bg-muted animate-pulse" />
+                  <div key={i} className="aspect-square rounded-xl bg-card border border-white/5 animate-pulse" />
                 ))}
               </div>
             ) : posts.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
-                <svg className="w-10 h-10 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="3" y="3" width="18" height="18" rx="3" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <path d="M21 15l-5-5L5 21" />
-                </svg>
-                <p className="text-sm">Henüz gönderi yok</p>
+              <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-2">
+                  <ImageIcon className="w-5 h-5 opacity-40" />
+                </div>
+                <p className="text-sm font-medium">İçerik bulunamadı</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2.5">
                   {posts.map((p) => (
                     <MediaCard key={p.id} item={p} type="post" />
                   ))}
@@ -420,9 +398,9 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
                   <button
                     onClick={() => void loadPosts(postsNextId)}
                     disabled={loadingPosts}
-                    className="w-full mt-3 py-2 text-xs text-primary hover:underline disabled:opacity-50"
+                    className="w-full mt-4 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-card border border-white/10 text-xs font-bold text-primary hover:bg-white/5 transition-all disabled:opacity-50"
                   >
-                    {loadingPosts ? 'Yükleniyor…' : 'Daha fazla yükle'}
+                    {loadingPosts ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Veri Çek'}
                   </button>
                 )}
               </>
@@ -431,23 +409,23 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
         )}
 
         {tab === 'reels' && (
-          <div className="p-3">
+          <div className="p-4">
             {loadingReels && reels.length === 0 ? (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2.5">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="aspect-square rounded-xl bg-muted animate-pulse" />
+                  <div key={i} className="aspect-square rounded-xl bg-card border border-white/5 animate-pulse" />
                 ))}
               </div>
             ) : reels.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
-                <svg className="w-10 h-10 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <polygon points="5,3 19,12 5,21" />
-                </svg>
-                <p className="text-sm">Henüz reel yok</p>
+              <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+                <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-2">
+                  <Film className="w-5 h-5 opacity-40" />
+                </div>
+                <p className="text-sm font-medium">Reel bulunamadı</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2.5">
                   {reels.map((r) => (
                     <MediaCard key={r.id} item={r} type="reel" />
                   ))}
@@ -456,9 +434,9 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
                   <button
                     onClick={() => void loadReels(reelsNextId)}
                     disabled={loadingReels}
-                    className="w-full mt-3 py-2 text-xs text-primary hover:underline disabled:opacity-50"
+                    className="w-full mt-4 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-card border border-white/10 text-xs font-bold text-primary hover:bg-white/5 transition-all disabled:opacity-50"
                   >
-                    {loadingReels ? 'Yükleniyor…' : 'Daha fazla yükle'}
+                    {loadingReels ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Veri Çek'}
                   </button>
                 )}
               </>
@@ -466,12 +444,11 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 // ─── Ana Feed sayfası ─────────────────────────────────────────────────────────
-
 export default function FeedPage({ user }: { user: IgUser }) {
   const [following, setFollowing] = useState<IgListUser[]>([]);
   const [cursor, setCursor] = useState<string | undefined>();
@@ -489,7 +466,7 @@ export default function FeedPage({ user }: { user: IgUser }) {
       setCursor(page.next_max_id);
       setHasMore(!!page.next_max_id);
     } catch {
-      toast.error('Takip listesi yüklenemedi');
+      toast.error('Bağlantı koptu (Takip Listesi)');
     } finally {
       setLoading(false);
     }
@@ -505,7 +482,6 @@ export default function FeedPage({ user }: { user: IgUser }) {
       )
     : following;
 
-  // Kullanıcı içerik görünümü
   if (selected) {
     return (
       <ErrorBoundary key={selected.pk}>
@@ -515,87 +491,80 @@ export default function FeedPage({ user }: { user: IgUser }) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background text-foreground">
-      {/* Başlık */}
-      <div className="px-4 py-3 border-b border-border">
-        <h2 className="text-sm font-semibold mb-2">Takip Edilenler</h2>
-        <div className="relative">
-          <svg
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-          </svg>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full bg-background text-foreground relative">
+      {/* Başlık / Arama */}
+      <div className="p-4 border-b border-white/5 flex-shrink-0 bg-card/40">
+        <h2 className="text-[11px] font-mono font-bold uppercase tracking-widest text-muted-foreground mb-3 px-1">Hedef Seçimi</h2>
+        <div className="relative group">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Kullanıcı ara…"
-            className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/40 rounded-lg border border-transparent focus:border-border focus:outline-none"
+            placeholder="Ağda ara…"
+            className="w-full pl-10 pr-4 py-2.5 text-sm font-medium bg-background border border-white/10 rounded-xl focus:border-primary/50 focus:ring-1 focus:ring-primary/50 focus:outline-none transition-all placeholder:text-muted-foreground shadow-inner"
           />
         </div>
       </div>
 
       {/* Liste */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-6">
         {loading && following.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-            <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            <p className="text-sm">Yükleniyor…</p>
+          <div className="flex flex-col items-center gap-4 py-20 text-muted-foreground">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <p className="text-xs font-mono uppercase tracking-widest">Ağ taranıyor...</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-            <svg className="w-10 h-10 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-            <p className="text-sm">{search ? 'Sonuç bulunamadı' : 'Henüz takip edilen yok'}</p>
+          <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
+            <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-2">
+              <Search className="w-5 h-5 opacity-40" />
+            </div>
+            <p className="text-sm font-medium">{search ? 'Sonuç bulunamadı' : 'Hedef yok'}</p>
           </div>
         ) : (
           <>
             {filtered.map((u) => (
-              <button
+              <motion.button
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 key={u.pk}
                 onClick={() => setSelected(u)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-colors text-left"
+                className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0 text-left group"
               >
-                <Avatar src={u.profile_pic_url} username={u.username} size={9} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium truncate">{u.username}</span>
-                    {u.is_verified && (
-                      <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                      </svg>
-                    )}
-                    {u.is_private && (
-                      <svg className="w-3 h-3 text-muted-foreground flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM9 8V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9z" />
-                      </svg>
-                    )}
-                  </div>
-                  {u.full_name && (
-                    <p className="text-xs text-muted-foreground truncate">{u.full_name}</p>
+                <div className="relative">
+                  <Avatar src={u.profile_pic_url} username={u.username} className="w-12 h-12 group-hover:ring-primary/30 transition-all" />
+                  {u.is_private && (
+                    <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 border border-background">
+                      <Lock className="w-3 h-3 text-muted-foreground" />
+                    </div>
                   )}
                 </div>
-                <svg className="w-4 h-4 text-muted-foreground flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 18l6-6-6-6" />
-                </svg>
-              </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-sm font-bold text-foreground truncate group-hover:text-primary transition-colors">{u.username}</span>
+                    {u.is_verified && <BadgeCheck className="w-4 h-4 text-blue-400 flex-shrink-0" />}
+                  </div>
+                  {u.full_name && (
+                    <p className="text-[11px] font-medium text-muted-foreground truncate">{u.full_name}</p>
+                  )}
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </motion.button>
             ))}
 
             {hasMore && !search && (
-              <div className="py-4 flex justify-center">
+              <div className="py-6 flex justify-center">
                 <button
                   onClick={() => void loadPage(cursor)}
                   disabled={loading}
-                  className="text-sm text-primary hover:underline disabled:opacity-50 flex items-center gap-2"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-card border border-white/10 text-xs font-bold text-primary hover:bg-white/5 transition-all disabled:opacity-50"
                 >
                   {loading ? (
                     <>
-                      <div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                      Yükleniyor…
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Taranıyor...
                     </>
                   ) : (
-                    'Daha fazla yükle'
+                    'Daha Fazla Yükle'
                   )}
                 </button>
               </div>
@@ -603,6 +572,6 @@ export default function FeedPage({ user }: { user: IgUser }) {
           </>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
