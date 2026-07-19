@@ -1,0 +1,39 @@
+Bilgisayarda bile kırmızı kalbi göremiyorsan, butonu yanlış seçiyorsun veya elemente hiç ulaşamıyorsun demektir. Instagram’ın arayüzü sürekli güncellenir ve botları engellemek için sınıfları (class) rastgele veya karmaşık harflerden oluşur.
+
+Eğer document.querySelector ile statik bir class ismi seçmeye çalışıyorsan, kod boşa düşüyordur.
+
+Sorunun Kaynağı: Yanlış Seçici (Selector)
+Instagram'da hikaye (story) izlerken sağ alt köşedeki kalp butonunu bulmanın en garanti yolu, butonun içindeki aria-label değerine veya SVG ikonunun niteliğine bakmaktır.
+
+Şu anki Instagram yapısında hikaye beğenme butonu genellikle "Beğen" (veya İngilizce arayüzde "Like") aria-label değerine sahiptir.
+
+Çözüm: Kodu Doğrudan Konsolda Test Et
+Eklenti koduna gömmeden önce, Instagram hikayesi açıkken bilgisayarında F12 -> Console (Konsol) sekmesini aç ve aşağıdaki kodu yapıştırıp çalıştırmayı dene.
+
+JavaScript
+// 1. Alternatif: aria-label üzerinden doğrudan butonu bulmak
+let likeBtn = document.querySelector('button[aria-label="Beğen"]') || 
+              document.querySelector('button[aria-label="Like"]') ||
+              document.querySelector('svg[aria-label="Beğen"]')?.closest('button') ||
+              document.querySelector('svg[aria-label="Like"]')?.closest('button');
+
+if (likeBtn) {
+    console.log("Buton bulundu, tıklanıyor...");
+    
+    // Gerçek insan tıklamasını simüle et
+    const events = ['mousedown', 'mouseup', 'click'];
+    events.forEach(type => {
+        likeBtn.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    });
+} else {
+    console.error("Buton bulunamadı! Instagram seçiciyi değiştirmiş olabilir.");
+}
+Bu Kod Neden Çalışmalı ve Senin Kodun Neden Çalışmıyor?
+Dil Farklılığı: Eğer tarayıcın İngilizce ise aria-label="Beğen" çalışmaz, "Like" olması gerekir. Yukarıdaki kod iki durumu da kontrol eder.
+
+Görünmez Katmanlar: Instagram butonu korumak için üzerine şeffaf divler koyabilir. Doğrudan click() methodu yerine bubbles: true (olayı yukarı taşıyan) MouseEvent tetiklemek bu engeli aşar.
+
+Şimdi ne yapmalısın?
+Hikaye açıkken bu kodu konsola yapıştır. Eğer konsolda "Buton bulunamadı!" yazıyorsa, Instagram arayüzünde butonun kodunu değiştirmiştir.
+
+Konsol çıktısını ve buton için yazdığın kendi querySelector kodunu buraya at, nerede takıldığını doğrudan düzeltelim.
