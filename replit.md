@@ -4,7 +4,6 @@ Turkish-localized Instagram tracking and automation panel. Built as a TypeScript
 
 ## Stack
 
-- **Frontend** (`artifacts/takipci-paneli`): React 19 + Vite + Tailwind CSS 4 + Radix UI + TanStack Query + Wouter
 - **Backend** (`artifacts/api-server`): Express 5 + TypeScript (built with esbuild, runs as ESM)
 - **Database** (`lib/db`): Drizzle ORM over PostgreSQL; falls back to embedded PGlite when `DATABASE_URL` is not set
 - **Instagram client** (`lib/instagram-client`): Stealth HTTP client with TLS fingerprint spoofing (Linux `.so` binary)
@@ -12,14 +11,13 @@ Turkish-localized Instagram tracking and automation panel. Built as a TypeScript
 
 ## How to run
 
-Both services start automatically via Replit workflows:
+The API server starts automatically via the Replit workflow:
 
 | Workflow | Command |
 |---|---|
 | `artifacts/api-server: API Server` | `pnpm --filter @workspace/api-server run dev` |
-| `artifacts/takipci-paneli: web` | `pnpm --filter @workspace/takipci-paneli run dev` |
 
-The API server listens on port 8080 (`/api`). The frontend dev server listens on port 18973 (`/`).
+The API server listens on port 8080 (`/api`).
 
 ## First-time database setup
 
