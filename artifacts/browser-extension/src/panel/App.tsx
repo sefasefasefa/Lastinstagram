@@ -4,7 +4,6 @@ import { useHashLocation } from 'wouter/use-hash-location';
 import { Router as WouterRouter } from 'wouter';
 import { Toaster } from 'sonner';
 import { igApi, getCachedUser, clearCachedUser, hasSession, normalizeIgUser, type IgUser } from '@/lib/ig-api';
-import { loadConfig } from '@/lib/config';
 import DashboardPage from '@/pages/dashboard';
 import FeedPage from '@/pages/feed';
 import AutomationPage from '@/pages/automation';
