@@ -1,0 +1,51 @@
+Instagram için yazdığın eklentide bu sorunu yaşıyorsan, büyük ihtimalle Instagram'ın arayüzündeki (DOM) elementlere tıklama simülasyonu yapıyorsun ve arka plandaki API isteğini tetikleyemiyorsun.
+
+Bilgisayar ekranında kalbin kırmızıya dönmesi veya panelinde "beğenildi" yazması seni yanıltmasın. Yaşadığın durumun teknik nedenleri ve çözümleri şunlardır:
+
+1. Sadece Görsel Arayüzü (UI) Değiştiriyorsun (En Sık Yapılan Hata)
+Eğer eklentin, hikayedeki kalp butonunu bulup sadece CSS sınıfını değiştiriyorsa (classList.add('liked') gibi) veya tetiklediğin click() olayı Instagram'ın arkada çalışan React/GraphQL event listener'ları tarafından yakalanamıyorsa, beğeni işlemi yerel kalır.
+
+Sonuç: Bilgisayarındaki tarayıcıda beğendin gibi görünür çünkü kodu manipüle ettin. Ancak Instagram sunucularına veri gitmediği için telefonunu açtığında hiçbir şey değişmemiş olur.
+
+2. Güvenlik ve Token Eksikliği (CSRF / GraphQL)
+Instagram, tarayıcıda yapılan her işlem (beğeni, takip, yorum) için arka planda özel X-CSRFToken başlıkları ve oturum bilgileri içeren GraphQL istekleri gönderir. Sen sadece butona tıkladığında, Instagram'ın bot koruma mekanizması (anti-bot) bu tıklamanın gerçek bir kullanıcı tarafından yapılmadığını algılayıp isteği bloke etmiş olabilir. Eklentinin konsolunu (Console) ve Network (Ağ) sekmesini kontrol et; 403 Forbidden veya 400 Bad Request hataları alıyor musun?
+
+3. Yanlış Elementi Tetiklemek
+Instagram arayüzü sürekli güncelleniyor. Kalp ikonunun olduğu SVG veya div elementine doğrudan .click() yaptırmak bazen işe yaramaz. O elementin üzerindeki görünmez üst katmana (parent element) veya doğrudan event'i dinleyen asıl butona tıklaman gerekir.
+
+Bu Sorunu Nasıl Çözersin?
+Yöntem A: Güvenilir Event Simülasyonu (Arayüz Üzerinden)
+Sadece .click() demek yerine, tarayıcıya bunun gerçek bir insan tıklaması olduğunu söyleyen PointerEvent veya MouseEvent setleri göndermelisin.
+
+Content script'inde şu fonksiyonu kullanmayı dene:
+
+JavaScript
+function realClick(element) {
+    const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+    events.forEach(eventType => {
+        const ev = new MouseEvent(eventType, {
+            view: window,
+            bubbles: true,
+            cancelable: true
+        });
+        element.dispatchEvent(ev);
+    });
+}
+
+// Kalp butonunu seçerken en dıştaki <button> etiketini hedeflediğinden emin ol
+const heartButton = document.querySelector('section svg[aria-label="Beğen"]').closest('button');
+if (heartButton) {
+    realClick(heartButton);
+}
+Yöntem B: Ağ İsteklerini İncelemek (Kesin Çözüm)
+Sorunun ne olduğunu anlamak için şu adımları takip et:
+
+Bilgisayarda Instagram'ı aç, sağ tıkla -> İncele (Inspect) de ve Network (Ağ) sekmesine gel.
+
+Filtre kısmına web_create_story_like veya like yaz.
+
+Elinle bir hikayeyi beğen ve giden isteği (Request) incele.
+
+Sonra kendi eklentini çalıştır ve aynı isteğin Network sekmesinde oluşup oluşmadığına bak.
+
+Eğer eklentin çalıştığında Network sekmesinde giden bir istek yoksa veya giden istek kırmızı renkli (hatalı) ise, yukarıda bahsettiğim gibi Instagram sunucusuna isteği ulaştıramıyorsun demektir.

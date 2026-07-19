@@ -248,12 +248,15 @@ export async function getUserReels(
  * HAR: PolarisAPILikePostMutation  →  doc_id=27358573637160660
  */
 export async function likeMedia(mediaId: string): Promise<void> {
-  // Private API kullan — GQL token'ları stale olabileceğinden direkt Private API
-  // çok daha güvenilir ve hızlı; oturum geçerliyse her zaman çalışır.
-  await igApi(`/api/v1/media/${mediaId}/like/`, undefined, 'POST', {
+  // Private API — oturum geçerliyse her zaman çalışır
+  const res = await igApi<{ status?: string }>(`/api/v1/media/${mediaId}/like/`, undefined, 'POST', {
     media_id: mediaId,
     d: '1',
   });
+  // Instagram "ok" dışında bir status döndürürse beğeni sunucuya ulaşmamıştır
+  if (res?.status && res.status !== 'ok') {
+    throw new Error(`Beğeni reddedildi (status: ${res.status})`);
+  }
 }
 
 /**
@@ -263,14 +266,14 @@ export async function likeMedia(mediaId: string): Promise<void> {
  * Başarısız olursa Private API'ye düşer.
  */
 export async function likeStory(mediaId: string): Promise<void> {
-  // media_id her zaman saf sayısal olmalı — "pk_userId" formatıysa sadece pk al
   const pureId = mediaId.includes('_') ? mediaId.split('_')[0] : mediaId;
-  // Private API kullan — GQL token'ları (fb_dtsg/lsd) stale olabileceğinden
-  // direkt Private API çok daha güvenilir. Oturum geçerliyse her zaman çalışır.
-  await igApi(`/api/v1/media/${pureId}/like/`, undefined, 'POST', {
+  const res = await igApi<{ status?: string }>(`/api/v1/media/${pureId}/like/`, undefined, 'POST', {
     media_id: pureId,
     d: '1',
   });
+  if (res?.status && res.status !== 'ok') {
+    throw new Error(`Hikaye beğenisi reddedildi (status: ${res.status})`);
+  }
 }
 
 /**
