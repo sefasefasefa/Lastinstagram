@@ -174,18 +174,26 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
             onClick={() => {
               if (loadingIds.has(s.id)) return;
               const storyId = s.id;
-              const next = !liked[storyId];
+              const current = liked[storyId] ?? false;
+              const next = !current;
+
+              // Optimistik güncelleme — hemen yansıt, hata olursa geri al
+              setLiked((prev) => ({ ...prev, [storyId]: next }));
               setLoadingIds((p) => new Set(p).add(storyId));
+
               likeQueue.current = likeQueue.current.then(async () => {
                 try {
                   if (next) await likeStory(storyId);
                   else await unlikeStory(storyId);
-                  setLiked((prev) => ({ ...prev, [storyId]: next }));
+                  // başarılı — optimistik değer doğru, ek güncelleme gerekmez
                 } catch (e) {
-                  toast.error(`Ağ hatası: ${e instanceof Error ? e.message : String(e)}`);
+                  // API başarısız — önceki duruma geri al
+                  setLiked((prev) => ({ ...prev, [storyId]: current }));
+                  const msg = e instanceof Error ? e.message : String(e);
+                  toast.error(msg.includes('Oturum') ? msg : `Beğeni başarısız: ${msg}`);
                 } finally {
                   setLoadingIds((p) => { const n = new Set(p); n.delete(storyId); return n; });
-                  await new Promise<void>((r) => setTimeout(r, 800));
+                  await new Promise<void>((r) => setTimeout(r, 600));
                 }
               });
             }}

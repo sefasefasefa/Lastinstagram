@@ -418,7 +418,22 @@ async function igFetchViaTab(
         body: bd ?? undefined,
       });
       const text = await res.text();
-      if (!text || text.trimStart().startsWith('<')) return { ok: false, status: res.status, body: `HTML (${text.slice(0, 100)})` };
+      if (!text || text.trimStart().startsWith('<')) {
+        // Instagram login/challenge sayfası mı? Kullanıcıya anlamlı mesaj ver.
+        const lo = text.toLowerCase();
+        const isLoginPage =
+          lo.includes('log in to instagram') ||
+          lo.includes('"login"') ||
+          lo.includes('login_required') ||
+          lo.includes('checkpoint') ||
+          res.url.includes('/login/') ||
+          res.url.includes('/challenge/');
+        return {
+          ok: false,
+          status: res.status,
+          body: isLoginPage ? '__SESSION_EXPIRED__' : `HTML (${text.slice(0, 80)})`,
+        };
+      }
       try {
         const d = JSON.parse(text) as AnyObj;
         if (d['message'] === 'feedback_required') return { ok: false, status: res.status, body: JSON.stringify(d).slice(0, 200) };
@@ -434,7 +449,12 @@ async function igFetchViaTab(
   if (r?.error) throw new Error('executeScript hatası: ' + r.error.message);
   const data = r?.result as Record<string, unknown> | null;
   if (!data) throw new Error('Yanıt boş');
-  if (!data['ok']) throw new Error(`HTTP ${data['status']}: ${data['body']}`);
+  if (!data['ok']) {
+    const body = String(data['body'] ?? '');
+    if (body === '__SESSION_EXPIRED__')
+      throw new Error('Oturum süresi dolmuş — Instagram\'a yeniden giriş yapın');
+    throw new Error(`HTTP ${data['status']}: ${body}`);
+  }
   return data['data'];
 }
 
