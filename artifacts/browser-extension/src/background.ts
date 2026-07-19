@@ -191,7 +191,7 @@ async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unkno
         const userDict = (r['data'] as AnyObj)?.['xig_user_by_igid_v2']?.['user_dict'] as AnyObj | undefined;
         // pk veya fbid_v2 — hangisi varsa normalize et
         const pkVal = (userDict?.['pk'] ?? userDict?.['fbid_v2']) as string | undefined;
-        if (pkVal) return { ok: true, user: { ...userDict, pk: pkVal } };
+        if (pkVal) return { ok: true, user: { ...userDict, pk: pkVal }, fbDtsg, lsd, csrf };
         return { ok: false, errors: ['user_dict boş — ' + JSON.stringify(r['data']).slice(0, 120)] };
       } catch (e) {
         return { ok: false, errors: ['GraphQL hatası: ' + (e as Error).message] };
@@ -207,7 +207,163 @@ async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unkno
     const errs = (data['errors'] as string[] | undefined)?.join(' | ') ?? 'bilinmeyen hata';
     throw new Error(errs);
   }
+  // Login sırasında elde edilen tokenları storage'a kaydet — mutation'lar buradan okur
+  if (data['fbDtsg'] && data['lsd']) {
+    chrome.storage.local.set({
+      igGqlTokens: {
+        fbDtsg: data['fbDtsg'],
+        lsd:    data['lsd'],
+        csrf:   data['csrf'] ?? '',
+        ts:     Date.now(),
+      },
+    });
+  }
   return data['user'] as Record<string, unknown>;
+}
+
+// ─── GraphQL Mutation (beğeni vb. — HAR'a göre /graphql/query endpoint'i) ────
+// HAR analizi:
+//   Post/Reel like → PolarisAPILikePostMutation          doc_id=27358573637160660
+//   Story like     → usePolarisStoriesV4LikeMutationLikeMutation  doc_id=26938887309082050
+// Gerekli tokenlar (fb_dtsg, lsd, actor_id) sayfadan okunur; __actor_id__
+// placeholder'ı varsa gerçek değerle değiştirilir.
+async function igGqlMutationViaTab(
+  tabId: number,
+  docId: string,
+  variables: Record<string, unknown>,
+  friendlyName: string,
+  knownActorId: string,
+  cachedTokens?: Record<string, unknown>,   // login sırasında storage'a kaydedilen tokenlar
+): Promise<unknown> {
+  // Tokenları storage'dan kullan; yoksa sayfadan çek (fallback)
+  const preFbDtsg = String(cachedTokens?.['fbDtsg'] ?? '');
+  const preLsd    = String(cachedTokens?.['lsd']    ?? '');
+  const preCsrf   = String(cachedTokens?.['csrf']   ?? '');
+
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: async (
+      _docId: string,
+      variablesJson: string,
+      _friendlyName: string,
+      _knownActorId: string,
+      _preFbDtsg: string,
+      _preLsd: string,
+      _preCsrf: string,
+    ) => {
+      type AnyObj = Record<string, unknown>;
+      const win = window as AnyObj & {
+        require?: (m: string) => AnyObj;
+        __bbox?: { require?: unknown[][] };
+      };
+
+      let fbDtsg = _preFbDtsg, lsd = _preLsd;
+
+      // Sayfadan yeniden çek (cachedTokens eksikse veya başarısız olursa)
+      if (!fbDtsg || !lsd) {
+        // Yöntem 0: window.require()
+        try {
+          if (!fbDtsg) fbDtsg = (win.require?.('DTSGInitData') as AnyObj | undefined)?.['token'] as string ?? '';
+          if (!lsd)    lsd    = (win.require?.('LSD')           as AnyObj | undefined)?.['token'] as string ?? '';
+        } catch { /* ignore */ }
+
+        // Yöntem 1: __bbox bootloader
+        if (!fbDtsg || !lsd) {
+          try {
+            for (const item of ((win.__bbox?.require ?? []) as unknown[][])) {
+              if (!Array.isArray(item)) continue;
+              const name = item[0] as string;
+              const payload = (item[3] as AnyObj[] | undefined)?.[0] as AnyObj | undefined;
+              if (name === 'DTSGInitData' && payload?.['token']) fbDtsg = payload['token'] as string;
+              if (name === 'LSD'          && payload?.['token']) lsd    = payload['token'] as string;
+              if (fbDtsg && lsd) break;
+            }
+          } catch { /* ignore */ }
+        }
+
+        // Yöntem 2: inline <script> taraması
+        if (!fbDtsg || !lsd) {
+          for (const s of Array.from(document.querySelectorAll('script'))) {
+            const t = s.textContent ?? '';
+            if (!t) continue;
+            if (!fbDtsg) { const m = t.match(/"DTSGInitData"\s*,\s*\[\s*\]\s*,\s*\{\s*"token"\s*:\s*"([^"]+)"/); if (m) fbDtsg = m[1]; }
+            if (!lsd)    { const m = t.match(/"LSD"\s*,\s*\[\s*\]\s*,\s*\{\s*"token"\s*:\s*"([^"]+)"/);         if (m) lsd    = m[1]; }
+            if (fbDtsg && lsd) break;
+          }
+        }
+      }
+
+      if (!fbDtsg || !lsd) {
+        return { ok: false, error: `Token eksik — fb_dtsg:${!!fbDtsg} lsd:${!!lsd}` };
+      }
+
+      const csrf = _preCsrf ||
+        (document.cookie.split(';').find((c) => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? '');
+      const jazoest = '2' + String(Array.from(fbDtsg).reduce((s, c) => s + c.charCodeAt(0), 0));
+
+      const actorId = _knownActorId || '0';
+      const vars = JSON.parse(variablesJson) as AnyObj;
+      const inp = vars['input'] as AnyObj | undefined;
+      if (inp && (!inp['actor_id'] || inp['actor_id'] === '__actor_id__')) {
+        inp['actor_id'] = actorId;
+      }
+
+      const body = new URLSearchParams({
+        av: actorId,
+        __d: 'www', __user: '0', __a: '1',
+        fb_dtsg: fbDtsg, jazoest, lsd,
+        fb_api_caller_class: 'RelayModern',
+        fb_api_req_friendly_name: _friendlyName,
+        server_timestamps: 'true',
+        variables: JSON.stringify(vars),
+        doc_id: _docId,
+      });
+
+      const res = await fetch('https://www.instagram.com/api/graphql', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'x-asbd-id': '359341',
+          'x-csrftoken': csrf,
+          'x-fb-lsd': lsd,
+          'x-fb-friendly-name': _friendlyName,
+          'x-ig-app-id': '936619743392459',
+          'x-ig-max-touch-points': '0',
+        },
+        body: body.toString(),
+      });
+
+      const text = await res.text();
+      if (!text || text.trimStart().startsWith('<'))
+        return { ok: false, error: `HTML yanıt (${res.status}): ${text.slice(0, 120)}` };
+      try {
+        const d = JSON.parse(text) as AnyObj;
+        if ((d['errors'] as unknown[] | undefined)?.length)
+          return { ok: false, error: JSON.stringify(d['errors']).slice(0, 300) };
+        // GraphQL data-level errors
+        const dataObj = d['data'] as AnyObj | undefined;
+        if (dataObj) {
+          for (const val of Object.values(dataObj)) {
+            const v = val as AnyObj | null;
+            if (v && typeof v === 'object' && v['__typename'] === 'XDTApiError')
+              return { ok: false, error: JSON.stringify(v).slice(0, 300) };
+          }
+        }
+        return { ok: true, data: d };
+      } catch {
+        return { ok: false, error: text.slice(0, 300) };
+      }
+    },
+    args: [docId, JSON.stringify(variables), friendlyName, knownActorId, preFbDtsg, preLsd, preCsrf],
+  });
+
+  const r = results[0];
+  if (r?.error) throw new Error('executeScript hatası: ' + r.error.message);
+  const data = r?.result as Record<string, unknown> | null;
+  if (!data) throw new Error('Yanıt boş');
+  if (!data['ok']) throw new Error((data['error'] as string | undefined) ?? 'GraphQL mutation hatası');
+  return data['data'];
 }
 
 // ─── Genel REST API fetch (takipçi/takip listesi, unfollow) ──────────────────
@@ -350,6 +506,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
     });
     return false;
+  }
+
+  if (msg.type === 'IG_GQL_MUTATION') {
+    // actor_id + gql tokenlarını storage'dan oku (login sırasında kaydedildi)
+    chrome.storage.local.get(['igUser', 'igGqlTokens'], (result) => {
+      const storedUser   = result['igUser']      as Record<string, unknown> | undefined;
+      const storedTokens = result['igGqlTokens'] as Record<string, unknown> | undefined;
+      const knownActorId = String(storedUser?.['pk'] ?? storedUser?.['fbid_v2'] ?? '');
+      getInstagramTabId()
+        .then((tabId) =>
+          igGqlMutationViaTab(
+            tabId,
+            msg.docId as string,
+            msg.variables as Record<string, unknown>,
+            msg.friendlyName as string,
+            knownActorId,
+            storedTokens,
+          ),
+        )
+        .then((data) => sendResponse({ ok: true, data }))
+        .catch((err: Error) => sendResponse({ ok: false, error: err.message }));
+    });
+    return true;
   }
 
   if (msg.type !== 'IG_API') return false;

@@ -38,7 +38,7 @@ export interface IgPage {
   next_max_id?: string;
 }
 
-// ─── Background'a mesaj (takipçi listesi vb. anlık istekler) ─────────────────
+// ─── Background'a mesaj (takipçi listesi vb. anlık REST istekler) ────────────
 export function igApi<T>(
   endpoint: string,
   params?: Record<string, string>,
@@ -53,6 +53,27 @@ export function igApi<T>(
         if (!res) { reject(new Error('Background yanıt vermedi')); return; }
         if (res.ok) resolve(res.data as T);
         else reject(new Error(res.error ?? 'Instagram API hatası'));
+      },
+    );
+  });
+}
+
+// ─── Background'a GraphQL mutation mesajı ────────────────────────────────────
+// HAR'dan alınan doc_id + friendlyName ile Instagram'ın web GraphQL
+// endpoint'ini (/graphql/query) kullanır; fb_dtsg/lsd tokenları sayfadan okunur.
+export function igGql<T>(
+  docId: string,
+  variables: Record<string, unknown>,
+  friendlyName: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type: 'IG_GQL_MUTATION', docId, variables, friendlyName },
+      (res: { ok: boolean; data?: T; error?: string } | undefined) => {
+        if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
+        if (!res) { reject(new Error('Background yanıt vermedi')); return; }
+        if (res.ok) resolve(res.data as T);
+        else reject(new Error(res.error ?? 'GraphQL mutation hatası'));
       },
     );
   });
@@ -180,7 +201,8 @@ export async function getUserStories(userId: string): Promise<IgStory[]> {
   const reel = reels?.[userId] as AnyObj | undefined;
   const items = (reel?.['items'] as AnyObj[] | undefined) ?? [];
   return items.map((item) => ({
-    id: String(item['pk'] ?? item['id'] ?? ''),
+    // pk her zaman saf sayısal media ID; id bazen "pk_userId" formatında gelir
+    id: String(item['pk'] ?? String(item['id'] ?? '').split('_')[0]),
     mediaType: (item['media_type'] as number) ?? 1,
     displayUrl: extractImageUrl(item),
     videoUrl: ((item['video_versions'] as AnyObj[] | undefined)?.[0]?.['url']) as string | undefined,
@@ -219,14 +241,67 @@ export async function getUserReels(
   return { reels, nextMaxId: pagingInfo?.['max_id'] as string | undefined };
 }
 
+// ─── Beğeni fonksiyonları (HAR'dan alınan GraphQL endpoint'leri) ─────────────
+
+/**
+ * Post / Reel beğen.
+ * HAR: PolarisAPILikePostMutation  →  doc_id=27358573637160660
+ */
 export async function likeMedia(mediaId: string): Promise<void> {
-  await igApi(`/api/v1/media/${mediaId}/like/`, undefined, 'POST', {
+  await igGql(
+    '27358573637160660',
+    { input: { media_id: mediaId, actor_id: '__actor_id__', client_mutation_id: '1' } },
+    'PolarisAPILikePostMutation',
+  );
+}
+
+/**
+ * Hikaye beğen.
+ * Önce HAR'dan alınan GraphQL mutation'ı dener
+ * (usePolarisStoriesV4LikeMutationLikeMutation, doc_id=26938887309082050).
+ * Başarısız olursa Private API'ye düşer.
+ */
+export async function likeStory(mediaId: string): Promise<void> {
+  // media_id her zaman saf sayısal olmalı — "pk_userId" formatıysa sadece pk al
+  const pureId = mediaId.includes('_') ? mediaId.split('_')[0] : mediaId;
+  try {
+    await igGql(
+      '26938887309082050',
+      { input: { actor_id: '__actor_id__', client_mutation_id: '2', media_id: pureId } },
+      'usePolarisStoriesV4LikeMutationLikeMutation',
+    );
+  } catch (gqlErr) {
+    // GraphQL başarısız → Private API ile dene
+    try {
+      await igApi(`/api/v1/media/${pureId}/like/`, undefined, 'POST', {
+        media_id: pureId,
+        d: '1',
+      });
+    } catch (apiErr) {
+      // Her iki yol da başarısız: GraphQL hatasını göster (daha bilgili)
+      throw new Error(
+        `GQL: ${gqlErr instanceof Error ? gqlErr.message : String(gqlErr)} | ` +
+        `API: ${apiErr instanceof Error ? apiErr.message : String(apiErr)}`,
+      );
+    }
+  }
+}
+
+/**
+ * Post / Reel beğeniyi geri al.
+ * Private API hâlâ çalışıyor; HAR'da unlike mutation yakalanmadı.
+ */
+export async function unlikeMedia(mediaId: string): Promise<void> {
+  await igApi(`/api/v1/media/${mediaId}/unlike/`, undefined, 'POST', {
     media_id: mediaId,
-    d: '0',
   });
 }
 
-export async function unlikeMedia(mediaId: string): Promise<void> {
+/**
+ * Hikaye beğenisini geri al.
+ * Private API hâlâ çalışıyor; HAR'da unlike mutation yakalanmadı.
+ */
+export async function unlikeStory(mediaId: string): Promise<void> {
   await igApi(`/api/v1/media/${mediaId}/unlike/`, undefined, 'POST', {
     media_id: mediaId,
   });

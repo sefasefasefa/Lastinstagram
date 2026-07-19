@@ -7,6 +7,8 @@ import {
   getUserReels,
   likeMedia,
   unlikeMedia,
+  likeStory,
+  unlikeStory,
   type IgUser,
   type IgListUser,
   type IgPost,
@@ -93,7 +95,25 @@ function LikeButton({
 // ─── Hikaye şeridi ────────────────────────────────────────────────────────────
 
 function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boolean }) {
-  const [liked, setLiked] = useState<Record<string, boolean>>({});
+  // hasLiked API'den geliyor — stories değişince senkronize et
+  const [liked, setLiked] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(stories.map((s) => [s.id, s.hasLiked])),
+  );
+  // İşlem sürerken o butonu kilitle (eş zamanlı çift tıklamayı engelle)
+  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
+  // Instagram rate-limit koruması: beğenileri sıraya koy, aralarında 800ms bekle
+  const likeQueue = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    setLiked((prev) => {
+      const next = { ...prev };
+      for (const s of stories) {
+        // Henüz yerel değişiklik yoksa API değerini kullan
+        if (!(s.id in next)) next[s.id] = s.hasLiked;
+      }
+      return next;
+    });
+  }, [stories]);
 
   if (loading) {
     return (
@@ -142,17 +162,28 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
             )}
           </div>
           <button
-            onClick={async () => {
-              const next = !liked[s.id];
-              try {
-                if (next) await likeMedia(s.id);
-                else await unlikeMedia(s.id);
-                setLiked((prev) => ({ ...prev, [s.id]: next }));
-              } catch {
-                toast.error('Beğenme başarısız');
-              }
+            disabled={loadingIds.has(s.id)}
+            onClick={() => {
+              if (loadingIds.has(s.id)) return;
+              const storyId = s.id;
+              const next = !liked[storyId];
+              setLoadingIds((p) => new Set(p).add(storyId));
+              // Sıraya ekle — önceki bitmeden bir sonraki başlamasın
+              likeQueue.current = likeQueue.current.then(async () => {
+                try {
+                  if (next) await likeStory(storyId);
+                  else await unlikeStory(storyId);
+                  setLiked((prev) => ({ ...prev, [storyId]: next }));
+                } catch (e) {
+                  toast.error(`Hikaye beğeni hatası: ${e instanceof Error ? e.message : String(e)}`);
+                } finally {
+                  setLoadingIds((p) => { const n = new Set(p); n.delete(storyId); return n; });
+                  // Instagram rate-limit koruması: beğeniler arası 800ms bekle
+                  await new Promise<void>((r) => setTimeout(r, 800));
+                }
+              });
             }}
-            className={`p-0.5 rounded-full transition-colors ${liked[s.id] ? 'text-rose-500' : 'text-muted-foreground hover:text-rose-400'}`}
+            className={`p-0.5 rounded-full transition-colors disabled:opacity-40 ${liked[s.id] ? 'text-rose-500' : 'text-muted-foreground hover:text-rose-400'}`}
           >
             <HeartIcon filled={!!liked[s.id]} className="w-3.5 h-3.5" />
           </button>
