@@ -33,85 +33,116 @@ async function getInstagramTabId(): Promise<number> {
         if (id !== tabId || info.status !== 'complete') return;
         chrome.tabs.onUpdated.removeListener(listener);
         clearTimeout(timer);
-        setTimeout(() => resolve(tabId), 800);
+        setTimeout(() => resolve(tabId), 1000);
       };
       chrome.tabs.onUpdated.addListener(listener);
     });
   });
 }
 
-// ─── Kullanıcı verisini sekme içinden çek ─────────────────────────────────────
-// Tek bir executeScript: args geçirmeden, URL ve method bilgisini URL'e encode eder.
-// Önce sayfaya gömülü window data'yı dener, sonra fetch yapar.
+// ─── Kullanıcı verisini sekme içinden GraphQL ile çek ────────────────────────
+// HAR analizine göre: GraphQL /api/graphql x-ig-www-claim gerektirmez.
+// Gerekli tokenlar (fb_dtsg, lsd) sayfanın window.require() sisteminden okunur.
 async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unknown>> {
   const results = await chrome.scripting.executeScript({
     target: { tabId },
     func: async () => {
       type AnyObj = Record<string, unknown>;
+      const win = window as AnyObj & { require?: (m: string) => AnyObj };
 
-      // ── Yardımcı: nested objede pk/username olan user bul ──────────────────
-      function extractUser(obj: unknown, depth = 0): AnyObj | null {
-        if (!obj || typeof obj !== 'object' || depth > 6) return null;
-        const o = obj as AnyObj;
-        if ((o['pk'] || o['id']) && o['username']) return o;
-        for (const v of Object.values(o)) {
-          const found = extractUser(v, depth + 1);
-          if (found) return found;
-        }
-        return null;
-      }
+      // ── Token okuma (Meta/Instagram modül sistemi) ──────────────────────────
+      let fbDtsg = '', lsd = '', userId = '';
+      try { fbDtsg = (win.require?.('DTSGInitData') as AnyObj | undefined)?.['token'] as string ?? ''; } catch { /* ignore */ }
+      try { lsd = (win.require?.('LSD') as AnyObj | undefined)?.['token'] as string ?? ''; } catch { /* ignore */ }
+      try {
+        const u = win.require?.('CurrentUserInitialData') as AnyObj | undefined;
+        userId = String(u?.['USER_ID'] ?? u?.['userId'] ?? '');
+      } catch { /* ignore */ }
 
-      // ── Strateji 1: window globals (ağ isteği yok) ─────────────────────────
-      const win = window as AnyObj;
-      for (const key of ['_sharedData', '__initialData', '__additionalDataCurrentUser', '__additionalData']) {
-        try {
-          const u = extractUser(win[key]);
-          if (u) return { ok: true, source: key, user: u };
-        } catch { /* devam */ }
-      }
-
-      // ── Strateji 2: <script type="application/json"> tag'leri ──────────────
-      for (const el of document.querySelectorAll('script[type="application/json"]')) {
-        try {
-          const u = extractUser(JSON.parse(el.textContent ?? ''));
-          if (u) return { ok: true, source: 'script-tag', user: u };
-        } catch { /* devam */ }
-      }
-
-      // ── Strateji 3: Inline <script> içindeki JSON bloklarını tara ──────────
-      for (const el of document.querySelectorAll('script:not([src])')) {
-        const text = el.textContent ?? '';
-        if (!text.includes('"username"') || !text.includes('"pk"')) continue;
-        const matches = text.matchAll(/\{[^{}]*"pk"\s*:\s*"?\d+"?[^{}]*"username"\s*:\s*"[^"]+[^{}]*\}/g);
-        for (const m of matches) {
+      // Fallback: window globals taraması
+      if (!fbDtsg) {
+        for (const k of Object.keys(win)) {
           try {
-            const u = JSON.parse(m[0]) as AnyObj;
-            if ((u['pk'] || u['id']) && u['username']) return { ok: true, source: 'inline-script', user: u };
-          } catch { /* devam */ }
+            const v = (win[k] as AnyObj);
+            if (v && typeof v === 'object') {
+              if (typeof v['fb_dtsg'] === 'string') { fbDtsg = v['fb_dtsg'] as string; break; }
+              if (typeof v['dtsg'] === 'string') { fbDtsg = v['dtsg'] as string; break; }
+            }
+          } catch { /* ignore */ }
+        }
+      }
+      if (!lsd) {
+        for (const k of Object.keys(win)) {
+          try {
+            const v = win[k] as AnyObj;
+            if (v && typeof v === 'object' && typeof v['lsd'] === 'string') { lsd = v['lsd'] as string; break; }
+          } catch { /* ignore */ }
         }
       }
 
-      // ── Strateji 4: Saf fetch — Instagram'a özel header yok ────────────────
-      const csrf = document.cookie.split(';').find((c) => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? '';
-      const errors: string[] = [];
-
-      for (const ep of ['/api/v1/accounts/current_user/?edit=true', '/api/v1/accounts/current_user/']) {
-        try {
-          const res = await fetch(`https://www.instagram.com${ep}`, {
-            credentials: 'include',
-            headers: csrf ? { 'X-CSRFToken': csrf } : {},
-          });
-          const text = await res.text();
-          if (!text || text.trimStart().startsWith('<')) { errors.push(`${ep}:HTML`); continue; }
-          const d = JSON.parse(text) as AnyObj;
-          if (d['message'] === 'feedback_required') { errors.push(`${ep}:spam`); continue; }
-          const u = extractUser(d);
-          if (u) return { ok: true, source: ep, user: u };
-          errors.push(`${ep}:no-user`);
-        } catch (e) { errors.push(`${ep}:${(e as Error).message.slice(0, 40)}`); }
+      if (!fbDtsg || !lsd) {
+        return { ok: false, errors: [`Token eksik — fb_dtsg:${!!fbDtsg} lsd:${!!lsd} userId:${userId}`] };
       }
 
-      return { ok: false, errors };
+      const csrf = document.cookie.split(';').find((c) => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? '';
+      // jazoest = "2" + her karakterin ASCII toplamı
+      const jazoest = '2' + String(Array.from(fbDtsg).reduce((s, c) => s + c.charCodeAt(0), 0));
+
+      const gqlHeaders: Record<string, string> = {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-asbd-id': '359341',
+        'x-csrftoken': csrf,
+        'x-fb-lsd': lsd,
+        'x-ig-app-id': '936619743392459',
+        'x-ig-max-touch-points': '0',
+        'x-ig-www-claim': '0',
+      };
+
+      const gqlPost = async (docId: string, variables: object, av = '0') => {
+        const body = new URLSearchParams({
+          av, __d: 'www', __user: '0', __a: '1',
+          fb_dtsg: fbDtsg, jazoest, lsd,
+          variables: JSON.stringify(variables),
+          doc_id: docId,
+        });
+        const res = await fetch('https://www.instagram.com/api/graphql', {
+          method: 'POST', credentials: 'include',
+          headers: gqlHeaders,
+          body: body.toString(),
+        });
+        const text = await res.text();
+        if (!text || text.trimStart().startsWith('<')) throw new Error(`HTML yanıt (${res.status})`);
+        const d = JSON.parse(text) as AnyObj;
+        if ((d['errors'] as unknown[])?.length) throw new Error(JSON.stringify(d['errors']).slice(0, 100));
+        return d;
+      };
+
+      // Kullanıcı ID'si bilinmiyorsa — viewer bilgisini bul
+      // Herhangi bir GraphQL yanıtında viewer.user.pk her zaman döner
+      if (!userId || userId === 'undefined' || userId === '0') {
+        try {
+          // Sahte bir userID ile sorgula, viewer.user.pk'yı oku
+          const r = await gqlPost('26785645987802781',
+            { userID: '1', '__relay_internal__pv__PolarisAIGMAccountLabelEnabledrelayprovider': false });
+          userId = String((r['data'] as AnyObj)?.['viewer']?.['user']?.['pk'] ?? '');
+        } catch { /* ignore */ }
+      }
+
+      if (!userId) return { ok: false, errors: ['USER_ID bulunamadı'] };
+
+      // Tam profil verisi — PolarisUserHoverCardContentV2Query
+      // doc_id: 26785645987802781 → xig_user_by_igid_v2.user_dict
+      // Dönen alanlar: pk, username, full_name, profile_pic_url, follower_count, following_count, media_count, is_verified, is_private
+      try {
+        const r = await gqlPost('26785645987802781',
+          { userID: userId, '__relay_internal__pv__PolarisAIGMAccountLabelEnabledrelayprovider': false },
+          userId);
+        const userDict = (r['data'] as AnyObj)?.['xig_user_by_igid_v2']?.['user_dict'] as AnyObj | undefined;
+        if (userDict?.['pk']) return { ok: true, user: userDict };
+        return { ok: false, errors: ['user_dict boş — ' + JSON.stringify(r['data']).slice(0, 120)] };
+      } catch (e) {
+        return { ok: false, errors: ['GraphQL hatası: ' + (e as Error).message] };
+      }
     },
   });
 
@@ -121,14 +152,13 @@ async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unkno
   if (!data) throw new Error('executeScript boş sonuç döndü');
   if (!data['ok']) {
     const errs = (data['errors'] as string[] | undefined)?.join(' | ') ?? 'bilinmeyen hata';
-    throw new Error('Tüm endpoint\'ler başarısız: ' + errs);
+    throw new Error(errs);
   }
-  const user = data['user'] as Record<string, unknown>;
-  if (!user?.['pk'] && !user?.['id']) throw new Error('Kullanıcı pk/id eksik — ' + JSON.stringify(user).slice(0, 100));
-  return user;
+  return data['user'] as Record<string, unknown>;
 }
 
-// ─── Genel API fetch: URL parametrelerini stringe encode eder ─────────────────
+// ─── Genel REST API fetch (takipçi/takip listesi, unfollow) ──────────────────
+// HAR'a göre gerekli headerlar: x-ig-www-claim, x-asbd-id: 359341
 async function igFetchViaTab(
   tabId: number,
   fullUrl: string,
@@ -137,30 +167,56 @@ async function igFetchViaTab(
 ): Promise<unknown> {
   const results = await chrome.scripting.executeScript({
     target: { tabId },
-    func: (url: string, meth: string, bd: string | null) => {
-      const csrf =
-        document.cookie
-          .split(';')
-          .find((c) => c.trim().startsWith('csrftoken='))
-          ?.split('=')[1] ?? '';
+    func: async (url: string, meth: string, bd: string | null) => {
+      type AnyObj = Record<string, unknown>;
+      const win = window as AnyObj;
+
+      // x-ig-www-claim bul — localStorage, window globals, inline scriptler
+      let wwwClaim = '0';
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const v = localStorage.getItem(localStorage.key(i) ?? '') ?? '';
+          if (v.startsWith('hmac.')) { wwwClaim = v; break; }
+        }
+      } catch { /* ignore */ }
+      if (wwwClaim === '0') {
+        for (const v of Object.values(win)) {
+          if (typeof v === 'string' && v.startsWith('hmac.')) { wwwClaim = v; break; }
+        }
+      }
+      if (wwwClaim === '0') {
+        // Inline script taraması
+        for (const el of document.querySelectorAll('script:not([src])')) {
+          const m = (el.textContent ?? '').match(/hmac\.[A-Za-z0-9_\-+=/.]{20,}/);
+          if (m) { wwwClaim = m[0]; break; }
+        }
+      }
+
+      const csrf = document.cookie.split(';').find((c) => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? '';
       const headers: Record<string, string> = {
-        'X-CSRFToken': csrf,
-        'X-IG-App-ID': '936619743392459',
-        'X-Requested-With': 'XMLHttpRequest',
-        Accept: '*/*',
+        'x-asbd-id': '359341',
+        'x-csrftoken': csrf,
+        'x-ig-app-id': '936619743392459',
+        'x-ig-www-claim': wwwClaim,
+        'x-ig-max-touch-points': '0',
+        'x-requested-with': 'XMLHttpRequest',
+        'accept': '*/*',
       };
-      if (bd) headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      return fetch(url, {
-        method: meth,
-        credentials: 'include',
-        headers,
+      if (bd) headers['content-type'] = 'application/x-www-form-urlencoded';
+
+      const res = await fetch(url, {
+        method: meth, credentials: 'include', headers,
         body: bd ?? undefined,
-      })
-        .then((res) => {
-          if (!res.ok) return res.text().then((t) => ({ ok: false, status: res.status, body: t.slice(0, 300) }));
-          return res.json().then((d) => ({ ok: true, data: d }));
-        })
-        .catch((e: Error) => ({ ok: false, error: e.message }));
+      });
+      const text = await res.text();
+      if (!text || text.trimStart().startsWith('<')) return { ok: false, status: res.status, body: `HTML (${text.slice(0, 100)})` };
+      try {
+        const d = JSON.parse(text) as AnyObj;
+        if (d['message'] === 'feedback_required') return { ok: false, status: res.status, body: JSON.stringify(d).slice(0, 200) };
+        return { ok: true, data: d };
+      } catch {
+        return { ok: false, status: res.status, body: text.slice(0, 200) };
+      }
     },
     args: [fullUrl, method, bodyStr],
   });
@@ -169,7 +225,7 @@ async function igFetchViaTab(
   if (r?.error) throw new Error('executeScript hatası: ' + r.error.message);
   const data = r?.result as Record<string, unknown> | null;
   if (!data) throw new Error('Yanıt boş');
-  if (!data['ok']) throw new Error(`HTTP ${data['status']}: ${data['body'] ?? data['error']}`);
+  if (!data['ok']) throw new Error(`HTTP ${data['status']}: ${data['body']}`);
   return data['data'];
 }
 
@@ -182,12 +238,10 @@ async function igFetch(
 ): Promise<unknown> {
   const tabId = await getInstagramTabId();
 
-  // Kullanıcı bilgisi isteği → özel fonksiyon
   if (endpoint === '/api/v1/accounts/current_user/?edit=true' && method === 'GET') {
     return getCurrentUserViaTab(tabId);
   }
 
-  // Diğer istekler → URL'e parametre encode et
   let url = endpoint.startsWith('http') ? endpoint : `https://www.instagram.com${endpoint}`;
   if (params && Object.keys(params).length > 0) url += '?' + new URLSearchParams(params).toString();
   const bodyStr = body ? new URLSearchParams(body).toString() : null;
