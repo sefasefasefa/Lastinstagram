@@ -549,7 +549,7 @@ interface AutoState {
 
 const AUTO_DEFAULTS: AutoState = {
   enabled: false, timeFrom: 9, timeTo: 23,
-  minDelaySec: 45, maxDelaySec: 120, maxPerDay: 50, targetType: 'stories',
+  minDelaySec: 45, maxDelaySec: 120, maxPerDay: 50, targetType: 'reels',
   todayCount: 0, todayDate: '', nextRunAt: 0, backoffUntil: 0,
   consecutiveErrors: 0, lastActionLabel: '',
 };
@@ -635,18 +635,10 @@ async function runAutoLikeTick(): Promise<void> {
     let liked = false;
     let label = '';
 
-    if (s.targetType === 'stories' || s.targetType === 'both') {
-      const data = await igFetch(`/api/v1/feed/reels_media/`, { reel_ids: targetPk }) as Record<string, unknown>;
-      const reel = ((data['reels'] as Record<string, unknown> | undefined)?.[targetPk]) as Record<string, unknown> | undefined;
-      const items = ((reel?.['items'] as Array<Record<string, unknown>>) ?? []).filter((i) => !(i['has_liked'] as boolean));
-      if (items.length > 0) {
-        const story = items[Math.floor(Math.random() * items.length)];
-        const sid = String(story['pk'] ?? String(story['id'] ?? '').split('_')[0]);
-        await igFetch(`/api/v1/media/${sid}/like/`, undefined, 'POST', { media_id: sid, d: '1' });
-        liked = true; label = `Hikaye beğenildi (${targetPk})`;
-      }
-    }
-
+    // Story "like" işlemi aslında hikaye sahibine görünen bir kalp reaksiyonu gönderir
+    // (uygulamada hikayelere çift dokunmaya eşdeğerdir). Bu, kullanıcının haberi
+    // olmadan gönderilmesini önlemek için devre dışı bırakıldı — kullanıcı panelde
+    // kalp butonuna tıkladığında hikayeler yine beğenilebilir.
     if (!liked && (s.targetType === 'reels' || s.targetType === 'both')) {
       const data = await igFetch(`/api/v1/clips/user/`, undefined, 'POST',
         { target_user_id: targetPk, page_size: '6', include_feed_video: 'true' }) as Record<string, unknown>;

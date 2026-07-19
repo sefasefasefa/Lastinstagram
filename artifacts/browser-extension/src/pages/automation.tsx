@@ -235,11 +235,19 @@ export default function AutomationPage() {
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {t === 'stories' ? 'Hikayeler' : t === 'reels' ? 'Reels' : 'Her İkisi'}
+                  {t === 'stories' ? 'Hikayeler*' : t === 'reels' ? 'Reels' : 'Her İkisi'}
                 </button>
               ))}
             </div>
           </div>
+
+          {/* Stories note */}
+          {(state.targetType === 'stories' || state.targetType === 'both') && (
+            <p className="text-[10px] font-mono text-yellow-400/70 border border-yellow-500/20 bg-yellow-500/5 rounded-lg px-3 py-2 leading-relaxed">
+              * Hikaye beğenileri hikaye sahibine görünen kalp reaksiyonu gönderir.
+              Otomatik hikaye reaksiyonu devre dışı — yalnızca Reels beğenilir.
+            </p>
+          )}
 
           {/* RESET CACHE */}
           <button
