@@ -54,16 +54,43 @@ async function igFetch(
 async function pushUserData() {
   // sessionid HttpOnly olduğu için document.cookie'de görünmez.
   // Her zaman isteği dene — giriş yapılmamışsa API 401 döner, sessizce geçilir.
+
+  // Yol A: Instagram'ın sayfa içine gömdüğü veriyi ağ çağrısı olmadan oku
+  try {
+    // window.__additionalDataCurrentUser (profil sayfası) veya _sharedData
+    const win = window as Record<string, unknown>;
+    const viewer =
+      (win['__additionalDataCurrentUser'] as Record<string, unknown> | undefined)?.['data']?.['user'] ??
+      (win['_sharedData'] as Record<string, unknown> | undefined)?.['config']?.['viewer'];
+    if (viewer && (viewer as Record<string, unknown>)['pk']) {
+      chrome.runtime.sendMessage({ type: 'IG_USER_DATA', user: viewer });
+      return; // Başarıyla gönderildi — API çağrısına gerek yok
+    }
+  } catch (_) { /* devam */ }
+
+  // Yol B: API isteği
   try {
     const data = (await igFetch('/api/v1/accounts/current_user/?edit=true')) as {
       user?: unknown;
     };
     if (data?.user) {
       chrome.runtime.sendMessage({ type: 'IG_USER_DATA', user: data.user });
+      return;
     }
   } catch (err) {
-    // Sessiz geç — background retry eder
-    console.debug('[takipci] pushUserData hata:', err);
+    console.debug('[takipci] pushUserData API hata:', err);
+  }
+
+  // Yol C: /api/v1/accounts/current_user/ (edit parametresiz)
+  try {
+    const data2 = (await igFetch('/api/v1/accounts/current_user/')) as {
+      user?: unknown;
+    };
+    if (data2?.user) {
+      chrome.runtime.sendMessage({ type: 'IG_USER_DATA', user: data2.user });
+    }
+  } catch (err2) {
+    console.debug('[takipci] pushUserData yedek API hata:', err2);
   }
 }
 

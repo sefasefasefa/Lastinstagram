@@ -32,6 +32,8 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
   const [phase, setPhase] = useState<'checking' | 'waiting' | 'connecting'>('checking');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const attemptRef = useRef(0);
+
   const tryConnect = useCallback(async () => {
     const has = await hasSession();
     if (!has) {
@@ -48,7 +50,27 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
       onConnected(cached);
       return;
     }
-    // Yoksa: content script henüz yüklemedi. Poll devam eder.
+
+    // 3 denemeden sonra (≈6 sn) content script'i beklemek yerine
+    // aktif olarak background→content script üzerinden veri çek
+    attemptRef.current += 1;
+    if (attemptRef.current >= 3) {
+      attemptRef.current = 0; // sıfırla, tekrar deneyecek
+      try {
+        const { igApi } = await import('@/lib/ig-api');
+        const data = await igApi<{ user?: import('@/lib/ig-api').IgUser }>(
+          '/api/v1/accounts/current_user/?edit=true',
+        );
+        const user = (data as Record<string, unknown>)?.['user'] as import('@/lib/ig-api').IgUser | undefined;
+        if (user?.pk) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          onConnected(user);
+          return;
+        }
+      } catch (_) {
+        // background/content-script hazır değil, bir sonraki döngüde tekrar denenecek
+      }
+    }
   }, [onConnected]);
 
   // İlk kontrol
