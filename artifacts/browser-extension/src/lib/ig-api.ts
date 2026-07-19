@@ -248,11 +248,28 @@ export async function getUserReels(
  * HAR: PolarisAPILikePostMutation  →  doc_id=27358573637160660
  */
 export async function likeMedia(mediaId: string): Promise<void> {
-  await igGql(
-    '27358573637160660',
-    { input: { media_id: mediaId, actor_id: '__actor_id__', client_mutation_id: '1' } },
-    'PolarisAPILikePostMutation',
-  );
+  // Önce GraphQL mutation dene (PolarisAPILikePostMutation).
+  // Instagram sessizce reddederse (spam/rate-limit) Private API'ye düş —
+  // likeStory ile aynı fallback deseni.
+  try {
+    await igGql(
+      '27358573637160660',
+      { input: { media_id: mediaId, actor_id: '__actor_id__', client_mutation_id: '1' } },
+      'PolarisAPILikePostMutation',
+    );
+  } catch (gqlErr) {
+    try {
+      await igApi(`/api/v1/media/${mediaId}/like/`, undefined, 'POST', {
+        media_id: mediaId,
+        d: '1',
+      });
+    } catch (apiErr) {
+      throw new Error(
+        `GQL: ${gqlErr instanceof Error ? gqlErr.message : String(gqlErr)} | ` +
+        `API: ${apiErr instanceof Error ? apiErr.message : String(apiErr)}`,
+      );
+    }
+  }
 }
 
 /**
