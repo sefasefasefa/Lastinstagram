@@ -81,6 +81,7 @@ function LikeButton({
   const [liked, setLiked] = useState(initialLiked);
   const [count, setCount] = useState(initialCount);
   const [loading, setLoading] = useState(false);
+  const [popped, setPopped] = useState(false);
 
   async function toggle() {
     if (loading) return;
@@ -91,6 +92,7 @@ function LikeButton({
       else await unlikeMedia(mediaId);
       setLiked(next);
       setCount((c) => c + (next ? 1 : -1));
+      if (next) { setPopped(true); setTimeout(() => setPopped(false), 500); }
       onToggle?.(next);
     } catch {
       toast.error(next ? 'Etkileşim başarısız' : 'Geri alma başarısız');
@@ -103,10 +105,14 @@ function LikeButton({
     <button
       onClick={toggle}
       disabled={loading}
-      className={`flex items-center gap-1.5 px-2 py-1 rounded-md backdrop-blur-md transition-all active:scale-90 disabled:opacity-50 shadow-sm ${liked ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-black/50 text-white/90 border border-white/10 hover:bg-black/70'}`}
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg backdrop-blur-md transition-all duration-200 active:scale-90 disabled:opacity-50 shadow-md ${
+        liked
+          ? 'bg-primary/25 text-primary border border-primary/40 shadow-[0_2px_12px_rgba(225,48,108,0.25)]'
+          : 'bg-black/55 text-white/90 border border-white/10 hover:bg-black/70 hover:border-white/20'
+      }`}
     >
-      <Heart className={`w-3.5 h-3.5 transition-transform duration-300 ${liked ? 'fill-current scale-110' : ''}`} />
-      <span className="text-[10px] font-mono font-semibold tracking-tight">{fmt(count)}</span>
+      <Heart className={`w-3.5 h-3.5 transition-colors duration-200 ${liked ? 'fill-current' : ''} ${popped ? 'animate-heart-pop' : ''}`} />
+      <span className="text-[10px] font-mono font-bold tracking-tight tabular-nums">{fmt(count)}</span>
     </button>
   );
 }
@@ -117,6 +123,7 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
     Object.fromEntries(stories.map((s) => [s.id, s.hasLiked || false])),
   );
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
+  const [popIds, setPopIds]         = useState<Set<string>>(new Set());
   const likeQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
@@ -131,9 +138,9 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
 
   if (loading) {
     return (
-      <div className="flex gap-3 px-4 py-4 overflow-x-auto scrollbar-hide border-b border-white/5 bg-card/40 shadow-inner">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex-shrink-0 w-16 h-16 rounded-xl border border-white/5 bg-white/5 animate-pulse" />
+      <div className="flex gap-3 px-4 py-4 overflow-x-auto scrollbar-hide border-b border-white/5 bg-card/40">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="skeleton flex-shrink-0 w-[72px] h-[72px] rounded-xl" />
         ))}
       </div>
     );
@@ -141,34 +148,39 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
 
   if (stories.length === 0) {
     return (
-      <div className="px-4 py-5 text-[11px] text-muted-foreground border-b border-white/5 bg-card/40 flex items-center justify-center gap-2 shadow-inner">
-        <AlertCircle className="w-3.5 h-3.5 opacity-50" />
-        <span>Aktif hikaye bağlantısı yok</span>
+      <div className="px-4 py-6 text-[11px] text-muted-foreground border-b border-white/5 bg-card/30 flex items-center justify-center gap-2">
+        <AlertCircle className="w-3.5 h-3.5 opacity-40" />
+        <span className="font-medium">Aktif hikaye yok</span>
       </div>
     );
   }
 
   return (
-    <div className="flex gap-3 px-4 py-4 overflow-x-auto border-b border-white/5 bg-card/40 scrollbar-hide shadow-inner">
+    <div className="flex gap-3 px-4 py-4 overflow-x-auto border-b border-white/5 bg-card/30 scrollbar-hide">
       {stories.map((s) => (
         <div key={s.id} className="flex-shrink-0 relative group">
           <div className="relative">
             {s.displayUrl ? (
               <img
                 src={s.displayUrl}
-                className={`w-16 h-16 rounded-xl object-cover ring-2 ring-offset-2 ring-offset-card transition-all ${liked[s.id] ? 'ring-primary shadow-[0_0_10px_rgba(225,48,108,0.3)]' : 'ring-white/10'}`}
+                className={`w-[72px] h-[72px] rounded-xl object-cover ring-2 ring-offset-2 ring-offset-[hsl(var(--background))] transition-all duration-300 ${
+                  liked[s.id]
+                    ? 'ring-primary shadow-[0_0_14px_rgba(225,48,108,0.35)]'
+                    : 'ring-white/10 hover:ring-white/25'
+                }`}
               />
             ) : (
-              <div className="w-16 h-16 rounded-xl bg-background border border-white/10 flex items-center justify-center">
-                <ImageIcon className="w-5 h-5 text-muted-foreground/30" />
+              <div className="w-[72px] h-[72px] rounded-xl bg-card border border-white/8 flex items-center justify-center">
+                <ImageIcon className="w-6 h-6 text-muted-foreground/25" />
               </div>
             )}
             {s.mediaType === 2 && (
-              <div className="absolute top-1 right-1 w-4 h-4 rounded bg-black/60 backdrop-blur-md flex items-center justify-center border border-white/10">
+              <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-md bg-black/65 backdrop-blur-md flex items-center justify-center border border-white/15">
                 <Film className="w-2.5 h-2.5 text-white" />
               </div>
             )}
           </div>
+          {/* Like butonu */}
           <button
             disabled={loadingIds.has(s.id)}
             onClick={() => {
@@ -177,17 +189,18 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
               const current = liked[storyId] ?? false;
               const next = !current;
 
-              // Optimistik güncelleme — hemen yansıt, hata olursa geri al
               setLiked((prev) => ({ ...prev, [storyId]: next }));
               setLoadingIds((p) => new Set(p).add(storyId));
+              if (next) {
+                setPopIds((p) => new Set(p).add(storyId));
+                setTimeout(() => setPopIds((p) => { const n = new Set(p); n.delete(storyId); return n; }), 500);
+              }
 
               likeQueue.current = likeQueue.current.then(async () => {
                 try {
                   if (next) await likeStory(storyId);
                   else await unlikeStory(storyId);
-                  // başarılı — optimistik değer doğru, ek güncelleme gerekmez
                 } catch (e) {
-                  // API başarısız — önceki duruma geri al
                   setLiked((prev) => ({ ...prev, [storyId]: current }));
                   const msg = e instanceof Error ? e.message : String(e);
                   toast.error(msg.includes('Oturum') ? msg : `Beğeni başarısız: ${msg}`);
@@ -197,9 +210,15 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
                 }
               });
             }}
-            className={`absolute -bottom-1.5 -right-1.5 p-1.5 rounded-lg border shadow-sm transition-all hover:scale-110 active:scale-90 disabled:opacity-50 z-10 ${liked[s.id] ? 'bg-primary text-white border-primary shadow-[0_0_8px_rgba(225,48,108,0.4)]' : 'bg-card text-muted-foreground border-white/10 hover:text-foreground'}`}
+            className={`absolute -bottom-2 -right-2 p-2 rounded-xl border shadow-lg transition-all duration-200 hover:scale-110 active:scale-90 disabled:opacity-50 z-10 ${
+              liked[s.id]
+                ? 'bg-primary text-white border-primary shadow-[0_0_10px_rgba(225,48,108,0.5)]'
+                : 'bg-card/95 text-muted-foreground border-white/12 hover:text-white hover:border-white/25 backdrop-blur-sm'
+            }`}
           >
-            <Heart className={`w-3 h-3 ${liked[s.id] ? 'fill-current' : ''}`} />
+            <Heart
+              className={`w-3.5 h-3.5 transition-colors duration-150 ${liked[s.id] ? 'fill-current' : ''} ${popIds.has(s.id) ? 'animate-heart-pop' : ''}`}
+            />
           </button>
         </div>
       ))}
@@ -373,8 +392,8 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
           <div className="pb-6">
             <StoriesStrip stories={stories} loading={loadingStories} />
             {storiesFetched && stories.length > 0 && (
-              <p className="text-center text-[9px] font-mono tracking-widest uppercase text-muted-foreground py-6">
-                Operator Engagement: {stories.length} Node(s)
+              <p className="text-center text-[9px] font-mono tracking-widest uppercase text-muted-foreground/40 py-6">
+                {stories.length} hikaye
               </p>
             )}
           </div>
@@ -385,7 +404,7 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
             {loadingPosts && posts.length === 0 ? (
               <div className="grid grid-cols-2 gap-2">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="aspect-square rounded-lg bg-card border border-white/5 animate-pulse" />
+                  <div key={i} className="skeleton aspect-square rounded-xl" />
                 ))}
               </div>
             ) : posts.length === 0 ? (
@@ -421,7 +440,7 @@ function UserContentView({ user, onBack }: { user: IgListUser; onBack: () => voi
             {loadingReels && reels.length === 0 ? (
               <div className="grid grid-cols-2 gap-2">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="aspect-[9/16] rounded-lg bg-card border border-white/5 animate-pulse" />
+                  <div key={i} className="skeleton aspect-[9/16] rounded-xl" />
                 ))}
               </div>
             ) : reels.length === 0 ? (

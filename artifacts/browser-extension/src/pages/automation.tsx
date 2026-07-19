@@ -97,23 +97,33 @@ export default function AutomationPage() {
                 <Activity className="w-3 h-3" /> System Status
               </span>
               <div className="flex items-center gap-3">
-                <div className="relative inline-flex">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={state.enabled}
-                    onChange={(e) => handleChange({ enabled: e.target.checked })}
-                  />
-                  <div className={`w-11 h-6 rounded-full transition-colors cursor-pointer border border-white/10 ${state.enabled ? 'bg-primary' : 'bg-white/5'}`} onClick={() => handleChange({ enabled: !state.enabled })}>
-                    <div className={`w-4 h-4 rounded-full bg-white transition-transform mt-0.5 ml-0.5 shadow-sm ${state.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </div>
-                </div>
-                <div className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border ${
-                  status.kind === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
-                  status.kind === 'backoff' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
-                  status.kind === 'window' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                {/* Toggle switch */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={state.enabled}
+                  onClick={() => handleChange({ enabled: !state.enabled })}
+                  className={`relative w-12 h-6 rounded-full border transition-all duration-300 flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
+                    state.enabled
+                      ? 'bg-primary border-primary shadow-[0_0_16px_rgba(225,48,108,0.4)]'
+                      : 'bg-white/5 border-white/10 hover:border-white/20'
+                  }`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-300 ${
+                    state.enabled ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+
+                {/* Status badge */}
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase border transition-all ${
+                  status.kind === 'active'  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                  status.kind === 'backoff' ? 'bg-yellow-500/10  text-yellow-400  border-yellow-500/20'  :
+                  status.kind === 'window'  ? 'bg-blue-500/10    text-blue-400    border-blue-500/20'    :
                   'bg-white/5 text-muted-foreground border-white/10'
                 }`}>
+                  {status.kind === 'active' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-live-ring flex-shrink-0" />
+                  )}
                   {status.text}
                 </div>
               </div>

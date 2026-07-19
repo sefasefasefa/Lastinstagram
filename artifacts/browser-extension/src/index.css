@@ -51,6 +51,28 @@
   --ig-orange: #fcb045;
 }
 
+/* ─── Keyframes ───────────────────────────────────────────────────────────── */
+@keyframes heart-pop {
+  0%   { transform: scale(1); }
+  20%  { transform: scale(0.78); }
+  60%  { transform: scale(1.35); }
+  80%  { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+@keyframes shimmer-slide {
+  from { transform: translateX(-150%); }
+  to   { transform: translateX(200%); }
+}
+@keyframes live-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55); }
+  70%  { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @layer base {
   * { @apply border-border; box-sizing: border-box; }
   body {
@@ -97,4 +119,24 @@
   /* Glow */
   .glow-pink { box-shadow: 0 0 20px hsl(var(--primary) / 0.22); }
   .glow-pink-lg { box-shadow: 0 0 40px hsl(var(--primary) / 0.30); }
+
+  /* ─── Animasyon yardımcıları ──────────────────────────────────── */
+  .animate-heart-pop { animation: heart-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  .animate-live-ring { animation: live-ring 1.8s ease-out infinite; }
+
+  /* Shimmer skeleton — animate-pulse'dan çok daha pürüzsüz */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: hsl(var(--card) / 0.8);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-150%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.045) 50%, transparent 100%);
+    animation: shimmer-slide 1.5s ease-in-out infinite;
+  }
 }

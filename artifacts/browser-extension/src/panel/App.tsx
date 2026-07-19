@@ -296,6 +296,38 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
   );
 }
 
+// ─── Kimliği doğrulanmış uygulama (Router içinde — useHashLocation için) ──────
+function AuthenticatedApp({ user, onLogout }: { user: IgUser; onLogout: () => void }) {
+  const [location] = useHashLocation();
+
+  return (
+    <div className="flex flex-col h-[100dvh] bg-background">
+      <TopHeader user={user} onLogout={onLogout} />
+      <div className="flex-1 overflow-hidden min-h-0 relative">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={location.split('?')[0]}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.17, ease: [0.4, 0, 0.2, 1] }}
+            className="absolute inset-0 overflow-hidden"
+          >
+            <Switch>
+              <Route path="/"           component={() => <Redirect to="/dashboard" />} />
+              <Route path="/dashboard"  component={() => <DashboardPage user={user} onLogout={onLogout} />} />
+              <Route path="/feed"       component={() => <FeedPage user={user} />} />
+              <Route path="/automation" component={() => <AutomationPage />} />
+              <Route component={NotFound} />
+            </Switch>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      <BottomNav />
+    </div>
+  );
+}
+
 // ─── Ana Uygulama ─────────────────────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState<IgUser | null | undefined>(undefined);
@@ -348,19 +380,7 @@ export default function App() {
 
   return (
     <WouterRouter hook={useHashLocation}>
-      <div className="flex flex-col h-[100dvh] bg-background">
-        <TopHeader user={user} onLogout={logout} />
-        <div className="flex-1 overflow-hidden min-h-0 relative">
-          <Switch>
-            <Route path="/"           component={() => <Redirect to="/dashboard" />} />
-            <Route path="/dashboard"  component={() => <DashboardPage user={user} onLogout={logout} />} />
-            <Route path="/feed"       component={() => <FeedPage user={user} />} />
-            <Route path="/automation" component={() => <AutomationPage />} />
-            <Route component={NotFound} />
-          </Switch>
-        </div>
-        <BottomNav />
-      </div>
+      <AuthenticatedApp user={user} onLogout={logout} />
       <Toaster theme="dark" position="top-center" richColors />
     </WouterRouter>
   );

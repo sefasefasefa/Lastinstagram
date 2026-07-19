@@ -78,7 +78,7 @@ function UserRow({ u, tab, onUnfollow }: { u: IgListUser; tab: Tab; onUnfollow?:
 
       {tab === 'following' && (
         <button onClick={handleUnfollow} disabled={unfollowing}
-          className="flex items-center justify-center gap-1 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border border-white/8 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/25 transition-all flex-shrink-0 disabled:opacity-40 opacity-0 group-hover:opacity-100 focus:opacity-100 min-w-[60px]">
+          className="flex items-center justify-center gap-1.5 text-[10px] font-semibold px-3 py-1.5 rounded-lg border transition-all duration-200 flex-shrink-0 disabled:opacity-40 min-w-[64px] border-white/8 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/25 opacity-0 group-hover:opacity-100 focus:opacity-100">
           {unfollowing ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserMinus className="w-3 h-3" />}
           {unfollowing ? '…' : 'Bırak'}
         </button>
@@ -186,9 +186,16 @@ export default function DashboardPage({ user }: Props) {
       {/* ─── List ────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto bg-background">
         {loading && users.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-3">
-            <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
-            <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Yükleniyor…</p>
+          <div className="p-3 space-y-px">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="flex items-center gap-3 px-2 py-2.5">
+                <div className="skeleton w-10 h-10 rounded-xl flex-shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="skeleton h-3 w-28 rounded-full" />
+                  <div className="skeleton h-2.5 w-16 rounded-full" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-muted-foreground">
