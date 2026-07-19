@@ -1,4 +1,7 @@
 export interface AppConfig {
+  // Panel sunucusu URL'si (örn: https://xxxx.replit.dev)
+  serverUrl: string;
+
   // Instagram Ayarları
   instagramUsername: string;
   instagramPassword: string;
@@ -20,6 +23,9 @@ export interface AppConfig {
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
+  // Panel sunucusu
+  serverUrl: '',
+
   // Instagram
   instagramUsername: '',
   instagramPassword: '',

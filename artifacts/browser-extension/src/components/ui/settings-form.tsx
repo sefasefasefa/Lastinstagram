@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect } from 'react';
 import { Button } from './button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './card';
@@ -37,17 +35,21 @@ export function SettingsForm() {
   };
 
   const handleSaveToBackend = async () => {
+    const serverUrl = config.serverUrl.replace(/\/$/, '');
+    if (!serverUrl) {
+      toast.error('Önce Panel Sunucusu URL\'sini girin');
+      return;
+    }
     setIsLoading(true);
     try {
-      // Backend'e kaydet (opsiyonel)
-      const response = await fetch('/api/settings', {
+      const response = await fetch(`${serverUrl}/api/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
-        credentials: 'include'
+        credentials: 'include',
       });
       if (response.ok) {
-        toast.success('Ayarlar backend\'e kaydedildi');
+        toast.success('Ayarlar panel sunucusuna kaydedildi');
       } else {
         toast.error('Backend kaydında hata: ' + response.statusText);
       }
@@ -60,6 +62,27 @@ export function SettingsForm() {
 
   return (
     <div className="space-y-6">
+      {/* Panel Sunucusu */}
+      <Card>
+        <CardHeader>
+          <CardTitle>🌐 Panel Sunucusu</CardTitle>
+          <CardDescription>
+            Replit'teki API sunucusunun URL'si (örn: https://xxxx.replit.dev)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="serverUrl">Sunucu URL</Label>
+            <Input
+              id="serverUrl"
+              value={config.serverUrl}
+              onChange={(e) => handleChange('serverUrl', e.target.value)}
+              placeholder="https://xxxx.replit.dev"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Instagram Ayarları */}
       <Card>
         <CardHeader>
