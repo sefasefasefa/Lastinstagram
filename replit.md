@@ -1,113 +1,59 @@
 # Takipçi Paneli
 
-Turkish-localized Instagram tracking and automation panel. Built as a TypeScript pnpm monorepo.
+An Instagram automation and management panel. Features an Express API backend, React frontend (browser extension), and Python stealth bridge services for TLS fingerprint spoofing and FunCaptcha solving.
 
 ## Stack
 
-- **Backend** (`artifacts/api-server`): Express 5 + TypeScript (built with esbuild, runs as ESM)
-- **Database** (`lib/db`): Drizzle ORM over PostgreSQL; falls back to embedded PGlite when `DATABASE_URL` is not set
-- **Instagram client** (`lib/instagram-client`): Stealth HTTP client with TLS fingerprint spoofing (Linux `.so` binary)
-- **Python bridge** (`lib/stealth-requests`): curl_cffi-based request bridge for additional stealth coverage
+- **Backend:** Node.js + Express, Drizzle ORM, SQLite (`lib/db/data.db`)
+- **Frontend:** React + Vite + Tailwind CSS (browser extension in `artifacts/browser-extension/`)
+- **Python sidecars:** `lib/stealth-requests/` (curl_cffi bridge) and `lib/funcaptcha-solver/`
+- **Monorepo:** pnpm workspaces
 
 ## How to run
 
-The API server starts automatically via the Replit workflow:
+The API server starts automatically via the managed workflow `artifacts/api-server: API Server`.
 
-| Workflow | Command |
-|---|---|
-| `artifacts/api-server: API Server` | `pnpm --filter @workspace/api-server run dev` |
+```
+pnpm --filter @workspace/api-server run dev
+```
 
-The API server listens on port 8080 (`/api`).
+The server listens on the port injected by Replit (`PORT` env var, defaults to 8080 locally).
 
-## First-time database setup
+## First-time setup
+
+Dependencies are installed via `pnpm install`. The Python venv is at `.venv/` and is set up by:
 
 ```bash
-# 1. Push schema
-pnpm --filter @workspace/db run push
+bash scripts/setup-python.sh
+```
 
-# 2. Seed default admin user
+Seed the admin user (username: `admin`, password: `admin123`):
+
+```bash
 pnpm --filter @workspace/scripts run db:seed-admin
-
-# Optional: seed mock data (tracked users, liked media, etc.)
-pnpm --filter @workspace/scripts run db:seed
 ```
 
-The database is SQLite — a single file at `lib/db/data.db`. No Postgres, no Docker needed.
-
-## Windows setup
-
-```powershell
-# 1. Install Node deps
-pnpm install
-
-# 2. Push schema & seed
-pnpm --filter @workspace/db run push
-pnpm --filter @workspace/scripts run db:seed-admin
-
-# 3. Python venv (for Instagram stealth bridge & funcaptcha solver)
-.\scripts\setup-python.ps1
-
-# 4. Start both services in separate terminals
-pnpm --filter @workspace/api-server run dev
-pnpm --filter @workspace/takipci-paneli run dev
-```
-
-The Python venv path is auto-detected (`py` launcher on Windows). If you have multiple Python versions, add to `.env`:
-```
-STEALTH_REQUESTS_PYTHON=.venv\Scripts\python.exe
-```
-
-## Default login
-
-- **Username:** `admin`
-- **Password:** `admin123`
-
-> Change `ADMIN_PASSWORD` in your environment for production use.
-
-## Environment variables / secrets
+## Environment variables
 
 | Variable | Required | Notes |
 |---|---|---|
-| `SESSION_SECRET` | ✅ Yes | Already set as a Replit secret |
-| `DATABASE_URL` | ❌ No | Falls back to PGlite if unset |
-| `ADMIN_PASSWORD` | ❌ No | Defaults to `admin123` — rotate for production |
-| `VITE_ADMIN_ENABLED` | ❌ No | Set to `true` to enable admin UI in the frontend |
+| `SESSION_SECRET` | Yes | Set in Replit Secrets |
+| `DATABASE_URL` | No | Defaults to SQLite at `lib/db/data.db` |
+| `USE_STEALTH_REQUESTS` | No | Defaults to `true`; set `false` to disable Python bridge |
+| `STEALTH_REQUESTS_PYTHON` | No | Path to Python interpreter; defaults to `.venv/bin/python3` |
+| `FUNCAPTCHA_PYTHON` | No | Same as above for the FunCaptcha solver |
 
-## Funcaptcha solver
+## Key paths
 
-The optional Python funcaptcha solver (`lib/funcaptcha-solver/app.py`) requires a `.venv` with `curl_cffi` installed. It starts automatically but the app works fine without it — Instagram login falls back to the stealth bridge.
-
-## Tarayıcı Eklentisi (Browser Extension)
-
-Kaynak: `artifacts/browser-extension/`
-
-### Build
-
-```bash
-pnpm --filter @workspace/browser-extension run build
-```
-
-Çıktılar:
-- `artifacts/browser-extension/dist/takipci-paneli-chrome.zip` — Chrome / Edge
-- `artifacts/browser-extension/dist/takipci-paneli-firefox.zip` — Firefox
-
-### Chrome / Edge'e kurulum
-
-1. `chrome://extensions/` → "Geliştirici modu" aç
-2. "Paketlenmemiş öğe yükle" → `artifacts/browser-extension/dist/chrome/` klasörünü seç
-
-### Firefox'a kurulum
-
-1. `about:debugging` → Bu Firefox → Geçici Eklenti Yükle
-2. `artifacts/browser-extension/dist/firefox/manifest.json` dosyasını seç
-
-### Nasıl çalışır
-
-1. Instagram'a giriş yapılmış bir sekmede eklenti simgesine tıkla
-2. Panel URL, kullanıcı adı ve şifresini gir → "Kaydet"
-3. "Oturumu Panele Gönder" butonuna tıkla
-4. Eklenti: `sessionid` cookie'sini okur → Panel admin girişi yapar → `/api/instagram/session-cookie` endpoint'ine gönderir
+- `artifacts/api-server/` — Express API server
+- `artifacts/browser-extension/` — React Chrome/Firefox extension UI
+- `lib/db/` — Drizzle schema and SQLite database
+- `lib/stealth-requests/` — Python curl_cffi stealth bridge
+- `lib/funcaptcha-solver/` — Python FunCaptcha solver sidecar
+- `lib/instagram-client/` — Instagram API client
+- `scripts/` — DB seed/restore scripts
 
 ## User preferences
 
-(none yet)
+- Keep the existing monorepo structure (pnpm workspaces)
+- Do not migrate to a different database without explicit request
