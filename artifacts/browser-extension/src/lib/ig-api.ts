@@ -248,28 +248,12 @@ export async function getUserReels(
  * HAR: PolarisAPILikePostMutation  →  doc_id=27358573637160660
  */
 export async function likeMedia(mediaId: string): Promise<void> {
-  // Önce GraphQL mutation dene (PolarisAPILikePostMutation).
-  // Instagram sessizce reddederse (spam/rate-limit) Private API'ye düş —
-  // likeStory ile aynı fallback deseni.
-  try {
-    await igGql(
-      '27358573637160660',
-      { input: { media_id: mediaId, actor_id: '__actor_id__', client_mutation_id: '1' } },
-      'PolarisAPILikePostMutation',
-    );
-  } catch (gqlErr) {
-    try {
-      await igApi(`/api/v1/media/${mediaId}/like/`, undefined, 'POST', {
-        media_id: mediaId,
-        d: '1',
-      });
-    } catch (apiErr) {
-      throw new Error(
-        `GQL: ${gqlErr instanceof Error ? gqlErr.message : String(gqlErr)} | ` +
-        `API: ${apiErr instanceof Error ? apiErr.message : String(apiErr)}`,
-      );
-    }
-  }
+  // Private API kullan — GQL token'ları stale olabileceğinden direkt Private API
+  // çok daha güvenilir ve hızlı; oturum geçerliyse her zaman çalışır.
+  await igApi(`/api/v1/media/${mediaId}/like/`, undefined, 'POST', {
+    media_id: mediaId,
+    d: '1',
+  });
 }
 
 /**
@@ -281,27 +265,12 @@ export async function likeMedia(mediaId: string): Promise<void> {
 export async function likeStory(mediaId: string): Promise<void> {
   // media_id her zaman saf sayısal olmalı — "pk_userId" formatıysa sadece pk al
   const pureId = mediaId.includes('_') ? mediaId.split('_')[0] : mediaId;
-  try {
-    await igGql(
-      '26938887309082050',
-      { input: { actor_id: '__actor_id__', client_mutation_id: '2', media_id: pureId } },
-      'usePolarisStoriesV4LikeMutationLikeMutation',
-    );
-  } catch (gqlErr) {
-    // GraphQL başarısız → Private API ile dene
-    try {
-      await igApi(`/api/v1/media/${pureId}/like/`, undefined, 'POST', {
-        media_id: pureId,
-        d: '1',
-      });
-    } catch (apiErr) {
-      // Her iki yol da başarısız: GraphQL hatasını göster (daha bilgili)
-      throw new Error(
-        `GQL: ${gqlErr instanceof Error ? gqlErr.message : String(gqlErr)} | ` +
-        `API: ${apiErr instanceof Error ? apiErr.message : String(apiErr)}`,
-      );
-    }
-  }
+  // Private API kullan — GQL token'ları (fb_dtsg/lsd) stale olabileceğinden
+  // direkt Private API çok daha güvenilir. Oturum geçerliyse her zaman çalışır.
+  await igApi(`/api/v1/media/${pureId}/like/`, undefined, 'POST', {
+    media_id: pureId,
+    d: '1',
+  });
 }
 
 /**

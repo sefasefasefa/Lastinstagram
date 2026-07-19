@@ -738,12 +738,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 const ALARM = 'ig-keepalive';
 
 function ensureAlarms() {
-  chrome.alarms.get(ALARM, (e) => { if (!e) chrome.alarms.create(ALARM, { periodInMinutes: 20 }); });
+  // 5 dakikada bir keepalive: GQL token'larını tazeler + Instagram oturumunu canlı tutar
+  chrome.alarms.get(ALARM, (e) => { if (!e) chrome.alarms.create(ALARM, { periodInMinutes: 5 }); });
   chrome.alarms.get(AUTO_ALARM, (e) => { if (!e) chrome.alarms.create(AUTO_ALARM, { periodInMinutes: 1 }); });
 }
 ensureAlarms();
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create(ALARM, { periodInMinutes: 20 });
+  chrome.alarms.create(ALARM, { periodInMinutes: 5 });
   chrome.alarms.create(AUTO_ALARM, { periodInMinutes: 1 });
 });
 

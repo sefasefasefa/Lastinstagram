@@ -52,6 +52,7 @@ if (!process.env.SESSION_SECRET) {
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
+    rolling: true,   // Her istekte cookie maxAge'i sıfırla (oturum aktif kaldıkça uzar)
     resave: false,
     saveUninitialized: false,
     cookie: {
