@@ -46,57 +46,69 @@ async function getInstagramTabId(): Promise<number> {
 async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unknown>> {
   const results = await chrome.scripting.executeScript({
     target: { tabId },
-    // async keyword is required — executeScript supports Promise-returning funcs
     func: async () => {
-      // Yol 1: Instagram'ın sayfaya gömdüğü window verisi (ağ isteği yok)
-      const win = window as Record<string, unknown>;
-      const viewer =
-        (win['__additionalDataCurrentUser'] as Record<string, unknown> | undefined)?.['data']?.['user'] ??
-        (win['_sharedData'] as Record<string, unknown> | undefined)?.['config']?.['viewer'];
-      if (viewer && (viewer as Record<string, unknown>)['pk']) {
-        return { ok: true, source: 'window', user: viewer };
+      type AnyObj = Record<string, unknown>;
+
+      // ── Yardımcı: nested objede pk/username olan user bul ──────────────────
+      function extractUser(obj: unknown, depth = 0): AnyObj | null {
+        if (!obj || typeof obj !== 'object' || depth > 6) return null;
+        const o = obj as AnyObj;
+        if ((o['pk'] || o['id']) && o['username']) return o;
+        for (const v of Object.values(o)) {
+          const found = extractUser(v, depth + 1);
+          if (found) return found;
+        }
+        return null;
       }
 
-      // Yol 2: API fetch — X-Instagram-AJAX: 1 olmadan HTML dönebilir
-      const csrf =
-        document.cookie.split(';').find((c) => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? '';
+      // ── Strateji 1: window globals (ağ isteği yok) ─────────────────────────
+      const win = window as AnyObj;
+      for (const key of ['_sharedData', '__initialData', '__additionalDataCurrentUser', '__additionalData']) {
+        try {
+          const u = extractUser(win[key]);
+          if (u) return { ok: true, source: key, user: u };
+        } catch { /* devam */ }
+      }
 
-      const igHeaders: Record<string, string> = {
-        'X-CSRFToken': csrf,
-        'X-IG-App-ID': '936619743392459',
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-Instagram-AJAX': '1',
-        'X-ASBD-ID': '129477',
-        Accept: 'application/json',
-      };
+      // ── Strateji 2: <script type="application/json"> tag'leri ──────────────
+      for (const el of document.querySelectorAll('script[type="application/json"]')) {
+        try {
+          const u = extractUser(JSON.parse(el.textContent ?? ''));
+          if (u) return { ok: true, source: 'script-tag', user: u };
+        } catch { /* devam */ }
+      }
 
-      const endpoints = [
-        '/api/v1/accounts/current_user/?edit=true',
-        '/api/v1/accounts/current_user/',
-        '/accounts/edit/?__a=1&__d=dis',
-      ];
+      // ── Strateji 3: Inline <script> içindeki JSON bloklarını tara ──────────
+      for (const el of document.querySelectorAll('script:not([src])')) {
+        const text = el.textContent ?? '';
+        if (!text.includes('"username"') || !text.includes('"pk"')) continue;
+        const matches = text.matchAll(/\{[^{}]*"pk"\s*:\s*"?\d+"?[^{}]*"username"\s*:\s*"[^"]+[^{}]*\}/g);
+        for (const m of matches) {
+          try {
+            const u = JSON.parse(m[0]) as AnyObj;
+            if ((u['pk'] || u['id']) && u['username']) return { ok: true, source: 'inline-script', user: u };
+          } catch { /* devam */ }
+        }
+      }
 
+      // ── Strateji 4: Saf fetch — Instagram'a özel header yok ────────────────
+      const csrf = document.cookie.split(';').find((c) => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? '';
       const errors: string[] = [];
-      for (const ep of endpoints) {
+
+      for (const ep of ['/api/v1/accounts/current_user/?edit=true', '/api/v1/accounts/current_user/']) {
         try {
           const res = await fetch(`https://www.instagram.com${ep}`, {
             credentials: 'include',
-            headers: igHeaders,
+            headers: csrf ? { 'X-CSRFToken': csrf } : {},
           });
           const text = await res.text();
-          if (!text || text.trimStart().startsWith('<')) {
-            errors.push(`${ep}: HTML yanıt (status=${res.status})`);
-            continue;
-          }
-          const d = JSON.parse(text) as Record<string, unknown>;
-          const u =
-            (d['user'] as Record<string, unknown> | undefined) ??
-            ((d['data'] as Record<string, unknown> | undefined)?.['user'] as Record<string, unknown> | undefined);
-          if (u?.['pk'] ?? u?.['id']) return { ok: true, source: ep, user: u };
-          errors.push(`${ep}: user alanı yok — ${JSON.stringify(d).slice(0, 80)}`);
-        } catch (e) {
-          errors.push(`${ep}: ${(e as Error).message}`);
-        }
+          if (!text || text.trimStart().startsWith('<')) { errors.push(`${ep}:HTML`); continue; }
+          const d = JSON.parse(text) as AnyObj;
+          if (d['message'] === 'feedback_required') { errors.push(`${ep}:spam`); continue; }
+          const u = extractUser(d);
+          if (u) return { ok: true, source: ep, user: u };
+          errors.push(`${ep}:no-user`);
+        } catch (e) { errors.push(`${ep}:${(e as Error).message.slice(0, 40)}`); }
       }
 
       return { ok: false, errors };
