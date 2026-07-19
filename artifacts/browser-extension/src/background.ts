@@ -46,47 +46,73 @@ async function getInstagramTabId(): Promise<number> {
 async function getCurrentUserViaTab(tabId: number): Promise<Record<string, unknown>> {
   const results = await chrome.scripting.executeScript({
     target: { tabId },
-    func: () => {
-      // Yol 1: Instagram'ın sayfaya gömdüğü veri (ağ isteği yok)
+    // async keyword is required — executeScript supports Promise-returning funcs
+    func: async () => {
+      // Yol 1: Instagram'ın sayfaya gömdüğü window verisi (ağ isteği yok)
       const win = window as Record<string, unknown>;
       const viewer =
         (win['__additionalDataCurrentUser'] as Record<string, unknown> | undefined)?.['data']?.['user'] ??
         (win['_sharedData'] as Record<string, unknown> | undefined)?.['config']?.['viewer'];
       if (viewer && (viewer as Record<string, unknown>)['pk']) {
-        return { ok: true, user: viewer };
+        return { ok: true, source: 'window', user: viewer };
       }
 
-      // Yol 2: API fetch (same-origin, cookie otomatik gönderilir)
+      // Yol 2: API fetch — X-Instagram-AJAX: 1 olmadan HTML dönebilir
       const csrf =
-        document.cookie
-          .split(';')
-          .find((c) => c.trim().startsWith('csrftoken='))
-          ?.split('=')[1] ?? '';
+        document.cookie.split(';').find((c) => c.trim().startsWith('csrftoken='))?.split('=')[1] ?? '';
 
-      return fetch('https://www.instagram.com/api/v1/accounts/current_user/?edit=true', {
-        credentials: 'include',
-        headers: {
-          'X-CSRFToken': csrf,
-          'X-IG-App-ID': '936619743392459',
-          'X-Requested-With': 'XMLHttpRequest',
-          Accept: '*/*',
-        },
-      })
-        .then((res) => {
-          if (!res.ok) return res.text().then((t) => ({ ok: false, status: res.status, body: t.slice(0, 300) }));
-          return res.json().then((d) => ({ ok: true, raw: d, user: (d as Record<string, unknown>)?.['user'] ?? null }));
-        })
-        .catch((e: Error) => ({ ok: false, error: e.message }));
+      const igHeaders: Record<string, string> = {
+        'X-CSRFToken': csrf,
+        'X-IG-App-ID': '936619743392459',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-Instagram-AJAX': '1',
+        'X-ASBD-ID': '129477',
+        Accept: 'application/json',
+      };
+
+      const endpoints = [
+        '/api/v1/accounts/current_user/?edit=true',
+        '/api/v1/accounts/current_user/',
+        '/accounts/edit/?__a=1&__d=dis',
+      ];
+
+      const errors: string[] = [];
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(`https://www.instagram.com${ep}`, {
+            credentials: 'include',
+            headers: igHeaders,
+          });
+          const text = await res.text();
+          if (!text || text.trimStart().startsWith('<')) {
+            errors.push(`${ep}: HTML yanıt (status=${res.status})`);
+            continue;
+          }
+          const d = JSON.parse(text) as Record<string, unknown>;
+          const u =
+            (d['user'] as Record<string, unknown> | undefined) ??
+            ((d['data'] as Record<string, unknown> | undefined)?.['user'] as Record<string, unknown> | undefined);
+          if (u?.['pk'] ?? u?.['id']) return { ok: true, source: ep, user: u };
+          errors.push(`${ep}: user alanı yok — ${JSON.stringify(d).slice(0, 80)}`);
+        } catch (e) {
+          errors.push(`${ep}: ${(e as Error).message}`);
+        }
+      }
+
+      return { ok: false, errors };
     },
   });
 
   const r = results[0];
   if (r?.error) throw new Error('executeScript hatası: ' + r.error.message);
   const data = r?.result as Record<string, unknown> | null;
-  if (!data) throw new Error('executeScript sonucu boş');
-  if (!data['ok']) throw new Error(`Instagram API hatası: status=${data['status']} body=${data['body'] ?? data['error']}`);
-  const user = data['user'] as Record<string, unknown> | null;
-  if (!user?.['pk']) throw new Error('Kullanıcı alanı eksik — raw: ' + JSON.stringify(data['raw'] ?? data).slice(0, 150));
+  if (!data) throw new Error('executeScript boş sonuç döndü');
+  if (!data['ok']) {
+    const errs = (data['errors'] as string[] | undefined)?.join(' | ') ?? 'bilinmeyen hata';
+    throw new Error('Tüm endpoint\'ler başarısız: ' + errs);
+  }
+  const user = data['user'] as Record<string, unknown>;
+  if (!user?.['pk'] && !user?.['id']) throw new Error('Kullanıcı pk/id eksik — ' + JSON.stringify(user).slice(0, 100));
   return user;
 }
 
