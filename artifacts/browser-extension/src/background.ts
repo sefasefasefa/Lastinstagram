@@ -717,6 +717,36 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  // DOM tıklama fallback: panel'den gelen isteği açık Instagram sekmelerine ilet
+  if (msg.type === 'DOM_LIKE_STORY') {
+    chrome.tabs.query({ url: '*://*.instagram.com/*' }, (tabs) => {
+      const igTabs = tabs.filter((t) => t.id != null);
+      if (igTabs.length === 0) {
+        sendResponse({ ok: false, error: 'Açık Instagram sekmesi bulunamadı' });
+        return;
+      }
+      // Tüm sekmelere paralel gönder, ilk başarılı yanıtı döndür
+      let settled = false;
+      let remaining = igTabs.length;
+      for (const tab of igTabs) {
+        chrome.tabs.sendMessage(tab.id!, { type: 'DOM_LIKE_STORY', like: msg.like }, (res) => {
+          remaining--;
+          if (chrome.runtime.lastError || !res) {
+            if (!settled && remaining === 0) sendResponse({ ok: false, error: 'Content script yanıt vermedi' });
+            return;
+          }
+          if (!settled && res.ok) {
+            settled = true;
+            sendResponse({ ok: true });
+          } else if (!settled && remaining === 0) {
+            sendResponse({ ok: false, error: 'Hikaye butonu DOM\'da bulunamadı' });
+          }
+        });
+      }
+    });
+    return true;
+  }
+
   // Otomasyon: mevcut durumu oku
   if (msg.type === 'IG_AUTO_GET') {
     getAutoState().then((st) => sendResponse(st));

@@ -259,22 +259,41 @@ export async function likeMedia(mediaId: string): Promise<void> {
   );
 }
 
+// ─── DOM fallback yardımcısı ──────────────────────────────────────────────────
+// API başarısız olduğunda background'a DOM_LIKE_STORY mesajı gönderir;
+// background açık Instagram sekmesindeki content script'e iletir.
+// Kullanıcının Instagram'da bir hikaye açmış olması gerekir.
+function domLikeStoryFallback(like: boolean): Promise<boolean> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      { type: 'DOM_LIKE_STORY', like },
+      (res: { ok: boolean; error?: string } | undefined) => {
+        if (chrome.runtime.lastError || !res) { resolve(false); return; }
+        resolve(res.ok);
+      },
+    );
+  });
+}
+
 /**
- * Hikaye beğen.
- * Önce HAR'dan alınan GraphQL mutation'ı dener
- * (usePolarisStoriesV4LikeMutationLikeMutation, doc_id=26938887309082050).
- * Başarısız olursa Private API'ye düşer.
+ * Hikaye beğen — hibrit yaklaşım.
+ * 1) GraphQL mutation dener (HAR: doc_id=26938887309082050).
+ * 2) Başarısız olursa açık Instagram sekmesindeki kalp butonuna DOM tıklaması yapar.
  */
 export async function likeStory(mediaId: string): Promise<void> {
-  // HAR'dan doğrulandı: story like = usePolarisStoriesV4LikeMutationLikeMutation
-  // doc_id=26938887309082050, response: {"data":{"xig_send_story_like":{...}}}
   const pureId = mediaId.includes('_') ? mediaId.split('_')[0] : mediaId;
   const mutId = String((Date.now() % 9000) + 1000);
-  await igGql(
-    '26938887309082050',
-    { input: { actor_id: '__actor_id__', client_mutation_id: mutId, media_id: pureId } },
-    'usePolarisStoriesV4LikeMutationLikeMutation',
-  );
+  try {
+    await igGql(
+      '26938887309082050',
+      { input: { actor_id: '__actor_id__', client_mutation_id: mutId, media_id: pureId } },
+      'usePolarisStoriesV4LikeMutationLikeMutation',
+    );
+  } catch (apiErr) {
+    // API başarısız — DOM tıklama fallback'i dene
+    const domOk = await domLikeStoryFallback(true);
+    if (!domOk) throw apiErr; // ikisi de başarısız — orijinal hatayı fırlat
+  }
 }
 
 /**
@@ -288,11 +307,17 @@ export async function unlikeMedia(mediaId: string): Promise<void> {
 }
 
 /**
- * Hikaye beğenisini geri al.
- * Private API hâlâ çalışıyor; HAR'da unlike mutation yakalanmadı.
+ * Hikaye beğenisini geri al — hibrit yaklaşım.
+ * 1) Private API dener.
+ * 2) Başarısız olursa açık Instagram sekmesindeki beğeniyi geri al butonuna DOM tıklaması yapar.
  */
 export async function unlikeStory(mediaId: string): Promise<void> {
-  await igApi(`/api/v1/media/${mediaId}/unlike/`, undefined, 'POST', {
-    media_id: mediaId,
-  });
+  try {
+    await igApi(`/api/v1/media/${mediaId}/unlike/`, undefined, 'POST', {
+      media_id: mediaId,
+    });
+  } catch (apiErr) {
+    const domOk = await domLikeStoryFallback(false);
+    if (!domOk) throw apiErr;
+  }
 }

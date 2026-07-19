@@ -98,8 +98,46 @@ async function pushUserData() {
 // (Instagram SPA bazen birkaç ms sonra cookie'yi set eder)
 setTimeout(() => void pushUserData(), 800);
 
+// ─── DOM üzerinden hikaye beğeni butonu bul ve tıkla ─────────────────────────
+// Bu yalnızca Instagram sayfası açıkken çalışır.
+// "like=true" → beğen butonu ara; "like=false" → geri al butonu ara.
+function domClickStoryLikeBtn(like: boolean): boolean {
+  // aria-label değerleri: TR / EN / DE / FR / ES / PT / RU / JA / AR
+  const likeLabels   = ['Beğen', 'Like', 'Gefällt mir', "J'aime", 'Me gusta', 'Curtir', 'Нравится', 'いいね！', 'أعجبني'];
+  const unlikeLabels = ['Beğenme', 'Unlike', 'Gefällt mir nicht mehr', "Je n'aime plus", 'Ya no me gusta', 'Não curtir', 'Не нравится', 'いいね！を取り消す', 'إلغاء الإعجاب'];
+  const labels = like ? likeLabels : unlikeLabels;
+
+  let btn: HTMLButtonElement | null = null;
+  for (const label of labels) {
+    btn =
+      document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`) ??
+      (document.querySelector<SVGElement>(`svg[aria-label="${label}"]`)?.closest('button') as HTMLButtonElement | null);
+    if (btn) break;
+  }
+
+  // Belirli bir etiket bulunamazsa ekranda görünen tek beğeni butonunu dene
+  if (!btn) {
+    btn = document.querySelector<HTMLButtonElement>('button[aria-label*="egen"]') ??
+          document.querySelector<HTMLButtonElement>('button[aria-label*="ike"]');
+  }
+
+  if (!btn) return false;
+
+  // Gerçek insan tıklamasını simüle et (bubbles:true şeffaf overlay'leri aşar)
+  for (const type of ['mousedown', 'mouseup', 'click'] as const) {
+    btn.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+  }
+  return true;
+}
+
 // ─── 2) Background'dan gelen anlık istekleri karşıla ─────────────────────────
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === 'DOM_LIKE_STORY') {
+    const ok = domClickStoryLikeBtn(msg.like as boolean);
+    sendResponse({ ok });
+    return false;
+  }
+
   if (msg.type !== 'IG_FETCH') return false;
 
   igFetch(
