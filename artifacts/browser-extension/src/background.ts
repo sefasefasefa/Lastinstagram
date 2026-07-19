@@ -492,6 +492,159 @@ async function igFetch(
   }
 }
 
+// ─── Otomasyon motoru ─────────────────────────────────────────────────────────
+const AUTO_ALARM = 'ig-autolike';
+const AUTO_KEY   = 'igAutoState';
+
+interface AutoState {
+  enabled:          boolean;
+  timeFrom:         number;   // 0-23 başlangıç saati
+  timeTo:           number;   // 0-23 bitiş saati
+  minDelaySec:      number;   // işlemler arası min bekleme
+  maxDelaySec:      number;   // işlemler arası max bekleme
+  maxPerDay:        number;   // günlük max beğeni
+  targetType:       'stories' | 'reels' | 'both';
+  // runtime (persist)
+  todayCount:       number;
+  todayDate:        string;   // 'YYYY-MM-DD'
+  nextRunAt:        number;   // ms timestamp — erken çalışma
+  backoffUntil:     number;   // ms timestamp — 429 bekleme
+  consecutiveErrors:number;
+  lastActionLabel:  string;   // son işlem açıklaması
+}
+
+const AUTO_DEFAULTS: AutoState = {
+  enabled: false, timeFrom: 9, timeTo: 23,
+  minDelaySec: 45, maxDelaySec: 120, maxPerDay: 50, targetType: 'stories',
+  todayCount: 0, todayDate: '', nextRunAt: 0, backoffUntil: 0,
+  consecutiveErrors: 0, lastActionLabel: '',
+};
+
+function getAutoState(): Promise<AutoState> {
+  return new Promise((res) =>
+    chrome.storage.local.get([AUTO_KEY], (r) =>
+      res({ ...AUTO_DEFAULTS, ...(r[AUTO_KEY] as Partial<AutoState> ?? {}) }),
+    ),
+  );
+}
+function patchAutoState(patch: Partial<AutoState>): Promise<void> {
+  return new Promise((res) =>
+    chrome.storage.local.get([AUTO_KEY], (r) => {
+      const cur = { ...AUTO_DEFAULTS, ...(r[AUTO_KEY] as Partial<AutoState> ?? {}) };
+      chrome.storage.local.set({ [AUTO_KEY]: { ...cur, ...patch } }, res);
+    }),
+  );
+}
+
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function inWindow(from: number, to: number): boolean {
+  const h = new Date().getHours();
+  return from <= to ? h >= from && h < to : h >= from || h < to;
+}
+function randDelay(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// Takip listesi önbelleği (4 saat geçerli)
+let _followingCache: string[] = [];
+let _followingCacheTs = 0;
+async function getCachedFollowingPks(userId: string): Promise<string[]> {
+  if (_followingCache.length > 0 && Date.now() - _followingCacheTs < 4 * 3600_000) return _followingCache;
+  try {
+    const data = await igFetch(`/api/v1/friendships/${userId}/following/`, { count: '200' }) as Record<string, unknown>;
+    const users = (data['users'] as Array<Record<string, unknown>>) ?? [];
+    _followingCache = users.map((u) => String(u['pk'] ?? '')).filter(Boolean);
+    _followingCacheTs = Date.now();
+  } catch { /* önbelleksiz devam */ }
+  return _followingCache;
+}
+
+function broadcastAutoStatus(): void {
+  const panelUrl = chrome.runtime.getURL('panel.html');
+  chrome.tabs.query({}, (tabs) => {
+    for (const t of tabs) {
+      if (t.url === panelUrl && t.id != null)
+        chrome.tabs.sendMessage(t.id, { type: 'IG_AUTO_STATUS' }).catch(() => {});
+    }
+  });
+}
+
+async function runAutoLikeTick(): Promise<void> {
+  const s = await getAutoState();
+  if (!s.enabled) return;
+  const now = Date.now();
+  if (s.backoffUntil > now) return;
+  if (!inWindow(s.timeFrom, s.timeTo)) return;
+
+  // Günlük sayaç sıfırla
+  const today = todayStr();
+  if (s.todayDate !== today) { await patchAutoState({ todayCount: 0, todayDate: today }); s.todayCount = 0; }
+  if (s.todayCount >= s.maxPerDay) return;
+  if (s.nextRunAt > now) return;
+
+  // Aktif kullanıcı al
+  const stored = await new Promise<Record<string, unknown>>((res) =>
+    chrome.storage.local.get(['igUser'], (r) => res(r as Record<string, unknown>)),
+  );
+  const igUserData = stored['igUser'] as Record<string, unknown> | undefined;
+  const userId = String(igUserData?.['pk'] ?? igUserData?.['fbid_v2'] ?? '');
+  if (!userId) return;
+
+  const targets = await getCachedFollowingPks(userId);
+  if (targets.length === 0) return;
+  const targetPk = targets[Math.floor(Math.random() * targets.length)];
+
+  try {
+    let liked = false;
+    let label = '';
+
+    if (s.targetType === 'stories' || s.targetType === 'both') {
+      const data = await igFetch(`/api/v1/feed/reels_media/`, { reel_ids: targetPk }) as Record<string, unknown>;
+      const reel = ((data['reels'] as Record<string, unknown> | undefined)?.[targetPk]) as Record<string, unknown> | undefined;
+      const items = ((reel?.['items'] as Array<Record<string, unknown>>) ?? []).filter((i) => !(i['has_liked'] as boolean));
+      if (items.length > 0) {
+        const story = items[Math.floor(Math.random() * items.length)];
+        const sid = String(story['pk'] ?? String(story['id'] ?? '').split('_')[0]);
+        await igFetch(`/api/v1/media/${sid}/like/`, undefined, 'POST', { media_id: sid, d: '1' });
+        liked = true; label = `Hikaye beğenildi (${targetPk})`;
+      }
+    }
+
+    if (!liked && (s.targetType === 'reels' || s.targetType === 'both')) {
+      const data = await igFetch(`/api/v1/clips/user/`, undefined, 'POST',
+        { target_user_id: targetPk, page_size: '6', include_feed_video: 'true' }) as Record<string, unknown>;
+      const items = ((data['items'] as Array<Record<string, unknown>>) ?? [])
+        .map((w) => ((w['media'] as Record<string, unknown> | undefined) ?? w))
+        .filter((m) => !(m['has_liked'] as boolean));
+      if (items.length > 0) {
+        const media = items[Math.floor(Math.random() * items.length)];
+        const mid = String(media['pk'] ?? media['id'] ?? '');
+        await igFetch(`/api/v1/media/${mid}/like/`, undefined, 'POST', { media_id: mid, d: '1' });
+        liked = true; label = `Reel beğenildi (${targetPk})`;
+      }
+    }
+
+    await patchAutoState({
+      todayCount: s.todayCount + (liked ? 1 : 0),
+      todayDate: today,
+      nextRunAt: now + randDelay(s.minDelaySec, s.maxDelaySec) * 1000,
+      consecutiveErrors: 0,
+      lastActionLabel: label || `İçerik bulunamadı (${targetPk})`,
+    });
+    broadcastAutoStatus();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const is429 = /429|rate.?limit|spam|feedback_required/i.test(msg);
+    const newErrors = s.consecutiveErrors + 1;
+    const backoff = is429 ? 30 * 60_000 : Math.min(newErrors * 5 * 60_000, 60 * 60_000);
+    await patchAutoState({ consecutiveErrors: newErrors, backoffUntil: now + backoff, lastActionLabel: `Hata: ${msg.slice(0,80)}` });
+    broadcastAutoStatus();
+  }
+}
+
 // ─── Mesaj dinleyiciler ───────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'IG_USER_DATA') {
@@ -538,6 +691,35 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  // Otomasyon: mevcut durumu oku
+  if (msg.type === 'IG_AUTO_GET') {
+    getAutoState().then((st) => sendResponse(st));
+    return true;
+  }
+
+  // Otomasyon: ayarları güncelle (sadece izin verilen alanlar)
+  if (msg.type === 'IG_AUTO_SET') {
+    const allowed: (keyof AutoState)[] = ['enabled','timeFrom','timeTo','minDelaySec','maxDelaySec','maxPerDay','targetType'];
+    const patch: Partial<AutoState> = {};
+    for (const k of allowed) {
+      if (k in (msg.patch as object)) (patch as Record<string, unknown>)[k] = (msg.patch as Record<string, unknown>)[k];
+    }
+    // Aktifleştiriliyorsa nextRunAt'ı sıfırla (hemen çalışabilsin)
+    if (patch.enabled === true) patch.nextRunAt = 0;
+    patchAutoState(patch).then(() => {
+      broadcastAutoStatus();
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  // Otomasyon: takip önbelleğini temizle (liste değişince kullanıcı tetikler)
+  if (msg.type === 'IG_AUTO_CLEAR_CACHE') {
+    _followingCache = []; _followingCacheTs = 0;
+    sendResponse({ ok: true });
+    return false;
+  }
+
   if (msg.type !== 'IG_API') return false;
 
   igFetch(
@@ -552,16 +734,32 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// ─── Oturum canlı tutma ───────────────────────────────────────────────────────
+// ─── Alarmlar ─────────────────────────────────────────────────────────────────
 const ALARM = 'ig-keepalive';
-chrome.alarms.get(ALARM, (e) => { if (!e) chrome.alarms.create(ALARM, { periodInMinutes: 20 }); });
-chrome.runtime.onInstalled.addListener(() => chrome.alarms.create(ALARM, { periodInMinutes: 20 }));
+
+function ensureAlarms() {
+  chrome.alarms.get(ALARM, (e) => { if (!e) chrome.alarms.create(ALARM, { periodInMinutes: 20 }); });
+  chrome.alarms.get(AUTO_ALARM, (e) => { if (!e) chrome.alarms.create(AUTO_ALARM, { periodInMinutes: 1 }); });
+}
+ensureAlarms();
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.alarms.create(ALARM, { periodInMinutes: 20 });
+  chrome.alarms.create(AUTO_ALARM, { periodInMinutes: 1 });
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== ALARM) return;
-  chrome.cookies.get({ url: 'https://www.instagram.com', name: 'sessionid' }, (c) => {
-    if (!c?.value) return;
-    igFetch('/api/v1/accounts/current_user/?edit=true').catch(() => {});
-  });
+  if (alarm.name === ALARM) {
+    chrome.cookies.get({ url: 'https://www.instagram.com', name: 'sessionid' }, (c) => {
+      if (!c?.value) return;
+      igFetch('/api/v1/accounts/current_user/?edit=true').catch(() => {});
+    });
+  }
+  if (alarm.name === AUTO_ALARM) {
+    chrome.cookies.get({ url: 'https://www.instagram.com', name: 'sessionid' }, (c) => {
+      if (!c?.value) return;
+      runAutoLikeTick().catch(() => {});
+    });
+  }
 });
 
 // ─── Oturum cookie izleyici ───────────────────────────────────────────────────

@@ -6,30 +6,39 @@ import { Toaster } from 'sonner';
 import { igApi, getCachedUser, clearCachedUser, hasSession, normalizeIgUser, type IgUser } from '@/lib/ig-api';
 import DashboardPage from '@/pages/dashboard';
 import FeedPage from '@/pages/feed';
+import AutomationPage from '@/pages/automation';
 import NotFound from '@/pages/not-found';
 import { motion } from 'framer-motion';
-import { Users, Layers, Instagram, LogOut, Loader2, ArrowRight, BadgeCheck, RefreshCw } from 'lucide-react';
+import { Users, Layers, Settings2, Instagram, LogOut, Loader2, ArrowRight, BadgeCheck, RefreshCw } from 'lucide-react';
 
 // ─── Alt navigasyon ───────────────────────────────────────────────────────────
 function BottomNav() {
   const [isDashboard] = useRoute('/dashboard');
   const [isFeed] = useRoute('/feed');
+  const [isAutomation] = useRoute('/automation');
 
   return (
-    <nav className="flex bg-card/90 backdrop-blur-xl border-t border-white/5 h-[72px] flex-shrink-0 relative z-50 px-2 pb-[env(safe-area-inset-bottom)]">
+    <nav className="flex bg-card/80 backdrop-blur-xl border-t border-white/5 h-[64px] flex-shrink-0 relative z-50 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.5)]">
       <Link
         href="/dashboard"
-        className={`flex-1 flex flex-col items-center justify-center gap-1.5 text-[11px] font-bold tracking-widest uppercase transition-all duration-300 ${isDashboard ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        className={`flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-mono tracking-widest uppercase transition-all duration-300 ${isDashboard ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
       >
-        <Users className={`w-5 h-5 transition-all duration-300 ${isDashboard ? 'drop-shadow-[0_0_8px_rgba(225,48,108,0.5)] scale-110' : ''}`} />
+        <Users className={`w-4 h-4 transition-all duration-300 ${isDashboard ? 'drop-shadow-[0_0_8px_rgba(225,48,108,0.5)] scale-110' : ''}`} />
         <span>Takip</span>
       </Link>
       <Link
         href="/feed"
-        className={`flex-1 flex flex-col items-center justify-center gap-1.5 text-[11px] font-bold tracking-widest uppercase transition-all duration-300 ${isFeed ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+        className={`flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-mono tracking-widest uppercase transition-all duration-300 ${isFeed ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
       >
-        <Layers className={`w-5 h-5 transition-all duration-300 ${isFeed ? 'drop-shadow-[0_0_8px_rgba(225,48,108,0.5)] scale-110' : ''}`} />
+        <Layers className={`w-4 h-4 transition-all duration-300 ${isFeed ? 'drop-shadow-[0_0_8px_rgba(225,48,108,0.5)] scale-110' : ''}`} />
         <span>Akış</span>
+      </Link>
+      <Link
+        href="/automation"
+        className={`flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-mono tracking-widest uppercase transition-all duration-300 ${isAutomation ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+      >
+        <Settings2 className={`w-4 h-4 transition-all duration-300 ${isAutomation ? 'drop-shadow-[0_0_8px_rgba(225,48,108,0.5)] scale-110' : ''}`} />
+        <span>Otomasyon</span>
       </Link>
     </nav>
   );
@@ -39,31 +48,31 @@ function BottomNav() {
 function TopHeader({ user, onLogout }: { user: IgUser; onLogout: () => void }) {
   const [imgErr, setImgErr] = useState(false);
   return (
-    <header className="flex items-center justify-between px-5 py-4 bg-card/90 backdrop-blur-xl border-b border-white/5 flex-shrink-0 z-50 relative">
-      <div className="flex items-center gap-3.5">
+    <header className="flex items-center justify-between px-5 py-3.5 bg-card/80 backdrop-blur-xl border-b border-white/5 flex-shrink-0 z-50 relative shadow-md">
+      <div className="flex items-center gap-3">
         {imgErr || !user.profile_pic_url ? (
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center text-white font-bold shadow-lg shadow-primary/20">
+          <div className="w-9 h-9 rounded-lg bg-card border border-white/10 flex items-center justify-center text-foreground font-semibold shadow-inner">
             {user.username[0]?.toUpperCase()}
           </div>
         ) : (
           <img
             src={user.profile_pic_url}
             alt={user.username}
-            className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/20 ring-1 ring-white/10"
+            className="w-9 h-9 rounded-lg object-cover shadow-sm ring-1 ring-white/10"
             onError={() => setImgErr(true)}
           />
         )}
-        <div className="flex flex-col">
-          <span className="text-sm font-extrabold tracking-tight text-foreground flex items-center gap-1.5">
+        <div className="flex flex-col min-w-0">
+          <span className="text-xs font-semibold tracking-tight text-foreground flex items-center gap-1.5 truncate">
             {user.username}
-            {user.is_verified && <BadgeCheck className="w-4 h-4 text-blue-400" />}
+            {user.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
           </span>
-          <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase mt-0.5">Active Operator</span>
+          <span className="text-[9px] font-mono text-primary tracking-widest uppercase mt-0.5">Active Operator</span>
         </div>
       </div>
       <button
         onClick={onLogout}
-        className="p-2.5 text-muted-foreground hover:text-white hover:bg-white/5 rounded-xl transition-all border border-transparent hover:border-white/10"
+        className="p-2 text-muted-foreground hover:text-white hover:bg-white/5 rounded-lg transition-all border border-transparent hover:border-white/10 active:scale-95"
         title="Oturumu Kapat"
       >
         <LogOut className="w-4 h-4" />
@@ -119,24 +128,24 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 relative overflow-hidden">
       {/* Background ambient glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] pointer-events-none" />
       
       <motion.div 
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        initial={{ opacity: 0, scale: 0.98, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="w-[420px] max-w-full relative z-10"
+        className="w-[380px] max-w-full relative z-10"
       >
-        <div className="p-8 rounded-3xl bg-card/60 backdrop-blur-2xl border border-white/10 shadow-2xl flex flex-col items-center text-center space-y-8 relative overflow-hidden">
+        <div className="p-8 rounded-2xl bg-card/60 backdrop-blur-xl border border-white/5 shadow-2xl flex flex-col items-center text-center space-y-8 relative overflow-hidden">
           {/* Glass glare */}
-          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
           
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-[0_0_30px_rgba(225,48,108,0.3)]">
-            <Instagram className="w-8 h-8 text-white" />
+          <div className="w-14 h-14 rounded-xl bg-card border border-white/5 flex items-center justify-center shadow-lg shadow-black/50">
+            <Instagram className="w-7 h-7 text-primary drop-shadow-[0_0_10px_rgba(225,48,108,0.5)]" />
           </div>
           
-          <div className="space-y-2">
-            <h1 className="text-2xl font-extrabold tracking-tight">Nexus Control</h1>
-            <p className="text-xs text-muted-foreground font-mono tracking-wide uppercase">
+          <div className="space-y-1.5">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Nexus Control</h1>
+            <p className="text-[10px] text-muted-foreground font-mono tracking-widest uppercase">
               {phase === 'checking' && 'Initializing secure uplink...'}
               {phase === 'fetching' && 'Retrieving operator payload...'}
               {phase === 'no-session' && 'Awaiting operator authentication'}
@@ -146,46 +155,47 @@ function ConnectPage({ onConnected }: { onConnected: (user: IgUser) => void }) {
 
           {(phase === 'checking' || phase === 'fetching') && (
             <div className="py-6">
-              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+              <Loader2 className="w-6 h-6 text-primary animate-spin" />
             </div>
           )}
 
           {phase === 'error' && (
-            <div className="w-full space-y-5">
-              <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-left shadow-inner">
-                <p className="text-[10px] font-mono text-destructive mb-1.5 uppercase tracking-widest">Error Trace</p>
-                <p className="text-[11px] text-muted-foreground font-mono break-all leading-relaxed">{errorMsg}</p>
+            <div className="w-full space-y-4">
+              <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-left shadow-inner">
+                <p className="text-[9px] font-mono text-destructive mb-1 uppercase tracking-widest">Error Trace</p>
+                <p className="text-[10px] text-muted-foreground font-mono break-all leading-relaxed">{errorMsg}</p>
               </div>
               <button
                 onClick={doFetch}
-                className="w-full flex items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 rounded-lg py-3 text-xs font-semibold bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all active:scale-[0.98]"
               >
-                <RefreshCw className="w-4 h-4" /> Retry Connection
+                <RefreshCw className="w-3.5 h-3.5" /> Retry Connection
               </button>
             </div>
           )}
 
           {phase === 'no-session' && (
-            <div className="w-full space-y-6">
-              <div className="rounded-xl bg-white/5 border border-white/10 p-5 text-left space-y-4 shadow-inner">
+            <div className="w-full space-y-5">
+              <div className="rounded-lg bg-white/5 border border-white/10 p-4 text-left space-y-3 shadow-inner">
                 {[
                   'Initialize Instagram session',
                   'Authenticate operator account',
                   'Return to command center',
                 ].map((text, i) => (
-                  <div key={i} className="flex items-center gap-3.5">
-                    <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center text-[10px] font-mono font-bold flex-shrink-0 border border-primary/20">
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-md bg-primary/20 text-primary flex items-center justify-center text-[9px] font-mono font-bold flex-shrink-0 border border-primary/20">
                       0{i + 1}
                     </div>
-                    <p className="text-[13px] font-medium text-muted-foreground">{text}</p>
+                    <p className="text-xs font-medium text-muted-foreground">{text}</p>
                   </div>
                 ))}
               </div>
               <button
                 onClick={openInstagram}
-                className="w-full group flex items-center justify-center gap-2 rounded-xl py-4 text-sm font-extrabold bg-primary hover:bg-primary/90 text-primary-foreground transition-all shadow-[0_0_20px_rgba(225,48,108,0.3)] hover:shadow-[0_0_30px_rgba(225,48,108,0.5)] active:scale-[0.98]"
+                className="w-full relative group flex items-center justify-center gap-2 rounded-lg py-3.5 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground transition-all shadow-[0_0_15px_rgba(225,48,108,0.2)] hover:shadow-[0_0_25px_rgba(225,48,108,0.4)] active:scale-[0.98] overflow-hidden"
               >
-                Launch Instagram <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+                <div className="absolute top-0 inset-x-0 h-[1px] bg-white/30" />
+                Launch Instagram <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
           )}
@@ -229,7 +239,7 @@ export default function App() {
   if (user === undefined) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <Loader2 className="w-6 h-6 text-primary animate-spin" />
       </div>
     );
   }
@@ -258,6 +268,7 @@ export default function App() {
               <DashboardPage user={user} onLogout={logout} />
             )} />
             <Route path="/feed" component={() => <FeedPage user={user} />} />
+            <Route path="/automation" component={() => <AutomationPage />} />
             <Route component={NotFound} />
           </Switch>
         </div>
