@@ -35,7 +35,7 @@ title = "Edge Eklentisi (paneledge)"
 id = "0YyfJF_Z_Sicr--WrHqQ4"
 uri = "file://artifacts/browser-extension/dist/takipci-paneli.zip"
 type = "unspecified"
-title = "Takipçi Paneli — Tarayıcı Eklentisi"
+title = "Takipçi Paneli – Uzantı (Chrome/Edge/Firefox)"
 
 [[outputs]]
 id = "IuA9-sYV_ssUPRNc11vUc"
