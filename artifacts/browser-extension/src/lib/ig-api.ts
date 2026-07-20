@@ -325,6 +325,11 @@ export async function likeStory(
       );
       return; // başarılı
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Rate limit'te tekrar deneme yapma — kısa bekleme işe yaramaz
+      if (msg === '__RATE_LIMIT__') {
+        throw new Error('Instagram çok fazla istek algıladı. Birkaç dakika bekleyip tekrar dene.');
+      }
       lastErr = err;
       if (attempt < 2) await new Promise<void>((r) => setTimeout(r, 1200));
     }

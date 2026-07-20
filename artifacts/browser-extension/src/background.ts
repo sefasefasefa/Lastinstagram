@@ -353,8 +353,15 @@ async function igGqlMutationViaTab(
       }
       try {
         const d = JSON.parse(text) as AnyObj;
-        if ((d['errors'] as unknown[] | undefined)?.length)
-          return { ok: false, error: JSON.stringify(d['errors']).slice(0, 300) };
+        const gqlErrors = d['errors'] as Array<{ message?: string; code?: number }> | undefined;
+        if (gqlErrors?.length) {
+          // Rate limit hatasını özel olarak tanı (kod 1675004)
+          const isRateLimit = gqlErrors.some((e) => e.code === 1675004 || /rate.limit/i.test(e.message ?? ''));
+          if (isRateLimit) return { ok: false, error: '__RATE_LIMIT__' };
+          // Diğer hatalar: ilk mesajı göster, ham JSON değil
+          const msg = gqlErrors[0]?.message ?? JSON.stringify(gqlErrors).slice(0, 200);
+          return { ok: false, error: msg };
+        }
         // GraphQL data-level errors
         const dataObj = d['data'] as AnyObj | undefined;
         if (dataObj) {
