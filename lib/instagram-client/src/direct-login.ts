@@ -60,14 +60,19 @@ const BLOKS_VERSION_ID =
 const loginFetch = process.env.USE_STEALTH_REQUESTS === "false" ? fetch : stealthFetch;
 console.log("[instagram-client] loginFetch:", process.env.USE_STEALTH_REQUESTS === "false" ? "native fetch" : "stealth bridge (Python/curl_cffi)");
 
-/** OnePlus 6 / Android 10 mobil UA */
+/** Samsung Galaxy S23 / Android 14 mobil UA — Instagram 2025 */
 const MOBILE_UA =
-  "Instagram 269.0.0.18.230 Android (29/10; 480dpi; 1080x2280;" +
-  " OnePlus; ONEPLUS A6003; OnePlus6; qcom; en_US; 443213192)";
+  "Instagram 365.0.0.0.87 Android (34/14; 420dpi; 1080x2340;" +
+  " samsung; SM-S918B; dm3q; exynos2200; tr_TR; 591553674)";
 
+/**
+ * Chrome 136 desktop UA — stealth bridge impersonate='chrome136' ile eşleşmeli.
+ * TLS parmak izi (JA3) ile User-Agent arasındaki uyumsuzluk Instagram bot
+ * tespitini tetikler; her zaman curl_cffi impersonate versiyonuyla aynı tut.
+ */
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
 
 // ── Şifreleme anahtar tipi ────────────────────────────────────────────────────
 
