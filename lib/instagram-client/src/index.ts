@@ -1059,7 +1059,28 @@ export class InstagramClient {
   }
 
   async likeStory(storyId: string): Promise<boolean> {
-    return this.likePost(storyId);
+    await this.ensureAuthenticated();
+    return this.withErrorRecovery(async () => {
+      if (this.session?.cookieHeader) {
+        // Hikayeler için doğru parametreler: src="story", module_name="story_tray"
+        // "timeline" ve "feed_timeline" kullanmak Instagram tarafından sessizce reddediliyor.
+        const result = await likeMediaRaw(storyId, this.session.cookieHeader, {
+          src: "story",
+          d: 0,
+          moduleInfo: { module_name: "story_tray", tray_id: storyId },
+          userAgent: this.client.state.deviceString,
+        });
+        if (result.success) return true;
+      }
+
+      // Fallback: kütüphane tabanlı yöntem
+      await this.client.media.like({
+        mediaId: storyId,
+        moduleInfo: { module_name: "story_tray" },
+        d: 0,
+      });
+      return true;
+    }).catch(() => false);
   }
 
   async likeReel(reelId: string): Promise<boolean> {

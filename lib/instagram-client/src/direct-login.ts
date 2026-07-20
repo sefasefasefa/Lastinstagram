@@ -1283,7 +1283,9 @@ async function postMediaLikeAction(
       module_info: options.moduleInfo ?? { module_name: "profile" },
     };
 
-    const res = await fetch(
+    // loginFetch (stealth bridge) kullan — native fetch, Instagram'ın TLS
+    // parmak izi denetimini geçemiyor ve beğeni sessizce reddediliyor.
+    const res = await loginFetch(
       `https://i.instagram.com/api/v1/media/${mediaId}/${action}/`,
       {
         method: "POST",
