@@ -297,13 +297,12 @@ async function markStorySeen(mediaId: string, ownerId?: string, takenAt?: number
 }
 
 /**
- * Hikaye beğen — 3 katmanlı hibrit yaklaşım:
- *
- * 1. GraphQL mutation  (HAR: usePolarisStoriesV4LikeMutationLikeMutation, doc_id=26938887309082050)
- * 2. Web API           (POST /api/v1/stories/web_create_story_like/ — tarayıcı oturumu kullanır)
- * 3. DOM tıklama       (content script üzerinden kalp butonunu aria-label ile bulur ve tıklar)
+ * Hikaye beğen — GraphQL mutation (HAR: usePolarisStoriesV4LikeMutationLikeMutation, doc_id=26938887309082050)
  *
  * Adım 0: Beğenmeden önce "seen" sinyali gönderilir (doğal davranış).
+ *
+ * NOT: DOM fallback kaldırıldı — ekranda görünen rastgele hikayeye tıklayarak
+ * yanlış hikayenin beğenilmesine yol açıyordu.
  */
 export async function likeStory(
   mediaId: string,
@@ -314,10 +313,8 @@ export async function likeStory(
   // 0) Hikayeyi "gördüm" olarak işaretle (hata olsa da devam et)
   void markStorySeen(pureId, opts?.ownerId, opts?.takenAt);
 
-  // 1) GraphQL mutation (HAR: doc_id=26938887309082050, usePolarisStoriesV4LikeMutationLikeMutation)
-  // Bu endpoint HAR'da başarıyla çalışıyor — /api/v1/stories/web_create_story_like/ kaldırıldı
-  // çünkü Instagram web uygulaması artık bu REST endpoint'i kullanmıyor.
-  let gqlErr: unknown;
+  // GQL mutation (HAR: doc_id=26938887309082050, usePolarisStoriesV4LikeMutationLikeMutation)
+  let lastErr: unknown;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const mutId = String((Date.now() % 9000) + 1000);
@@ -328,21 +325,12 @@ export async function likeStory(
       );
       return; // başarılı
     } catch (err) {
-      gqlErr = err;
-      if (attempt < 2) {
-        console.debug('[takipci] likeStory GQL deneme', attempt, 'başarısız, tekrar deneniyor:', err);
-        await new Promise<void>((r) => setTimeout(r, 1500));
-      }
+      lastErr = err;
+      if (attempt < 2) await new Promise<void>((r) => setTimeout(r, 1200));
     }
   }
-  console.debug('[takipci] likeStory GQL iki denemede de başarısız, DOM fallback deneniyor:', gqlErr);
-
-  // 2) DOM tıklama — Instagram sekmesinde hikaye açıksa content script kalp butonunu tıklar
-  const domOk = await domLikeStoryFallback(true);
-  if (!domOk) {
-    const reason = gqlErr instanceof Error ? gqlErr.message : String(gqlErr);
-    throw new Error(`Hikaye beğenisi başarısız — GQL: ${reason}`);
-  }
+  const reason = lastErr instanceof Error ? lastErr.message : String(lastErr);
+  throw new Error(`Hikaye beğenisi başarısız: ${reason}`);
 }
 
 /**
@@ -355,30 +343,30 @@ export async function unlikeMedia(mediaId: string): Promise<void> {
 }
 
 /**
- * Hikaye beğenisini geri al — 3 katmanlı:
+ * Hikaye beğenisini geri al — 2 katmanlı:
  *
- * 1. REST API   (/api/v1/media/{id}/unlike/)
- * 2. REST yeniden — bazen ilk istek Instagram tarafında race condition ile reddedilir
- * 3. DOM tıklama — Instagram sekmesinde beğenilmiş hikaye görünüyorsa kalp butonunu tıklar
+ * 1. REST API   (/api/v1/media/{id}/unlike/) — iki deneme
+ * 2. DOM tıklama — Instagram sekmesinde hikaye görünüyorsa kalp butonunu tıklar
  *
  * NOT: Story unlike için GQL doc_id henüz doğrulanmadı (HAR gerekiyor).
- * Doğru endpoint bulunduğunda buraya eklenecek.
+ * Doğru endpoint bulunduğunda GQL katmanı eklenecek.
  */
 export async function unlikeStory(mediaId: string): Promise<void> {
   const pureId = mediaId.includes('_') ? mediaId.split('_')[0] : mediaId;
 
   let lastErr: unknown;
 
-  // 1 & 2) REST — iki deneme, aralarında 800ms bekleme
+  // 1 & 2) REST — iki deneme, aralarında 600ms bekleme
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       await igApi(`/api/v1/media/${pureId}/unlike/`, undefined, 'POST', {
         media_id: pureId,
+        d: '1',
       });
       return; // başarılı
     } catch (err) {
       lastErr = err;
-      if (attempt < 2) await new Promise<void>((r) => setTimeout(r, 800));
+      if (attempt < 2) await new Promise<void>((r) => setTimeout(r, 600));
     }
   }
 
@@ -387,5 +375,5 @@ export async function unlikeStory(mediaId: string): Promise<void> {
   if (domOk) return;
 
   const reason = lastErr instanceof Error ? lastErr.message : String(lastErr);
-  throw new Error(`Beğeni geri alma başarısız — API: ${reason}`);
+  throw new Error(`Hikaye beğeni geri alma başarısız: ${reason}`);
 }

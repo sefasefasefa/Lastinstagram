@@ -12,7 +12,7 @@ import { loadConfig, saveConfig, DEFAULT_CONFIG, type AppConfig } from '@/lib/co
 import { motion } from 'framer-motion';
 import {
   Settings2, Clock, Zap, Target, Trash2, Loader2,
-  Activity, RotateCcw, Users,
+  Activity, RotateCcw, Users, Bot, SlidersHorizontal,
 } from 'lucide-react';
 
 function useDebouncedCallback<T extends (...args: unknown[]) => unknown>(cb: T, delay: number) {
@@ -90,6 +90,13 @@ export default function SettingsPage() {
       className="flex flex-col h-full bg-background text-foreground overflow-y-auto"
     >
       <div className="p-4 space-y-4 pb-24">
+
+        {/* ── Otomasyon Bölümü Başlığı ─────────────────────────────────────── */}
+        <div className="flex items-center gap-2 pt-1">
+          <Bot className="w-3.5 h-3.5 text-primary" />
+          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-primary">Otomasyon</span>
+          <div className="flex-1 h-px bg-white/5" />
+        </div>
 
         {/* ── Durum kartı ───────────────────────────────────────────────────── */}
         <div className="bg-card border border-white/5 rounded-xl p-5 relative overflow-hidden shadow-sm">
@@ -267,6 +274,13 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* ── Genel Ayarlar Bölümü Başlığı ─────────────────────────────────── */}
+        <div className="flex items-center gap-2 pt-2">
+          <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-muted-foreground">Ayarlar</span>
+          <div className="flex-1 h-px bg-white/5" />
         </div>
 
         {/* ── İşlem butonları ───────────────────────────────────────────────── */}

@@ -704,14 +704,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             storedTokens,
           ),
         )
-        .then((result) => {
-            // igGqlMutationViaTab { ok, data?, error? } döndürür — iç ok'u
-            // doğrudan ilet; her zaman { ok: true } sarmalamak hataları gizler.
-            if (!result.ok)
-              sendResponse({ ok: false, error: (result as { ok: false; error: string }).error ?? 'GraphQL mutation başarısız' });
-            else
-              sendResponse({ ok: true, data: (result as { ok: true; data: unknown }).data });
-          })
+        .then((data) => sendResponse({ ok: true, data }))
         .catch((err: Error) => sendResponse({ ok: false, error: err.message }));
     });
     return true;

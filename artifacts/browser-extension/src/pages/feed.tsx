@@ -128,17 +128,19 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
 
   useEffect(() => {
     // Her API güncellemesinde tüm hikayelerin beğeni durumunu API'dan al.
-    // Sadece "yeni eklenen" yerine hepsini sync et — böylece "beğenilmedi ama
-    // beğenildi görünüyor" hatası olmaz. In-flight optimistic update zaten
-    // likeQueue aracılığıyla sıraya alındığından yarış koşulu oluşmaz.
+    // In-flight (loadingIds içindeki) hikayeler atlanır — aksi hâlde
+    // optimistik güncelleme, API yanıtı gelmeden önce sıfırlanır ve
+    // "beğenilmedi ama beğenildi görünüyor" hatası oluşur.
     setLiked((prev) => {
       const next = { ...prev };
       for (const s of stories) {
-        next[s.id] = s.hasLiked ?? false;
+        if (!loadingIds.has(s.id)) {
+          next[s.id] = s.hasLiked ?? false;
+        }
       }
       return next;
     });
-  }, [stories]);
+  }, [stories, loadingIds]);
 
   if (loading) {
     return (
