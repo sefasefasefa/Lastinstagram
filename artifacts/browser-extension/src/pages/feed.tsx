@@ -211,7 +211,7 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
                 } catch (e) {
                   setLiked((prev) => ({ ...prev, [storyId]: current }));
                   const msg = e instanceof Error ? e.message : String(e);
-                  toast.error(msg.includes('Oturum') ? msg : `Beğeni başarısız: ${msg}`);
+                  toast.error(msg);
                 } finally {
                   setLoadingIds((p) => { const n = new Set(p); n.delete(storyId); return n; });
                   await new Promise<void>((r) => setTimeout(r, 600));

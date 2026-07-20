@@ -433,7 +433,9 @@ async function igFetchViaTab(
       });
       const text = await res.text();
       if (!text || text.trimStart().startsWith('<')) {
-        // Instagram login/challenge sayfası mı? Kullanıcıya anlamlı mesaj ver.
+        // Oturum açık mı? Cookie'den doğrula — login sayfasına yönlendirme
+        // her zaman oturum sona erdi anlamına gelmez; bazen API isteği reddedilir.
+        const hasSession = document.cookie.split(';').some((c) => c.trim().startsWith('sessionid='));
         const lo = text.toLowerCase();
         const isLoginPage =
           lo.includes('log in to instagram') ||
@@ -442,15 +444,25 @@ async function igFetchViaTab(
           lo.includes('checkpoint') ||
           res.url.includes('/login/') ||
           res.url.includes('/challenge/');
-        return {
-          ok: false,
-          status: res.status,
-          body: isLoginPage ? '__SESSION_EXPIRED__' : `HTML (${text.slice(0, 80)})`,
-        };
+        if (isLoginPage && !hasSession) {
+          return { ok: false, status: res.status, body: '__SESSION_EXPIRED__' };
+        }
+        if (isLoginPage && hasSession) {
+          return { ok: false, status: res.status, body: '__API_REJECTED__' };
+        }
+        return { ok: false, status: res.status, body: `HTML (${text.slice(0, 80)})` };
       }
       try {
         const d = JSON.parse(text) as AnyObj;
         if (d['message'] === 'feedback_required') return { ok: false, status: res.status, body: JSON.stringify(d).slice(0, 200) };
+        // login_required JSON yanıtı — oturum açıksa API reddi, değilse oturum sona erdi
+        if (d['message'] === 'login_required' || d['status'] === 'fail') {
+          const hasSessionJ = document.cookie.split(';').some((c) => c.trim().startsWith('sessionid='));
+          const errMsg = d['message'] === 'login_required'
+            ? (hasSessionJ ? '__API_REJECTED__' : '__SESSION_EXPIRED__')
+            : String(d['message'] ?? d['error_title'] ?? 'API hatası');
+          return { ok: false, status: res.status, body: errMsg };
+        }
         return { ok: true, data: d };
       } catch {
         return { ok: false, status: res.status, body: text.slice(0, 200) };
@@ -467,6 +479,8 @@ async function igFetchViaTab(
     const body = String(data['body'] ?? '');
     if (body === '__SESSION_EXPIRED__')
       throw new Error('Oturum süresi dolmuş — Instagram\'a yeniden giriş yapın');
+    if (body === '__API_REJECTED__')
+      throw new Error('Instagram bu isteği reddetti — kısa süre bekleyip tekrar deneyin');
     throw new Error(`HTTP ${data['status']}: ${body}`);
   }
   return data['data'];
