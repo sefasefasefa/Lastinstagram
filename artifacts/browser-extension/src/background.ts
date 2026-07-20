@@ -358,7 +358,11 @@ async function igGqlMutationViaTab(
         // GraphQL data-level errors
         const dataObj = d['data'] as AnyObj | undefined;
         if (dataObj) {
-          for (const val of Object.values(dataObj)) {
+          for (const [key, val] of Object.entries(dataObj)) {
+            // null → mutation Instagram tarafından sessizce reddedildi
+            // (genellikle stale doc_id veya eksik izin)
+            if (val === null)
+              return { ok: false, error: `Mutation reddedildi: '${key}' null döndü` };
             const v = val as AnyObj | null;
             if (v && typeof v === 'object' && v['__typename'] === 'XDTApiError')
               return { ok: false, error: JSON.stringify(v).slice(0, 300) };

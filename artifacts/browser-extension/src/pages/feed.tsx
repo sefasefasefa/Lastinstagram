@@ -197,21 +197,25 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
               const current  = liked[storyId] ?? false;
               const next     = !current;
 
-              setLiked((prev) => ({ ...prev, [storyId]: next }));
+              // Optimistic update KALDIRILDI — API yanıtını bekle, sadece
+              // başarı gelince güncelle. Sessiz GQL hatalarında yanlış
+              // "beğenildi" görünmesini önler.
               setLoadingIds((p) => new Set(p).add(storyId));
-              if (next) {
-                setPopIds((p) => new Set(p).add(storyId));
-                setTimeout(() => setPopIds((p) => { const n = new Set(p); n.delete(storyId); return n; }), 500);
-              }
 
               likeQueue.current = likeQueue.current.then(async () => {
                 try {
                   if (next) await likeStory(storyId, { ownerId, takenAt });
                   else await unlikeStory(storyId);
+                  // Sadece gerçek başarıda güncelle
+                  setLiked((prev) => ({ ...prev, [storyId]: next }));
+                  if (next) {
+                    setPopIds((p) => new Set(p).add(storyId));
+                    setTimeout(() => setPopIds((p) => { const n = new Set(p); n.delete(storyId); return n; }), 500);
+                  }
                 } catch (e) {
-                  setLiked((prev) => ({ ...prev, [storyId]: current }));
+                  // Geri alma yok — zaten güncelleme yapmadık
                   const msg = e instanceof Error ? e.message : String(e);
-                  toast.error(msg);
+                  toast.error(`Beğeni başarısız: ${msg}`);
                 } finally {
                   setLoadingIds((p) => { const n = new Set(p); n.delete(storyId); return n; });
                   await new Promise<void>((r) => setTimeout(r, 600));
