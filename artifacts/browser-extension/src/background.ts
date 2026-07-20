@@ -33,7 +33,7 @@ async function getInstagramTabId(): Promise<number> {
         if (id !== tabId || info.status !== 'complete') return;
         chrome.tabs.onUpdated.removeListener(listener);
         clearTimeout(timer);
-        setTimeout(() => resolve(tabId), 1000);
+        setTimeout(() => resolve(tabId), 3000); // Instagram JS bundle (fb_dtsg/lsd) tam yüklensin
       };
       chrome.tabs.onUpdated.addListener(listener);
     });

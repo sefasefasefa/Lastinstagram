@@ -275,23 +275,25 @@ function domLikeStoryFallback(like: boolean): Promise<boolean> {
 /**
  * "Hikayeyi gördüm" sinyali gönder — doğal kullanıcı davranışı simülasyonu.
  * Sessiz: başarısız olursa beğeni akışını engellemez.
- * Endpoint: POST /api/v1/stories/seen/
- * Body: container_module=stories&seen_reels[ownerId]=mediaId_takenAt&...
+ *
+ * HAR: PolarisStoriesV3SeenMutation  →  doc_id=26234228992942885
+ * variables: { reelId, reelMediaId, reelMediaOwnerId, reelMediaTakenAt, viewSeenAt }
  */
 async function markStorySeen(mediaId: string, ownerId?: string, takenAt?: number): Promise<void> {
   if (!ownerId) return;
-  const ts = takenAt ?? Math.floor(Date.now() / 1000);
-  const seenValue = `${mediaId}_${ts}`;
-  // URL-encoded key: seen_reels[ownerId]
-  const body: Record<string, string> = {
-    container_module:   'stories',
-    live_vods_skipped:  '',
-    nuxes_skipped:      '',
-    nuxes_seen:         '',
-    reel_media_skipped: '',
-    [`seen_reels[${ownerId}]`]: seenValue,
-  };
-  await igApi('/api/v1/stories/seen/', undefined, 'POST', body).catch(() => {/* sessiz */});
+  const now = Math.floor(Date.now() / 1000);
+  const ts  = takenAt ?? now;
+  await igGql(
+    '26234228992942885',
+    {
+      reelId:           ownerId,
+      reelMediaId:      mediaId,
+      reelMediaOwnerId: ownerId,
+      reelMediaTakenAt: ts,
+      viewSeenAt:       now,
+    },
+    'PolarisStoriesV3SeenMutation',
+  ).catch(() => {/* sessiz — seen başarısız olursa beğeni akışını engellemez */});
 }
 
 /**
@@ -312,32 +314,35 @@ export async function likeStory(
   // 0) Hikayeyi "gördüm" olarak işaretle (hata olsa da devam et)
   void markStorySeen(pureId, opts?.ownerId, opts?.takenAt);
 
-  // 1) GraphQL mutation
-  try {
-    const mutId = String((Date.now() % 9000) + 1000);
-    await igGql(
-      '26938887309082050',
-      { input: { actor_id: '__actor_id__', client_mutation_id: mutId, media_id: pureId } },
-      'usePolarisStoriesV4LikeMutationLikeMutation',
-    );
-    return; // başarılı
-  } catch (gqlErr) {
-    console.debug('[takipci] likeStory GQL başarısız, Web API deneniyor:', gqlErr);
+  // 1) GraphQL mutation (HAR: doc_id=26938887309082050, usePolarisStoriesV4LikeMutationLikeMutation)
+  // Bu endpoint HAR'da başarıyla çalışıyor — /api/v1/stories/web_create_story_like/ kaldırıldı
+  // çünkü Instagram web uygulaması artık bu REST endpoint'i kullanmıyor.
+  let gqlErr: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const mutId = String((Date.now() % 9000) + 1000);
+      await igGql(
+        '26938887309082050',
+        { input: { actor_id: '__actor_id__', client_mutation_id: mutId, media_id: pureId } },
+        'usePolarisStoriesV4LikeMutationLikeMutation',
+      );
+      return; // başarılı
+    } catch (err) {
+      gqlErr = err;
+      if (attempt < 2) {
+        console.debug('[takipci] likeStory GQL deneme', attempt, 'başarısız, tekrar deneniyor:', err);
+        await new Promise<void>((r) => setTimeout(r, 1500));
+      }
+    }
   }
+  console.debug('[takipci] likeStory GQL iki denemede de başarısız, DOM fallback deneniyor:', gqlErr);
 
-  // 2) Web API — tarayıcı oturumunun cookie'lerini doğrudan kullanır
-  try {
-    await igApi('/api/v1/stories/web_create_story_like/', undefined, 'POST', {
-      media_id: pureId,
-    });
-    return; // başarılı
-  } catch (webErr) {
-    console.debug('[takipci] likeStory Web API başarısız, DOM fallback deneniyor:', webErr);
-  }
-
-  // 3) DOM tıklama — Instagram sekmesi açıksa content script kalp butonunu tıklar
+  // 2) DOM tıklama — Instagram sekmesinde hikaye açıksa content script kalp butonunu tıklar
   const domOk = await domLikeStoryFallback(true);
-  if (!domOk) throw new Error('Hikaye beğenisi başarısız (GQL + Web API + DOM — üç yöntem de çalışmadı)');
+  if (!domOk) {
+    const reason = gqlErr instanceof Error ? gqlErr.message : String(gqlErr);
+    throw new Error(`Hikaye beğenisi başarısız — GQL: ${reason}`);
+  }
 }
 
 /**
@@ -350,18 +355,37 @@ export async function unlikeMedia(mediaId: string): Promise<void> {
 }
 
 /**
- * Hikaye beğenisini geri al — 2 katmanlı:
- * 1. Private API  (/api/v1/media/{id}/unlike/)
- * 2. DOM tıklama
+ * Hikaye beğenisini geri al — 3 katmanlı:
+ *
+ * 1. REST API   (/api/v1/media/{id}/unlike/)
+ * 2. REST yeniden — bazen ilk istek Instagram tarafında race condition ile reddedilir
+ * 3. DOM tıklama — Instagram sekmesinde beğenilmiş hikaye görünüyorsa kalp butonunu tıklar
+ *
+ * NOT: Story unlike için GQL doc_id henüz doğrulanmadı (HAR gerekiyor).
+ * Doğru endpoint bulunduğunda buraya eklenecek.
  */
 export async function unlikeStory(mediaId: string): Promise<void> {
   const pureId = mediaId.includes('_') ? mediaId.split('_')[0] : mediaId;
-  try {
-    await igApi(`/api/v1/media/${pureId}/unlike/`, undefined, 'POST', {
-      media_id: pureId,
-    });
-  } catch {
-    const domOk = await domLikeStoryFallback(false);
-    if (!domOk) throw new Error('Hikaye beğeni geri alma başarısız (API + DOM)');
+
+  let lastErr: unknown;
+
+  // 1 & 2) REST — iki deneme, aralarında 800ms bekleme
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await igApi(`/api/v1/media/${pureId}/unlike/`, undefined, 'POST', {
+        media_id: pureId,
+      });
+      return; // başarılı
+    } catch (err) {
+      lastErr = err;
+      if (attempt < 2) await new Promise<void>((r) => setTimeout(r, 800));
+    }
   }
+
+  // 3) DOM fallback
+  const domOk = await domLikeStoryFallback(false);
+  if (domOk) return;
+
+  const reason = lastErr instanceof Error ? lastErr.message : String(lastErr);
+  throw new Error(`Beğeni geri alma başarısız — API: ${reason}`);
 }

@@ -127,10 +127,14 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
   const likeQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
+    // Her API güncellemesinde tüm hikayelerin beğeni durumunu API'dan al.
+    // Sadece "yeni eklenen" yerine hepsini sync et — böylece "beğenilmedi ama
+    // beğenildi görünüyor" hatası olmaz. In-flight optimistic update zaten
+    // likeQueue aracılığıyla sıraya alındığından yarış koşulu oluşmaz.
     setLiked((prev) => {
       const next = { ...prev };
       for (const s of stories) {
-        if (!(s.id in next)) next[s.id] = s.hasLiked || false;
+        next[s.id] = s.hasLiked ?? false;
       }
       return next;
     });

@@ -6,12 +6,11 @@ import { Toaster } from 'sonner';
 import { igApi, getCachedUser, clearCachedUser, hasSession, normalizeIgUser, type IgUser } from '@/lib/ig-api';
 import DashboardPage from '@/pages/dashboard';
 import FeedPage from '@/pages/feed';
-import AutomationPage from '@/pages/automation';
 import SettingsPage from '@/pages/settings';
 import NotFound from '@/pages/not-found';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Users, Layers, Settings2, SlidersHorizontal, Instagram, LogOut, Loader2,
+  Users, Layers, SlidersHorizontal, Instagram, LogOut, Loader2,
   ArrowRight, BadgeCheck, RefreshCw, AlertCircle,
 } from 'lucide-react';
 
@@ -19,14 +18,12 @@ import {
 function BottomNav() {
   const [isDashboard] = useRoute('/dashboard');
   const [isFeed] = useRoute('/feed');
-  const [isAutomation] = useRoute('/automation');
   const [isSettings] = useRoute('/settings');
 
   const tabs = [
-    { href: '/dashboard', label: 'Takip', icon: Users, active: isDashboard },
-    { href: '/feed', label: 'Akış', icon: Layers, active: isFeed },
-    { href: '/automation', label: 'Otomasyon', icon: Settings2, active: isAutomation },
-    { href: '/settings', label: 'Ayarlar', icon: SlidersHorizontal, active: isSettings },
+    { href: '/dashboard', label: 'Takip',   icon: Users,             active: isDashboard },
+    { href: '/feed',      label: 'Akış',    icon: Layers,            active: isFeed      },
+    { href: '/settings',  label: 'Ayarlar', icon: SlidersHorizontal, active: isSettings  },
   ];
 
   return (
@@ -320,7 +317,6 @@ function AuthenticatedApp({ user, onLogout }: { user: IgUser; onLogout: () => vo
               <Route path="/"           component={() => <Redirect to="/dashboard" />} />
               <Route path="/dashboard"  component={() => <DashboardPage user={user} onLogout={onLogout} />} />
               <Route path="/feed"       component={() => <FeedPage user={user} />} />
-              <Route path="/automation" component={() => <AutomationPage />} />
               <Route path="/settings"   component={() => <SettingsPage />} />
               <Route component={NotFound} />
             </Switch>
