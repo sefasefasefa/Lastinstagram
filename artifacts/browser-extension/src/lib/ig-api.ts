@@ -359,25 +359,26 @@ export async function unlikeMedia(mediaId: string): Promise<void> {
 export async function unlikeStory(mediaId: string): Promise<void> {
   const pureId = mediaId.includes('_') ? mediaId.split('_')[0] : mediaId;
 
+  // GQL mutation (HAR: doc_id=26510485515280697, usePolarisStoriesV4LikeMutationUnlikeMutation)
   let lastErr: unknown;
-
-  // 1 & 2) REST — iki deneme, aralarında 600ms bekleme
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      await igApi(`/api/v1/media/${pureId}/unlike/`, undefined, 'POST', {
-        media_id: pureId,
-        d: '1',
-      });
+      const mutId = String((Date.now() % 9000) + 1000);
+      await igGql(
+        '26510485515280697',
+        { input: { actor_id: '__actor_id__', client_mutation_id: mutId, media_id: pureId } },
+        'usePolarisStoriesV4LikeMutationUnlikeMutation',
+      );
       return; // başarılı
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === '__RATE_LIMIT__') {
+        throw new Error('Instagram çok fazla istek algıladı. Birkaç dakika bekleyip tekrar dene.');
+      }
       lastErr = err;
-      if (attempt < 2) await new Promise<void>((r) => setTimeout(r, 600));
+      if (attempt < 2) await new Promise<void>((r) => setTimeout(r, 1200));
     }
   }
-
-  // 3) DOM fallback
-  const domOk = await domLikeStoryFallback(false);
-  if (domOk) return;
 
   const reason = lastErr instanceof Error ? lastErr.message : String(lastErr);
   throw new Error(`Hikaye beğeni geri alma başarısız: ${reason}`);

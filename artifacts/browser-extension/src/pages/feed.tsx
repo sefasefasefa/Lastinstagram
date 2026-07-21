@@ -118,6 +118,10 @@ function LikeButton({
 }
 
 // ─── Hikaye şeridi ────────────────────────────────────────────────────────────
+// Kullanıcının son like/unlike tercihinin ne kadar süre API verisine karşı
+// korunacağı (ms). Instagram'ın beğeni durumunu yayması bu süreyi alabilir.
+const LIKE_PIN_TTL_MS = 90_000; // 90 saniye
+
 function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boolean }) {
   const [liked, setLiked] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(stories.map((s) => [s.id, s.hasLiked || false])),
@@ -126,15 +130,26 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
   const [popIds, setPopIds]         = useState<Set<string>>(new Set());
   const likeQueue = useRef<Promise<void>>(Promise.resolve());
 
+  // Kullanıcının açıkça yaptığı like/unlike'lar burada "pin" olarak tutulur.
+  // API güncellemesi geldiğinde TTL dolmamış pinler API verisini ezer;
+  // bu sayede unlike sonrası hikaye yenilemesi liked=true'ya geri dönemez.
+  const pinnedRef = useRef<Record<string, { val: boolean; ts: number }>>({});
+
   useEffect(() => {
-    // Her API güncellemesinde tüm hikayelerin beğeni durumunu API'dan al.
-    // In-flight (loadingIds içindeki) hikayeler atlanır — aksi hâlde
-    // optimistik güncelleme, API yanıtı gelmeden önce sıfırlanır ve
-    // "beğenilmedi ama beğenildi görünüyor" hatası oluşur.
+    const now = Date.now();
     setLiked((prev) => {
       const next = { ...prev };
       for (const s of stories) {
-        if (!loadingIds.has(s.id)) {
+        if (loadingIds.has(s.id)) continue; // in-flight — dokunma
+
+        const pin = pinnedRef.current[s.id];
+        if (pin && now - pin.ts < LIKE_PIN_TTL_MS) {
+          // Kullanıcı bu hikayeyi yakın zamanda beğendi/geri aldı;
+          // API verisi ne derse desin pin'i koru.
+          next[s.id] = pin.val;
+        } else {
+          // Pin yok veya süresi dolmuş — API verisini kullan.
+          if (pin) delete pinnedRef.current[s.id];
           next[s.id] = s.hasLiked ?? false;
         }
       }
@@ -206,14 +221,16 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
                 try {
                   if (next) await likeStory(storyId, { ownerId, takenAt });
                   else await unlikeStory(storyId);
-                  // Sadece gerçek başarıda güncelle
+                  // API başarılı — pin kaydet ve UI'ı güncelle.
+                  // Pin, sonraki hikaye yenilemelerinin bu seçimi ezmesini önler.
+                  pinnedRef.current[storyId] = { val: next, ts: Date.now() };
                   setLiked((prev) => ({ ...prev, [storyId]: next }));
                   if (next) {
                     setPopIds((p) => new Set(p).add(storyId));
                     setTimeout(() => setPopIds((p) => { const n = new Set(p); n.delete(storyId); return n; }), 500);
                   }
                 } catch (e) {
-                  // Geri alma yok — zaten güncelleme yapmadık
+                  // Hata — hiçbir güncelleme yapılmadı, pin yazılmadı
                   const msg = e instanceof Error ? e.message : String(e);
                   toast.error(`Beğeni başarısız: ${msg}`);
                 } finally {
