@@ -150,6 +150,7 @@ export interface IgStory {
   takenAt?: number;
   ownerId?: string;
   hasLiked?: boolean;
+  hasSeen?: boolean;  // telefonda/başka oturumda görüldüyse true
 }
 
 export interface IgReel {
@@ -200,6 +201,10 @@ export async function getUserStories(userId: string): Promise<IgStory[]> {
   const reels = data['reels'] as AnyObj | undefined;
   const reel = reels?.[userId] as AnyObj | undefined;
   const items = (reel?.['items'] as AnyObj[] | undefined) ?? [];
+  // reel.seen: Instagram'ın bu tray için kaydettiği son görülme zaman damgası.
+  // 0 veya null → hiç görülmemiş; pozitif sayı → telefon/başka oturumda görülmüş.
+  const reelSeen = Number(reel?.['seen'] ?? 0);
+  const hasSeen = reelSeen > 0;
   return items.map((item) => ({
     // pk her zaman saf sayısal media ID; id bazen "pk_userId" formatında gelir
     id: String(item['pk'] ?? String(item['id'] ?? '').split('_')[0]),
@@ -209,6 +214,7 @@ export async function getUserStories(userId: string): Promise<IgStory[]> {
     takenAt: item['taken_at'] as number | undefined,
     ownerId: String((item['user'] as AnyObj | undefined)?.['pk'] ?? userId),
     hasLiked: (item['has_liked'] as boolean) ?? false,
+    hasSeen,
   }));
 }
 
@@ -306,12 +312,18 @@ async function markStorySeen(mediaId: string, ownerId?: string, takenAt?: number
  */
 export async function likeStory(
   mediaId: string,
-  opts?: { ownerId?: string; takenAt?: number },
+  opts?: { ownerId?: string; takenAt?: number; hasSeen?: boolean },
 ): Promise<void> {
   const pureId = mediaId.includes('_') ? mediaId.split('_')[0] : mediaId;
 
-  // 0) Hikayeyi "gördüm" olarak işaretle (hata olsa da devam et)
-  void markStorySeen(pureId, opts?.ownerId, opts?.takenAt);
+  // 0) Hikayeyi "gördüm" olarak işaretle — ama sadece daha önce görülmemişse.
+  // Zaten görülmüş hikayeler için duplicate seen sinyali Instagram tarafından
+  // reddediliyor ve hemen ardından gelen like isteğini de bozuyor (race condition).
+  // Await ile bekliyoruz: iki GQL isteğinin aynı anda executeScript çalıştırması
+  // Instagram sekmesinde yarış yaratıyor ve like'ı silently reddettiriyor.
+  if (!opts?.hasSeen) {
+    await markStorySeen(pureId, opts?.ownerId, opts?.takenAt);
+  }
 
   // GQL mutation (HAR: doc_id=26938887309082050, usePolarisStoriesV4LikeMutationLikeMutation)
   let lastErr: unknown;

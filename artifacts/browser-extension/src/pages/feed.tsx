@@ -219,7 +219,7 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
 
               likeQueue.current = likeQueue.current.then(async () => {
                 try {
-                  if (next) await likeStory(storyId, { ownerId, takenAt });
+                  if (next) await likeStory(storyId, { ownerId, takenAt, hasSeen: s.hasSeen });
                   else await unlikeStory(storyId);
                   // API başarılı — pin kaydet ve UI'ı güncelle.
                   // Pin, sonraki hikaye yenilemelerinin bu seçimi ezmesini önler.
