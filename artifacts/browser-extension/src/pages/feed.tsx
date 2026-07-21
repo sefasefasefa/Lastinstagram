@@ -129,6 +129,8 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
   const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [popIds, setPopIds]         = useState<Set<string>>(new Set());
   const likeQueue = useRef<Promise<void>>(Promise.resolve());
+  // Unlike yapılan hikayeler — yeniden beğenirken markStorySeen tekrar gönderilmeli.
+  const unlikedRef = useRef<Set<string>>(new Set());
 
   // Kullanıcının açıkça yaptığı like/unlike'lar burada "pin" olarak tutulur.
   // API güncellemesi geldiğinde TTL dolmamış pinler API verisini ezer;
@@ -219,8 +221,21 @@ function StoriesStrip({ stories, loading }: { stories: IgStory[]; loading: boole
 
               likeQueue.current = likeQueue.current.then(async () => {
                 try {
-                  if (next) await likeStory(storyId, { ownerId, takenAt, hasSeen: s.hasSeen });
-                  else await unlikeStory(storyId);
+                  if (next) {
+                    // Unlike sonrası yeniden beğeniliyorsa markStorySeen tekrar gönderilmeli.
+                    // Instagram unlike yapınca "seen" durumunu sıfırlıyor.
+                    const wasUnliked = unlikedRef.current.has(storyId);
+                    await likeStory(storyId, {
+                      ownerId,
+                      takenAt,
+                      hasSeen: s.hasSeen && !wasUnliked,
+                    });
+                    unlikedRef.current.delete(storyId);
+                  } else {
+                    await unlikeStory(storyId);
+                    // Unlike başarılı — bir sonraki like'ta seen tekrar gönderilsin.
+                    unlikedRef.current.add(storyId);
+                  }
                   // API başarılı — pin kaydet ve UI'ı güncelle.
                   // Pin, sonraki hikaye yenilemelerinin bu seçimi ezmesini önler.
                   pinnedRef.current[storyId] = { val: next, ts: Date.now() };
