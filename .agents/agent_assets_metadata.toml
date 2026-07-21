@@ -42,3 +42,9 @@ id = "IuA9-sYV_ssUPRNc11vUc"
 uri = "file://takipci-paneli.zip"
 type = "unspecified"
 title = "Takipçi Paneli — Proje ZIP"
+
+[[outputs]]
+id = "ePTdDhWdtn_-5F1tiraN_"
+uri = "file://workspace.zip"
+type = "unspecified"
+title = "workspace.zip"
