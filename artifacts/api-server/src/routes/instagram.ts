@@ -230,12 +230,13 @@ router.post("/instagram/like-post", async (req, res): Promise<void> => {
 
 router.post("/instagram/like-story", async (req, res): Promise<void> => {
   const storyId = typeof req.body?.storyId === "string" ? req.body.storyId : "";
+  const ownerId = typeof req.body?.ownerId === "string" ? req.body.ownerId : undefined;
   if (!storyId) {
     res.status(400).json({ success: false, error: "storyId is required" });
     return;
   }
 
-  const success = await getClient().likeStory(storyId);
+  const success = await getClient().likeStory(storyId, ownerId);
   res.status(success ? 200 : 502).json({
     success,
     message: success ? "Story liked" : "Instagram rejected the like request",

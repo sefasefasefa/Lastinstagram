@@ -1058,16 +1058,17 @@ export class InstagramClient {
     }).catch(() => false);
   }
 
-  async likeStory(storyId: string): Promise<boolean> {
+  async likeStory(storyId: string, ownerId?: string): Promise<boolean> {
     await this.ensureAuthenticated();
     return this.withErrorRecovery(async () => {
       if (this.session?.cookieHeader) {
         // Hikayeler için doğru parametreler: src="story", module_name="story_tray"
-        // "timeline" ve "feed_timeline" kullanmak Instagram tarafından sessizce reddediliyor.
+        // tray_id = hikaye SAHİBİNİN user_id'si (storyId değil!).
+        // Yanlış tray_id ile Instagram 2. ve sonraki hikayeleri sessizce reddeder.
         const result = await likeMediaRaw(storyId, this.session.cookieHeader, {
           src: "story",
           d: 0,
-          moduleInfo: { module_name: "story_tray", tray_id: storyId },
+          moduleInfo: { module_name: "story_tray", tray_id: ownerId ?? storyId },
           userAgent: this.client.state.deviceString,
         });
         if (result.success) return true;
@@ -1076,7 +1077,7 @@ export class InstagramClient {
       // Fallback: kütüphane tabanlı yöntem
       await this.client.media.like({
         mediaId: storyId,
-        moduleInfo: { module_name: "story_tray" },
+        moduleInfo: { module_name: "story_tray", tray_id: ownerId ?? storyId },
         d: 0,
       });
       return true;
