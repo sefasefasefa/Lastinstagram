@@ -251,7 +251,7 @@ export async function likeMedia(mediaId: string): Promise<void> {
   // HAR doğrulaması: Instagram web GQL kullanıyor, doc_id=27358573637160660
   // Her çağrı için benzersiz client_mutation_id — aynı değer göndermek Instagram'ın
   // deduplikasyon mekanizmasını tetikleyip beğeniyi sessizce reddedebilir.
-  const mutId = String((Date.now() % 9000) + 1000);
+  const mutId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   await igGql(
     '27358573637160660',
     { input: { media_id: mediaId, actor_id: '__actor_id__', client_mutation_id: mutId } },
@@ -317,7 +317,7 @@ export async function likeStory(
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const mutId = String((Date.now() % 9000) + 1000);
+      const mutId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       await igGql(
         '26938887309082050',
         { input: { actor_id: '__actor_id__', client_mutation_id: mutId, media_id: pureId } },
@@ -363,7 +363,7 @@ export async function unlikeStory(mediaId: string): Promise<void> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const mutId = String((Date.now() % 9000) + 1000);
+      const mutId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       await igGql(
         '26510485515280697',
         { input: { actor_id: '__actor_id__', client_mutation_id: mutId, media_id: pureId } },
